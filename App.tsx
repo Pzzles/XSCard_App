@@ -3,7 +3,8 @@ import { NavigationContainer } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { COLORS } from './src/constants/colors';
-import TabNavigator from './src/navigation/TabNavigator';
+import AuthNavigator from './src/navigation/AuthNavigator';
+// import TabNavigator from './src/navigation/TabNavigator';
 
 export default function App() {
   return (
@@ -40,7 +41,7 @@ export default function App() {
           },
         }}
       >
-        <TabNavigator />
+        <AuthNavigator />
       </NavigationContainer>
     </SafeAreaProvider>
   );
