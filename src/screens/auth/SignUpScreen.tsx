@@ -11,9 +11,64 @@ type SignUpScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'SignU
 export default function SignUpScreen() {
   const navigation = useNavigation<SignUpScreenNavigationProp>();
   const [firstName, setFirstName] = useState('');
+  const [status, setStatus] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+
+      const handleSignUp = async () => {
+        setIsLoading(true);
+        try {
+                // const userData = {
+      //   firstName,
+      //   lastName,
+      //   email,
+      //   phoneNumber,
+      //   // Add company logo and profile picture handling later
+      // };
+
+          const userData = {
+            name: firstName,
+            status: status,
+          };
+      
+          const response = await fetch('https://b3f2-102-217-178-202.ngrok-free.app/AddUser', {
+            method: 'POST',
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json; charset=UTF-8'
+            },
+            body: JSON.stringify(userData),
+          });
+      
+          // Log response headers and status
+          console.log('Response status:', response.status);
+          console.log('Response headers:', response.headers);
+      
+          // Check content type
+          const contentType = response.headers.get("content-type");
+          if (!contentType || !contentType.includes("application/json")) {
+            const text = await response.text();
+            console.error('Non-JSON response:', text);
+            throw new Error("Server returned non-JSON response");
+          }
+      
+          const data = await response.json();
+          
+          if (response.ok) {
+            navigation.navigate('SignIn');
+          } else {
+            alert(data.message || 'Signup failed');
+          }
+        } catch (error) {
+          console.error('Error:', error);
+          alert('Network error, please try again');
+        } finally {
+          setIsLoading(false);
+        }
+      };
 
   return (
     <View style={styles.container}>
@@ -26,6 +81,14 @@ export default function SignUpScreen() {
         onChangeText={setFirstName}
         placeholderTextColor="#999"
       />
+
+<TextInput
+  style={styles.input}
+  placeholder="Status..."
+  value={status}
+  onChangeText={setStatus}
+  placeholderTextColor="#999"
+/>
 
       <TextInput
         style={styles.input}
@@ -68,7 +131,11 @@ export default function SignUpScreen() {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.signUpButton}>
+      <TouchableOpacity 
+      style={styles.signUpButton}
+      onPress={handleSignUp}
+      disabled={isLoading}
+      >
         <Text style={styles.signUpButtonText}>Sign Up</Text>
       </TouchableOpacity>
 
