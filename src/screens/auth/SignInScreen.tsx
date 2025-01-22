@@ -4,6 +4,7 @@ import { COLORS } from '../../constants/colors';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { AuthStackParamList } from '../../types';
+import { MaterialIcons } from '@expo/vector-icons';
 
 type SignInScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'SignIn'>;
 
@@ -11,6 +12,7 @@ export default function SignInScreen() {
   const navigation = useNavigation<SignInScreenNavigationProp>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   return (
     <View style={styles.container}>
@@ -26,14 +28,26 @@ export default function SignInScreen() {
         placeholderTextColor="#999"
       />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Password..."
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        placeholderTextColor="#999"
-      />
+      <View style={styles.passwordContainer}>
+        <TextInput
+          style={[styles.input, styles.passwordInput]}
+          placeholder="Password..."
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry={!showPassword}
+          placeholderTextColor="#999"
+        />
+        <TouchableOpacity 
+          style={styles.eyeIcon}
+          onPress={() => setShowPassword(!showPassword)}
+        >
+          <MaterialIcons 
+            name={showPassword ? "visibility" : "visibility-off"} 
+            size={24} 
+            color="#999" 
+          />
+        </TouchableOpacity>
+      </View>
 
       <TouchableOpacity style={styles.signInButton}>
         <Text style={styles.signInButtonText}>Sign In</Text>
@@ -93,5 +107,20 @@ const styles = StyleSheet.create({
   signUpLink: {
     color: COLORS.primary,
     fontSize: 16,
+  },
+  passwordContainer: {
+    position: 'relative',
+    width: '100%',
+    marginBottom: 15,
+  },
+  passwordInput: {
+    marginBottom: 0,
+    paddingRight: 50,
+  },
+  eyeIcon: {
+    position: 'absolute',
+    right: 15,
+    top: 12,
+    padding: 5,
   },
 }); 

@@ -1,11 +1,47 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View, Image, TouchableOpacity, Animated, ScrollView, ImageStyle } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
 
 export default function CardsScreen() {
+  const [qrCode, setQrCode] = useState<string>('');
   const borderRotation = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    fetchQRCode();
+  }, []);
+
+  const fetchQRCode = async () => {
+    try {
+      const response = await fetch('https://b3f2-102-217-178-202.ngrok-free.app/generateQR', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'image/png'
+        },
+        body: JSON.stringify({
+          name: "Xolisa Ndaba",
+          status: "Software Project Manager"
+        })
+      });
+      
+      // Get the response as a blob
+      const blob = await response.blob();
+      
+      // Create a FileReader to convert blob to base64
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          setQrCode(reader.result);
+        }
+      };
+      reader.readAsDataURL(blob);
+      
+    } catch (error) {
+      console.error('Error fetching QR code:', error);
+    }
+  };
 
   useEffect(() => {
     Animated.loop(
@@ -29,10 +65,16 @@ export default function CardsScreen() {
       <ScrollView style={[styles.contentContainer, { marginTop: 120 }]}>
         <View style={styles.scrollContent}>
           <View style={styles.qrContainer}>
-            <Image
-              style={styles.qrCode}
-              source={require('../../../assets/images/prcode.png')}
-            />
+            {qrCode ? (
+              <Image
+                style={styles.qrCode}
+                source={{ uri: qrCode }}
+                resizeMode="contain"
+                onError={(error) => console.log('Image loading error:', error.nativeEvent.error)}
+              />
+            ) : (
+              <Text>Loading QR Code...</Text>
+            )}
           </View>
           <View style={styles.logoContainer}>
             <Image
@@ -88,11 +130,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   qrContainer: {
-    marginBottom: 20,
-  },
-  qrCode: {
     width: 300,
     height: 300,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    backgroundColor: '#fff',
+  },
+  qrCode: {
+    width: '100%',
+    height: '100%',
   },
   logoContainer: {
     width: '100%',
