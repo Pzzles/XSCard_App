@@ -4,12 +4,14 @@ process.removeAllListeners('warning');
 const express = require('express');
 const { FieldValue } = require('firebase-admin/firestore');
 const QRCode = require('qrcode');
+const path = require('path');
 // const admin = require('firebase-admin'); // Authentication temporarily disabled
 const app = express();
 const port = 8383;
 const { db } = require('./firebase.js');
 
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 
 /* Authentication middleware temporarily disabled
 const authenticateToken = async (req, res, next) => {
@@ -375,19 +377,36 @@ app.delete('/Cards/:id', async (req, res) => {
 });
 
 // QR code generation endpoint
-app.post('/generateQR', async (req, res) => {
-    const { name, status } = req.body;
-    if (!name || !status) {
-        return res.status(400).send({ message: 'Name and status are required to generate QR code' });
-    }
+app.get('/generateQR/:userId', async (req, res) => {
+    const { userId } = req.params;
+    console.log('Generating QR code for user ID:', userId);
     try {
-        const qrData = JSON.stringify({ name, status });
-        const qrCodeBuffer = await QRCode.toBuffer(qrData);
+        const userRef = db.collection('users').doc(userId);
+        const userDoc = await userRef.get();
+        
+        if (!userDoc.exists) {
+            return res.status(404).send({ message: 'User not found' });
+        }
+
+        // Create direct URL for QR code using ngrok URL
+        const saveContactUrl = `https://8ae4-41-13-5-187.ngrok-free.app/saveContact?userId=${userDoc.id}`;
+        
+        // Generate QR code with just the URL
+        const qrCodeBuffer = await QRCode.toBuffer(saveContactUrl);
         res.setHeader('Content-Type', 'image/png');
         res.status(200).send(qrCodeBuffer);
     } catch (error) {
-        res.status(500).send({ message: 'Internal Server Error', error });
+        console.error('Error generating QR code:', error);
+        res.status(500).send({ 
+            message: 'Failed to generate QR code',
+            error: error.message 
+        });
     }
+});
+
+// Add the SaveContact route
+app.get('/saveContact', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'saveContact.html'));
 });
 
 app.use((error, req, res, next) => {
