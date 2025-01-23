@@ -6,6 +6,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { AuthStackParamList } from '../../types';
+import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
+
 
 type SignUpScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'SignUp'>;
 
@@ -16,13 +18,36 @@ export default function SignUpScreen() {
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [companyName, setCompanyName] = useState('');
-  const [status, setStatus] = useState('');
+  const [occupation, setOccupation] = useState(''); // Changed from status
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleSignUp = () => {
-    // Navigate directly to main app
-    navigation.navigate('MainApp');
+  const handleSignUp = async () => {
+    try {
+      const response = await fetch(buildUrl(ENDPOINTS.ADD_USER), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: firstName,
+          surname: lastName,
+          email,
+          password,
+          occupation,
+          company: companyName,
+          status: 'active',
+        }),
+      });
+
+      if (response.ok) {
+        navigation.navigate('MainApp');
+      } else {
+        Alert.alert('Error', 'Failed to create account. Please try again.');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Network error. Please check your connection.');
+    }
   };
 
   return (
@@ -84,9 +109,9 @@ export default function SignUpScreen() {
 
           <TextInput
             style={styles.input}
-            placeholder="Status... (e.g. Software Developer)"
-            value={status}
-            onChangeText={setStatus}
+            placeholder="Occupation... (e.g. Software Developer)"
+            value={occupation}
+            onChangeText={setOccupation}
             placeholderTextColor="#999"
           />
 
@@ -251,4 +276,4 @@ const styles = StyleSheet.create({
     height: 40,
     zIndex: 1,
   },
-}); 
+});
