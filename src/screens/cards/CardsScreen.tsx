@@ -3,6 +3,8 @@ import { StyleSheet, Text, View, Image, TouchableOpacity, Animated, ScrollView, 
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
+import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
+
 
 export default function CardsScreen() {
   const [qrCode, setQrCode] = useState<string>('');
@@ -14,7 +16,7 @@ export default function CardsScreen() {
 
   const fetchQRCode = async () => {
     try {
-      const response = await fetch('https://b3f2-102-217-178-202.ngrok-free.app/generateQR', {
+      const response = await fetch(buildUrl(ENDPOINTS.GENERATE_QR_CODE), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
