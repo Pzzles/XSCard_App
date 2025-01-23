@@ -2,12 +2,27 @@ import React from 'react';
 import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../constants/colors';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+
+// Update this type to match your actual navigation type
+type RootStackParamList = {
+  Home: undefined;
+  AddCards: undefined;
+  // ... other screens ...
+};
 
 type HeaderProps = {
   title: string;
 };
 
 export default function Header({ title }: HeaderProps) {
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+
+  const handleAddPress = () => {
+    navigation.navigate('AddCards');
+  };
+
   return (
     <View style={styles.header}>
       <TouchableOpacity style={styles.icon}>
@@ -19,7 +34,7 @@ export default function Header({ title }: HeaderProps) {
       </View>
 
       <View style={styles.iconContainer}>
-        <TouchableOpacity style={styles.icon}>
+        <TouchableOpacity style={styles.icon} onPress={handleAddPress}>
           <MaterialIcons name="add" size={24} color={COLORS.black} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.icon}>
