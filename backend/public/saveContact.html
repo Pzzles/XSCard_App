@@ -1,80 +1,3 @@
-<!-- <!DOCTYPE html>
-<html>
-<head>
-    <title>Save Contact</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 600px;
-            margin: 20px auto;
-            padding: 20px;
-        }
-        .contact-card {
-            border: 1px solid #ddd;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        .submit-btn {
-            background-color: #4CAF50;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        .submit-btn:hover {
-            background-color: #45a049;
-        }
-    </style>
-</head>
-<body>
-    <div class="contact-card">
-        <h2>Contact Details</h2>
-        <div id="userData"></div>
-        <button class="submit-btn" onclick="handleSubmit()">Save Contact</button>
-    </div>
-
-    <script>
-        // Parse URL parameters
-        const urlParams = new URLSearchParams(window.location.search);
-        const userId = urlParams.get('userId');
-
-        // Fetch and display user data
-        async function loadUserData() {
-            try {
-                const response = await fetch(`/Users/${userId}`);
-                const userData = await response.json();
-                
-                document.getElementById('userData').innerHTML = `
-                    <p><strong>Name:</strong> ${userData.name} ${userData.surname}</p>
-                    <p><strong>Email:</strong> ${userData.email}</p>
-                    <p><strong>Phone:</strong> +27 71 234 5678</p>
-                    <p><strong>Occupation:</strong> ${userData.occupation}</p>
-                    <p><strong>Company:</strong> ${userData.company}</p>
-                `;
-            } catch (error) {
-                console.error('Error:', error);
-                document.getElementById('userData').innerHTML = '<p>Error loading contact details</p>';
-            }
-        }
-
-        function handleSubmit() {
-            // Placeholder for future implementation
-            alert('Save contact feature coming soon!');
-        }
-
-        // Load user data when page loads
-        if (userId) {
-            loadUserData();
-        } else {
-            document.getElementById('userData').innerHTML = '<p>No contact information provided</p>';
-        }
-    </script>
-</body>
-</html> -->
-
 <!DOCTYPE html>
 <html>
 <head>
@@ -104,12 +27,37 @@
         .submit-btn:hover {
             background-color: #45a049;
         }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .divider {
+            margin: 20px 0;
+            border-top: 1px solid #ddd;
+        }
     </style>
 </head>
 <body>
     <div class="contact-card">
         <h2>Contact Details</h2>
         <div id="userData"></div>
+        <div class="divider"></div>
+        <h3>Your Information</h3>
+        <div class="form-group">
+            <input type="text" id="scannerName" placeholder="Your Name">
+        </div>
+        <div class="form-group">
+            <input type="text" id="scannerSurname" placeholder="Your Surname">
+        </div>
+        <div class="form-group">
+            <input type="tel" id="scannerPhone" placeholder="Your Phone Number">
+        </div>
         <button class="submit-btn" onclick="handleSubmit()">Save Contact</button>
     </div>
 
@@ -128,7 +76,7 @@
                 document.getElementById('userData').innerHTML = `
                     <p><strong>Name:</strong> ${userData.name} ${userData.surname}</p>
                     <p><strong>Email:</strong> ${userData.email}</p>
-                    <p><strong>Phone:</strong> ${userData.phone || '+27 71 234 5678'}</p>
+                    <p><strong>Phone:</strong> ${userData.phoneNumber || 'No phone number available'}</p>
                     <p><strong>Occupation:</strong> ${userData.occupation}</p>
                     <p><strong>Company:</strong> ${userData.company}</p>
                 `;
@@ -138,18 +86,61 @@
             }
         }
 
-        function handleSubmit() {
+        async function saveContactToDatabase() {
+            const scannerName = document.getElementById('scannerName').value;
+            const scannerSurname = document.getElementById('scannerSurname').value;
+            const scannerPhone = document.getElementById('scannerPhone').value;
+
+            if (!scannerName || !scannerSurname || !scannerPhone) {
+                alert('Please fill in all your details');
+                return false;
+            }
+
+            try {
+                const response = await fetch('/saveContactInfo', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        userId: userData.id, // The scanned user's ID
+                        contactInfo: {
+                            name: scannerName,
+                            surname: scannerSurname,
+                            phone: scannerPhone,
+                            createdAt: new Date().toISOString()
+                        }
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to save contact information');
+                }
+
+                return true;
+            } catch (error) {
+                console.error('Error saving contact:', error);
+                alert('Failed to save contact information');
+                return false;
+            }
+        }
+
+        async function handleSubmit() {
             if (!userData) {
                 alert('No user data available to save!');
                 return;
             }
 
-            const vCardData = `
-BEGIN:VCARD
+            // First save contact to database
+            const savedToDb = await saveContactToDatabase();
+            if (!savedToDb) return;
+
+            // Then create and download vCard
+            const vCardData = `BEGIN:VCARD
 VERSION:3.0
 FN:${userData.name} ${userData.surname}
 EMAIL:${userData.email}
-TEL;TYPE=CELL:${userData.phone || '+27 71 234 5678'}
+TEL;TYPE=CELL:${userData.phone || 'No phone number available'}
 ORG:${userData.company}
 TITLE:${userData.occupation}
 END:VCARD`;

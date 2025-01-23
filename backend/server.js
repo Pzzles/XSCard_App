@@ -68,17 +68,31 @@ app.get('/Users/:id', async (req, res) => {
     const { id } = req.params;
     console.log('Fetching user with ID:', id);
     try {
+        // Fetch user data
         const userRef = db.collection('users').doc(id);
-        const doc = await userRef.get();
+        const userDoc = await userRef.get();
         
-        if (!doc.exists) {
+        if (!userDoc.exists) {
             return res.status(404).send({ message: 'User is not found' });
         }
+
+        // Fetch associated card data
+        const cardsRef = db.collection('cards');
+        const cardSnapshot = await cardsRef.where('UserId', '==', userRef).get();
         
-        res.status(200).send({
-            id: doc.id,
-            ...doc.data()
-        });
+        let userData = {
+            id: userDoc.id,
+            ...userDoc.data(),
+            phone: null
+        };
+
+        // Add phone number if card exists
+        if (!cardSnapshot.empty) {
+            const cardData = cardSnapshot.docs[0].data();
+            userData.phone = cardData.PhoneNumber;
+        }
+        
+        res.status(200).send(userData);
     } catch (error) {
         console.error('Error fetching user:', error);
         res.status(500).send({ 
@@ -399,6 +413,47 @@ app.get('/generateQR/:userId', async (req, res) => {
         console.error('Error generating QR code:', error);
         res.status(500).send({ 
             message: 'Failed to generate QR code',
+            error: error.message 
+        });
+    }
+});
+
+// Add new endpoint for saving contact information
+app.post('/saveContactInfo', async (req, res) => {
+    const { userId, contactInfo } = req.body;
+    
+    if (!userId || !contactInfo) {
+        return res.status(400).send({ message: 'User ID and contact info are required' });
+    }
+
+    try {
+        // Get or create the contacts document for the scanned user (QR owner)
+        const contactsRef = db.collection('contacts').doc(userId);
+        const contactsDoc = await contactsRef.get();
+
+        // Initialize or get existing contacts array
+        let existingContacts = contactsDoc.exists ? contactsDoc.data().contactsList : [];
+        if (!Array.isArray(existingContacts)) existingContacts = [];
+
+        // Add new contact to array
+        existingContacts.push({
+            name: contactInfo.name,
+            surname: contactInfo.surname,
+            number: contactInfo.phone,
+            createdAt: new Date()
+        });
+
+        // Update or create the document
+        await contactsRef.set({
+            userId: db.doc(`users/${userId}`),  // Reference to QR owner's user document
+            contactsList: existingContacts      // Array of people who scanned the QR
+        }, { merge: true });
+
+        res.status(200).send({ message: 'Contact saved successfully' });
+    } catch (error) {
+        console.error('Error saving contact:', error);
+        res.status(500).send({ 
+            message: 'Failed to save contact',
             error: error.message 
         });
     }
