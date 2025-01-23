@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, TextInput } from 'react-native';
+import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, TextInput, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
@@ -22,9 +22,12 @@ interface ContactData {
 export default function ContactsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [contactDocId, setContactDocId] = useState<string>('');
 
   useEffect(() => {
     loadContacts();
+    const intervalId = setInterval(loadContacts, 30000);
+    return () => clearInterval(intervalId);
   }, []);
 
   const loadContacts = async () => {
@@ -34,21 +37,62 @@ export default function ContactsScreen() {
         const parsedUserData = JSON.parse(storedUserData);
         const response = await fetch(buildUrl(ENDPOINTS.GET_CONTACTS) + `/${parsedUserData.id}`);
         const contactData: ContactData = await response.json();
-        if (contactData.contactsList) {
-          setContacts(contactData.contactsList);
+        if (contactData) {
+          setContacts(contactData.contactsList || []);
+          setContactDocId(contactData.id); // Store the contact document ID
         }
       }
     } catch (error) {
       console.error('Error loading contacts:', error);
+      Alert.alert('Error', 'Failed to load contacts');
+    }
+  };
+
+  const deleteContact = async (index: number) => {
+    try {
+      if (!contactDocId) {
+        throw new Error('Contact document ID not found');
+      }
+
+      const response = await fetch(`${API_BASE_URL}/Contacts/${contactDocId}/contact/${index}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete contact');
+      }
+
+      // Refresh contacts list after successful deletion
+      loadContacts();
+      Alert.alert('Success', 'Contact deleted successfully');
+    } catch (error) {
+      console.error('Error deleting contact:', error);
+      Alert.alert('Error', 'Failed to delete contact');
     }
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffTime = Math.abs(now.getTime() - date.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return `${diffDays} days ago`;
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        return 'Invalid date';
+      }
+      
+      const now = new Date();
+      const diffTime = now.getTime() - date.getTime();
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays === 0) {
+        return 'Today';
+      } else if (diffDays === 1) {
+        return 'Yesterday';
+      } else {
+        return `${diffDays} days ago`;
+      }
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return 'Invalid date';
+    }
   };
 
   const filteredContacts = contacts.filter(contact =>
@@ -91,9 +135,30 @@ export default function ContactsScreen() {
                 <Text style={styles.dateAdded}>
                   {formatDate(contact.createdAt)}
                 </Text>
-                <TouchableOpacity style={styles.shareButton}>
-                  <MaterialIcons name="share" size={24} color={COLORS.gray} />
-                </TouchableOpacity>
+                <View style={styles.actionButtons}>
+                  <TouchableOpacity style={styles.shareButton}>
+                    <MaterialIcons name="share" size={24} color={COLORS.gray} />
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.deleteButton}
+                    onPress={() => {
+                      Alert.alert(
+                        'Delete Contact',
+                        'Are you sure you want to delete this contact?',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { 
+                            text: 'Delete', 
+                            onPress: () => deleteContact(index),
+                            style: 'destructive'
+                          }
+                        ]
+                      );
+                    }}
+                  >
+                    <MaterialIcons name="delete" size={24} color={COLORS.error} />
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           ))}
@@ -177,5 +242,16 @@ const styles = StyleSheet.create({
   },
   shareButton: {
     padding: 5,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  deleteButton: {
+    padding: 5,
+  },
+  error: {
+    color: COLORS.error,
   },
 });

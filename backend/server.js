@@ -533,6 +533,49 @@ app.delete('/Contacts/:id', async (req, res) => {
     }
 });
 
+app.delete('/Contacts/:id/contact/:index', async (req, res) => {
+    const { id, index } = req.params;
+    const contactIndex = parseInt(index);
+
+    if (isNaN(contactIndex)) {
+        return res.status(400).send({ message: 'Invalid contact index' });
+    }
+
+    try {
+        const contactRef = db.collection('contacts').doc(id);
+        const doc = await contactRef.get();
+        
+        if (!doc.exists) {
+            return res.status(404).send({ message: 'Contact list not found' });
+        }
+
+        const currentContacts = doc.data().contactsList || [];
+        
+        if (contactIndex < 0 || contactIndex >= currentContacts.length) {
+            return res.status(400).send({ message: 'Contact index out of range' });
+        }
+
+        // Remove the contact at the specified index
+        currentContacts.splice(contactIndex, 1);
+
+        // Update the document with the modified contacts list
+        await contactRef.update({
+            contactsList: currentContacts
+        });
+
+        res.status(200).send({ 
+            message: 'Contact deleted successfully',
+            remainingContacts: currentContacts.length
+        });
+    } catch (error) {
+        console.error('Delete contact error:', error);
+        res.status(500).send({ 
+            message: 'Failed to delete contact',
+            error: error.message 
+        });
+    }
+});
+
 // QR code generation endpoint
 app.get('/generateQR/:userId', async (req, res) => {
     const { userId } = req.params;
