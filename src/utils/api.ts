@@ -1,10 +1,14 @@
 // Base URL for the API
-export const API_BASE_URL = 'https://8ae4-41-13-5-187.ngrok-free.app';
+export const API_BASE_URL = 'https://dd9e-197-184-173-167.ngrok-free.app';
 
 // API endpoints
 export const ENDPOINTS = {
     ADD_USER: '/AddUser',
-    GENERATE_QR_CODE: '/GenerateQRCode',
+    GENERATE_QR_CODE: '/generateQR',
+    SIGN_IN: '/SignIn',
+    GET_USER: '/Users',
+    GET_CARD: '/Cards',
+    ADD_CARD: '/AddCard',
     // Add other endpoints here as needed
 };
 

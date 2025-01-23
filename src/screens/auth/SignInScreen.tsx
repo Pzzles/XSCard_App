@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { COLORS } from '../../constants/colors';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { AuthStackParamList } from '../../types';
 import { MaterialIcons } from '@expo/vector-icons';
+import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type SignInScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'SignIn'>;
 
@@ -13,6 +15,46 @@ export default function SignInScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSignIn = async () => {
+    if (!email || !password) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch(buildUrl(ENDPOINTS.SIGN_IN), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          password,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        await AsyncStorage.setItem('userData', JSON.stringify({
+          id: data.user.id,
+          name: data.user.name,
+          email: data.user.email,
+          company: data.user.company
+        }));
+        navigation.navigate('MainApp');
+      } else {
+        Alert.alert('Error', data.message || 'Sign in failed');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Network error. Please check your connection.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -49,8 +91,14 @@ export default function SignInScreen() {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.signInButton}>
-        <Text style={styles.signInButtonText}>Sign In</Text>
+      <TouchableOpacity 
+        style={[styles.signInButton, isLoading && styles.disabledButton]}
+        onPress={handleSignIn}
+        disabled={isLoading}
+      >
+        <Text style={styles.signInButtonText}>
+          {isLoading ? 'Signing In...' : 'Sign In'}
+        </Text>
       </TouchableOpacity>
 
       <View style={styles.signUpContainer}>
@@ -123,4 +171,7 @@ const styles = StyleSheet.create({
     top: 12,
     padding: 5,
   },
-}); 
+  disabledButton: {
+    opacity: 0.7,
+  },
+});

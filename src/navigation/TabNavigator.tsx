@@ -6,7 +6,7 @@ import CardsScreen from '../screens/cards/CardsScreen';
 import ContactsScreen from '../screens/contacts/ContactScreen';
 import { RootTabParamList } from '../types';
 import { createStackNavigator } from '@react-navigation/stack';
-import AddCards from '../screens/AddCards';
+import AddCards from '../screens/cards/AddCards';
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
 const Stack = createStackNavigator();
