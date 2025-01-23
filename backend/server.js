@@ -76,21 +76,10 @@ app.get('/Users/:id', async (req, res) => {
             return res.status(404).send({ message: 'User is not found' });
         }
 
-        // Fetch associated card data
-        const cardsRef = db.collection('cards');
-        const cardSnapshot = await cardsRef.where('UserId', '==', userRef).get();
-        
-        let userData = {
+        const userData = {
             id: userDoc.id,
-            ...userDoc.data(),
-            phone: null
+            ...userDoc.data()
         };
-
-        // Add phone number if card exists
-        if (!cardSnapshot.empty) {
-            const cardData = cardSnapshot.docs[0].data();
-            userData.phone = cardData.PhoneNumber;
-        }
         
         res.status(200).send(userData);
     } catch (error) {
@@ -103,10 +92,10 @@ app.get('/Users/:id', async (req, res) => {
 });
 
 app.post('/AddUser', async (req, res) => {
-    const { name, surname, email, password, occupation, company, status } = req.body;
+    const { name, surname, email, password, occupation, company, status, phone } = req.body;
     
     // Validate all required fields
-    const requiredFields = ['name', 'surname', 'email', 'password', 'occupation', 'company', 'status'];
+    const requiredFields = ['name', 'surname', 'email', 'password', 'occupation', 'company', 'status', 'phone'];
     const missingFields = requiredFields.filter(field => !req.body[field]);
     
     if (missingFields.length > 0) {
@@ -125,6 +114,7 @@ app.post('/AddUser', async (req, res) => {
             occupation,
             company,
             status,
+            phone,
             createdAt: new Date().toISOString()
         };
 
@@ -294,10 +284,10 @@ app.get('/Cards/:id', async (req, res) => {
 });
 
 app.post('/AddCard', async (req, res) => {
-    const { CardId, Company, Email, PhoneNumber, UserId, socialLinks, title } = req.body;
+    const { Company, Email, PhoneNumber, UserId, socialLinks, title } = req.body;
     
     // Validate required fields
-    const requiredFields = ['CardId', 'Company', 'Email', 'PhoneNumber', 'UserId', 'title'];
+    const requiredFields = ['Company', 'Email', 'PhoneNumber', 'UserId', 'title'];
     const missingFields = requiredFields.filter(field => !req.body[field]);
     
     if (missingFields.length > 0) {
@@ -309,16 +299,16 @@ app.post('/AddCard', async (req, res) => {
 
     try {
         const cardData = {
-            CardId,
             Company,
             Email,
             PhoneNumber,
-            UserId: db.doc(`Users/${UserId}`), // Creating a reference to the user
+            UserId: db.doc(`users/${UserId}`), // Creating a reference to the user
             socialLinks: socialLinks || [],
             title,
             createdAt: new Date().toISOString()
         };
 
+        // Add document with auto-generated ID instead of using UserId
         const docRef = await db.collection('cards').add(cardData);
         
         res.status(201).send({ 
@@ -390,23 +380,228 @@ app.delete('/Cards/:id', async (req, res) => {
     }
 });
 
+// Contacts Controller Endpoints
+app.get('/Contacts', async (req, res) => {
+    try {
+        console.log('Fetching all contacts...');
+        const contactsRef = db.collection('contacts');
+        const snapshot = await contactsRef.get();
+        
+        if (snapshot.empty) {
+            console.log('No contacts found in collection');
+            return res.status(404).send({ message: 'No contacts found' });
+        }
+
+        const contacts = [];
+        snapshot.forEach(doc => {
+            contacts.push({
+                id: doc.id,
+                ...doc.data()
+            });
+        });
+
+        console.log(`Found ${contacts.length} contacts`);
+        res.status(200).send(contacts);
+    } catch (error) {
+        console.error('Error fetching contacts:', error);
+        res.status(500).send({ 
+            message: 'Internal Server Error', 
+            error: error.message 
+        });
+    }
+});
+
+app.get('/Contacts/:id', async (req, res) => {
+    const { id } = req.params;
+    console.log('Fetching contact with ID:', id);
+    try {
+        const contactRef = db.collection('contacts').doc(id);
+        const doc = await contactRef.get();
+        
+        if (!doc.exists) {
+            return res.status(404).send({ message: 'Contact list not found' });
+        }
+        
+        res.status(200).send({
+            id: doc.id,
+            ...doc.data()
+        });
+    } catch (error) {
+        console.error('Error fetching contact:', error);
+        res.status(500).send({ 
+            message: 'Internal Server Error', 
+            error: error.message 
+        });
+    }
+});
+
+app.post('/AddContact', async (req, res) => {
+    const { userId, contactInfo } = req.body;
+    
+    if (!userId || !contactInfo) {
+        return res.status(400).send({ 
+            message: 'User ID and contact info are required'
+        });
+    }
+
+    try {
+        const contactData = {
+            userId: db.doc(`users/${userId}`),
+            contactsList: [{
+                ...contactInfo,
+                createdAt: new Date().toISOString()
+            }]
+        };
+
+        const docRef = await db.collection('contacts').add(contactData);
+        
+        res.status(201).send({ 
+            message: 'Contact list created successfully',
+            contactId: docRef.id,
+            contactData
+        });
+    } catch (error) {
+        console.error('Error adding contact:', error);
+        res.status(500).send({ 
+            message: 'Internal Server Error', 
+            error: error.message 
+        });
+    }
+});
+
+app.patch('/Contacts/:id', async (req, res) => {
+    const { id } = req.params;
+    const { contactInfo } = req.body;
+    
+    if (!contactInfo) {
+        return res.status(400).send({ message: 'Contact info is required' });
+    }
+
+    try {
+        const contactRef = db.collection('contacts').doc(id);
+        const doc = await contactRef.get();
+
+        if (!doc.exists) {
+            return res.status(404).send({ message: 'Contact list not found' });
+        }
+
+        const currentContacts = doc.data().contactsList || [];
+        currentContacts.push({
+            ...contactInfo,
+            createdAt: new Date().toISOString()
+        });
+
+        await contactRef.update({
+            contactsList: currentContacts
+        });
+
+        res.status(200).send({ 
+            message: 'Contact list updated successfully',
+            updatedContacts: currentContacts
+        });
+    } catch (error) {
+        console.error('Error updating contacts:', error);
+        res.status(500).send({ 
+            message: 'Internal Server Error', 
+            error: error.message 
+        });
+    }
+});
+
+app.delete('/Contacts/:id', async (req, res) => {
+    const { id } = req.params;
+    
+    try {
+        const contactRef = db.collection('contacts').doc(id);
+        const doc = await contactRef.get();
+        
+        if (!doc.exists) {
+            return res.status(404).send({ message: 'Contact list not found' });
+        }
+
+        await contactRef.delete();
+        res.status(200).send({ 
+            message: 'Contact list deleted successfully',
+            deletedContactId: id
+        });
+    } catch (error) {
+        console.error('Delete contact error:', error);
+        res.status(500).send({ 
+            message: 'Failed to delete contact list',
+            error: error.message 
+        });
+    }
+});
+
+app.delete('/Contacts/:id/contact/:index', async (req, res) => {
+    const { id, index } = req.params;
+    const contactIndex = parseInt(index);
+
+    if (isNaN(contactIndex)) {
+        return res.status(400).send({ message: 'Invalid contact index' });
+    }
+
+    try {
+        const contactRef = db.collection('contacts').doc(id);
+        const doc = await contactRef.get();
+        
+        if (!doc.exists) {
+            return res.status(404).send({ message: 'Contact list not found' });
+        }
+
+        const currentContacts = doc.data().contactsList || [];
+        
+        if (contactIndex < 0 || contactIndex >= currentContacts.length) {
+            return res.status(400).send({ message: 'Contact index out of range' });
+        }
+
+        // Remove the contact at the specified index
+        currentContacts.splice(contactIndex, 1);
+
+        // Update the document with the modified contacts list
+        await contactRef.update({
+            contactsList: currentContacts
+        });
+
+        res.status(200).send({ 
+            message: 'Contact deleted successfully',
+            remainingContacts: currentContacts.length
+        });
+    } catch (error) {
+        console.error('Delete contact error:', error);
+        res.status(500).send({ 
+            message: 'Failed to delete contact',
+            error: error.message 
+        });
+    }
+});
+
 // QR code generation endpoint
 app.get('/generateQR/:userId', async (req, res) => {
     const { userId } = req.params;
     console.log('Generating QR code for user ID:', userId);
+    
     try {
         const userRef = db.collection('users').doc(userId);
         const userDoc = await userRef.get();
         
         if (!userDoc.exists) {
+            console.log('User not found:', userId);
             return res.status(404).send({ message: 'User not found' });
         }
 
-        // Create direct URL for QR code using ngrok URL
-        const saveContactUrl = `https://8ae4-41-13-5-187.ngrok-free.app/saveContact?userId=${userDoc.id}`;
-        
-        // Generate QR code with just the URL
-        const qrCodeBuffer = await QRCode.toBuffer(saveContactUrl);
+        // Create QR code data with redirect URL
+        const redirectUrl = `${req.protocol}://${req.get('host')}/saveContact?userId=${userId}`;
+        const qrData = redirectUrl;  // Just encode the URL directly
+
+        // Generate QR code
+        console.log('Generating QR code with URL:', qrData);
+        const qrCodeBuffer = await QRCode.toBuffer(qrData, {
+            errorCorrectionLevel: 'H',
+            margin: 1,
+            width: 300
+        });
+
         res.setHeader('Content-Type', 'image/png');
         res.status(200).send(qrCodeBuffer);
     } catch (error) {
@@ -462,6 +657,48 @@ app.post('/saveContactInfo', async (req, res) => {
 // Add the SaveContact route
 app.get('/saveContact', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'saveContact.html'));
+});
+
+app.post('/SignIn', async (req, res) => {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+        return res.status(400).send({ 
+            message: 'Email and password are required' 
+        });
+    }
+
+    try {
+        const usersRef = db.collection('users');
+        const snapshot = await usersRef.where('email', '==', email).get();
+
+        if (snapshot.empty) {
+            return res.status(401).send({ message: 'Invalid credentials' });
+        }
+
+        const userDoc = snapshot.docs[0];
+        const userData = userDoc.data();
+
+        if (userData.password !== password) {
+            return res.status(401).send({ message: 'Invalid credentials' });
+        }
+
+        res.status(200).send({
+            message: 'Sign in successful',
+            user: {
+                id: userDoc.id,
+                name: userData.name,
+                email: userData.email,
+                company: userData.company
+            }
+        });
+    } catch (error) {
+        console.error('Sign in error:', error);
+        res.status(500).send({ 
+            message: 'Internal Server Error', 
+            error: error.message 
+        });
+    }
 });
 
 app.use((error, req, res, next) => {

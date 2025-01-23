@@ -33,6 +33,7 @@ export default function SignUpScreen() {
           name: firstName,
           surname: lastName,
           email,
+          phone: phoneNumber,  // Added phone field to payload
           password,
           occupation,
           company: companyName,
@@ -41,7 +42,13 @@ export default function SignUpScreen() {
       });
 
       if (response.ok) {
-        navigation.navigate('MainApp');
+        Alert.alert(
+          'Success',
+          'Account created successfully! Please sign in.',
+          [
+            { text: 'OK', onPress: () => navigation.navigate('SignIn') }
+          ]
+        );
       } else {
         Alert.alert('Error', 'Failed to create account. Please try again.');
       }

@@ -1,15 +1,77 @@
-import React from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState } from 'react';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { COLORS } from '../constants/colors';
-import Header from '../components/Header';
+import { COLORS } from '../../constants/colors';
+import Header from '../../components/Header';
 import { useNavigation } from '@react-navigation/native';
+import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function AddCards() {
   const navigation = useNavigation();
+  const [error, setError] = useState('');
+  const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
+    occupation: '',
+    company: '',
+    email: '',
+    phoneNumber: '',
+  });
 
   const handleCancel = () => {
     navigation.goBack();
+  };
+
+  const validateForm = () => {
+    if (!formData.company || !formData.email || !formData.phoneNumber || !formData.occupation) {
+      setError('Please fill in all required fields');
+      return false;
+    }
+    setError('');
+    return true;
+  };
+
+  const handleAdd = async () => {
+    try {
+      if (!validateForm()) {
+        return;
+      }
+
+      const storedUserData = await AsyncStorage.getItem('userData');
+      if (!storedUserData) {
+        Alert.alert('Error', 'Please login first');
+        return;
+      }
+
+      const userData = JSON.parse(storedUserData);
+      
+      const response = await fetch(buildUrl(ENDPOINTS.ADD_CARD), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          Company: formData.company,
+          Email: formData.email,
+          PhoneNumber: formData.phoneNumber,
+          UserId: userData.id,
+          title: formData.occupation,
+          socialLinks: []
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create card');
+      }
+
+      const result = await response.json();
+      Alert.alert('Success', 'Card created successfully');
+      navigation.goBack();
+    } catch (error) {
+      console.error('Error creating card:', error);
+      Alert.alert('Error', 'Failed to create card. Please try again.');
+    }
   };
 
   return (
@@ -21,7 +83,7 @@ export default function AddCards() {
         <TouchableOpacity onPress={handleCancel}>
           <Text style={styles.cancelButton}>Cancel</Text>
         </TouchableOpacity>
-        <TouchableOpacity>
+        <TouchableOpacity onPress={handleAdd}>
           <Text style={styles.saveButton}>Save</Text>
         </TouchableOpacity>
       </View>
@@ -52,27 +114,52 @@ export default function AddCards() {
         {/* Personal Details Section */}
         <Text style={styles.sectionTitle}>Personal details</Text>
         <View style={styles.form}>
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
           <TextInput 
             style={styles.input}
             placeholder="First name..."
             placeholderTextColor="#999"
+            value={formData.firstName}
+            onChangeText={(text) => setFormData({...formData, firstName: text})}
           />
           <TextInput 
             style={styles.input}
             placeholder="Occupation..."
             placeholderTextColor="#999"
+            value={formData.occupation}
+            onChangeText={(text) => setFormData({...formData, occupation: text})}
           />
           <TextInput 
             style={styles.input}
             placeholder="Last name..."
             placeholderTextColor="#999"
+            value={formData.lastName}
+            onChangeText={(text) => setFormData({...formData, lastName: text})}
           />
           <TextInput 
             style={styles.input}
             placeholder="Company name..."
             placeholderTextColor="#999"
+            value={formData.company}
+            onChangeText={(text) => setFormData({...formData, company: text})}
           />
-          <TouchableOpacity style={styles.addButton}>
+          <TextInput 
+            style={styles.input}
+            placeholder="Email..."
+            placeholderTextColor="#999"
+            value={formData.email}
+            onChangeText={(text) => setFormData({...formData, email: text})}
+            keyboardType="email-address"
+          />
+          <TextInput 
+            style={styles.input}
+            placeholder="Phone number..."
+            placeholderTextColor="#999"
+            value={formData.phoneNumber}
+            onChangeText={(text) => setFormData({...formData, phoneNumber: text})}
+            keyboardType="phone-pad"
+          />
+          <TouchableOpacity style={styles.addButton} onPress={handleAdd}>
             <Text style={styles.addButtonText}>Add</Text>
           </TouchableOpacity>
         </View>
@@ -169,5 +256,9 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: 16,
     fontWeight: '500',
+  },
+  errorText: {
+    color: 'red',
+    marginBottom: 10,
   },
 });

@@ -4,34 +4,74 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
+interface UserData {
+  id: string;
+  name: string;
+  surname: string;
+  email: string;
+  company: string;
+  phone: string;  // Changed from phoneNumber to phone
+  occupation: string;
+  status: string;
+}
+
+interface CardData {
+  CardId: string;
+  Company: string;
+  Email: string;
+  PhoneNumber: string;
+  title: string;
+  socialLinks: string[];
+}
 
 export default function CardsScreen() {
   const [qrCode, setQrCode] = useState<string>('');
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [cardData, setCardData] = useState<CardData | null>(null);
   const borderRotation = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    fetchQRCode();
+    loadUserData();
   }, []);
 
-  const fetchQRCode = async () => {
+  const loadUserData = async () => {
     try {
-      const response = await fetch(buildUrl(ENDPOINTS.GENERATE_QR_CODE), {
-        method: 'POST',
+      // Get logged in user data from AsyncStorage
+      const storedUserData = await AsyncStorage.getItem('userData');
+      if (storedUserData) {
+        const parsedUserData = JSON.parse(storedUserData);
+        
+        // Fetch user details
+        const userResponse = await fetch(buildUrl(ENDPOINTS.GET_USER) + `/${parsedUserData.id}`);
+        const userData = await userResponse.json();
+        setUserData(userData);
+
+        // Use hardcoded card ID for now
+        const cardId = parsedUserData.id;
+        const cardResponse = await fetch(buildUrl(ENDPOINTS.GET_CARD) + `/${cardId}`);
+        const cardData = await cardResponse.json();
+        setCardData(cardData);
+
+        // Generate QR code using logged in user's ID
+        fetchQRCode(parsedUserData.id);
+      }
+    } catch (error) {
+      console.error('Error loading data:', error);
+    }
+  };
+
+  const fetchQRCode = async (userId: string) => {
+    try {
+      const response = await fetch(buildUrl(ENDPOINTS.GENERATE_QR_CODE) + `/${userId}`, {
+        method: 'GET',
         headers: {
-          'Content-Type': 'application/json',
           'Accept': 'image/png'
-        },
-        body: JSON.stringify({
-          name: "Xolisa Ndaba",
-          status: "Software Project Manager"
-        })
+        }
       });
       
-      // Get the response as a blob
       const blob = await response.blob();
-      
-      // Create a FileReader to convert blob to base64
       const reader = new FileReader();
       reader.onload = () => {
         if (typeof reader.result === 'string') {
@@ -39,7 +79,6 @@ export default function CardsScreen() {
         }
       };
       reader.readAsDataURL(blob);
-      
     } catch (error) {
       console.error('Error fetching QR code:', error);
     }
@@ -93,21 +132,38 @@ export default function CardsScreen() {
               </Animated.View>
             </View>
           </View>
-          <Text style={styles.name}>Xolisa</Text>
-          <Text style={styles.position}>Software Project Manager</Text>
-          <Text style={styles.company}>XSpark</Text>
+          <Text style={styles.name}>
+            {userData ? `${userData.name} ${userData.surname}` : 'Loading...'}
+          </Text>
+          <Text style={styles.position}>{cardData?.title || userData?.occupation || 'Loading...'}</Text>
+          <Text style={styles.company}>{cardData?.Company || userData?.company || 'Loading...'}</Text>
           
           {/* Email Section */}
           <View style={styles.contactSection}>
             <MaterialIcons name="email" size={24} color={COLORS.secondary} />
-            <Text style={styles.contactText}>xolisa@xspark.com</Text>
+            <Text style={styles.contactText}>{cardData?.Email || userData?.email || 'Loading...'}</Text>
           </View>
 
           {/* Phone Section */}
           <View style={styles.contactSection}>
             <MaterialIcons name="phone" size={24} color={COLORS.secondary} />
-            <Text style={styles.contactText}>+123 456 7890</Text>
+            <Text style={styles.contactText}>{userData?.phone || 'No phone number'}</Text>
           </View>
+
+          {/* Social Links */}
+          {cardData?.socialLinks && cardData.socialLinks.length > 0 && (
+            <View style={styles.socialLinksContainer}>
+              {cardData.socialLinks.map((link, index) => (
+                <TouchableOpacity 
+                  key={index}
+                  style={styles.socialLink}
+                  onPress={() => {/* Handle link press */}}
+                >
+                  <Text style={styles.socialLinkText}>{link}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
 
           <TouchableOpacity style={styles.sendButton}>
             <MaterialIcons name="send" style={[styles.sendButtonIcon, { color: COLORS.light }]} />
@@ -221,5 +277,19 @@ const styles = StyleSheet.create({
     color: COLORS.light,
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  socialLinksContainer: {
+    marginVertical: 15,
+    width: '100%',
+  },
+  socialLink: {
+    padding: 10,
+    marginVertical: 5,
+    backgroundColor: COLORS.background,
+    borderRadius: 8,
+  },
+  socialLinkText: {
+    color: COLORS.primary,
+    fontSize: 14,
   },
 });

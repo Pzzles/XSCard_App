@@ -1,30 +1,103 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, TextInput, ImageStyle } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, TextInput, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
-import { Contact } from '../../types';
 import Header from '../../components/Header';
+import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+interface Contact {
+  name: string;
+  surname: string;
+  number: string;
+  createdAt: string;
+}
+
+interface ContactData {
+  id: string;
+  userId: string;
+  contactsList: Contact[];
+}
 
 export default function ContactsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [contacts, setContacts] = useState<Contact[]>([
-    {
-      id: 1,
-      name: 'Pule Tshehla',
-      position: 'Founder',
-      company: 'KruxTeck',
-      dateAdded: '6 days ago',
-      image: require('../../../assets/images/profile.png'),
-    },
-    {
-      id: 2,
-      name: 'Sapho Maqhwazima',
-      position: 'Co-founder',
-      company: 'X Spark',
-      dateAdded: '6 days ago',
-      image: require('../../../assets/images/profile.png'),
-    },
-  ]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [contactDocId, setContactDocId] = useState<string>('');
+
+  useEffect(() => {
+    loadContacts();
+    const intervalId = setInterval(loadContacts, 30000);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  const loadContacts = async () => {
+    try {
+      const storedUserData = await AsyncStorage.getItem('userData');
+      if (storedUserData) {
+        const parsedUserData = JSON.parse(storedUserData);
+        const response = await fetch(buildUrl(ENDPOINTS.GET_CONTACTS) + `/${parsedUserData.id}`);
+        const contactData: ContactData = await response.json();
+        if (contactData) {
+          setContacts(contactData.contactsList || []);
+          setContactDocId(contactData.id); // Store the contact document ID
+        }
+      }
+    } catch (error) {
+      console.error('Error loading contacts:', error);
+      Alert.alert('Error', 'Failed to load contacts');
+    }
+  };
+
+  const deleteContact = async (index: number) => {
+    try {
+      if (!contactDocId) {
+        throw new Error('Contact document ID not found');
+      }
+
+      const response = await fetch(`${API_BASE_URL}/Contacts/${contactDocId}/contact/${index}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete contact');
+      }
+
+      // Refresh contacts list after successful deletion
+      loadContacts();
+      Alert.alert('Success', 'Contact deleted successfully');
+    } catch (error) {
+      console.error('Error deleting contact:', error);
+      Alert.alert('Error', 'Failed to delete contact');
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        return 'Invalid date';
+      }
+      
+      const now = new Date();
+      const diffTime = now.getTime() - date.getTime();
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays === 0) {
+        return 'Today';
+      } else if (diffDays === 1) {
+        return 'Yesterday';
+      } else {
+        return `${diffDays} days ago`;
+      }
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return 'Invalid date';
+    }
+  };
+
+  const filteredContacts = contacts.filter(contact =>
+    `${contact.name} ${contact.surname}`.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <View style={styles.container}>
@@ -42,23 +115,50 @@ export default function ContactsScreen() {
         </View>
 
         <ScrollView style={styles.contactsList}>
-          {contacts.map((contact) => (
-            <View key={contact.id} style={styles.contactCard}>
+          {filteredContacts.map((contact, index) => (
+            <View key={index} style={styles.contactCard}>
               <View style={styles.contactLeft}>
-                <Image source={contact.image} style={styles.contactImage} />
+                <Image 
+                  source={require('../../../assets/images/profile.png')} 
+                  style={styles.contactImage} 
+                />
                 <View style={styles.contactInfo}>
-                  <Text style={styles.contactName}>{contact.name}</Text>
+                  <Text style={styles.contactName}>
+                    {contact.name} {contact.surname}
+                  </Text>
                   <View style={styles.contactSubInfo}>
-                    <Text style={styles.contactPosition}>{contact.position}</Text>
-                    <Text style={styles.contactCompany}> | {contact.company}</Text>
+                    <Text style={styles.contactPosition}>{contact.number}</Text>
                   </View>
                 </View>
               </View>
               <View style={styles.contactRight}>
-                <Text style={styles.dateAdded}>{contact.dateAdded}</Text>
-                <TouchableOpacity style={styles.shareButton}>
-                  <MaterialIcons name="share" size={24} color={COLORS.gray} />
-                </TouchableOpacity>
+                <Text style={styles.dateAdded}>
+                  {formatDate(contact.createdAt)}
+                </Text>
+                <View style={styles.actionButtons}>
+                  <TouchableOpacity style={styles.shareButton}>
+                    <MaterialIcons name="share" size={24} color={COLORS.gray} />
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.deleteButton}
+                    onPress={() => {
+                      Alert.alert(
+                        'Delete Contact',
+                        'Are you sure you want to delete this contact?',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { 
+                            text: 'Delete', 
+                            onPress: () => deleteContact(index),
+                            style: 'destructive'
+                          }
+                        ]
+                      );
+                    }}
+                  >
+                    <MaterialIcons name="delete" size={24} color={COLORS.error} />
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           ))}
@@ -142,5 +242,16 @@ const styles = StyleSheet.create({
   },
   shareButton: {
     padding: 5,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  deleteButton: {
+    padding: 5,
+  },
+  error: {
+    color: COLORS.error,
   },
 });
