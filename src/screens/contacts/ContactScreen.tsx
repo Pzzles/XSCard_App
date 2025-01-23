@@ -1,30 +1,59 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, TextInput, ImageStyle } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, TextInput } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
-import { Contact } from '../../types';
 import Header from '../../components/Header';
+import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+interface Contact {
+  name: string;
+  surname: string;
+  number: string;
+  createdAt: string;
+}
+
+interface ContactData {
+  id: string;
+  userId: string;
+  contactsList: Contact[];
+}
 
 export default function ContactsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [contacts, setContacts] = useState<Contact[]>([
-    {
-      id: 1,
-      name: 'Pule Tshehla',
-      position: 'Founder',
-      company: 'KruxTeck',
-      dateAdded: '6 days ago',
-      image: require('../../../assets/images/profile.png'),
-    },
-    {
-      id: 2,
-      name: 'Sapho Maqhwazima',
-      position: 'Co-founder',
-      company: 'X Spark',
-      dateAdded: '6 days ago',
-      image: require('../../../assets/images/profile.png'),
-    },
-  ]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+
+  useEffect(() => {
+    loadContacts();
+  }, []);
+
+  const loadContacts = async () => {
+    try {
+      const storedUserData = await AsyncStorage.getItem('userData');
+      if (storedUserData) {
+        const parsedUserData = JSON.parse(storedUserData);
+        const response = await fetch(buildUrl(ENDPOINTS.GET_CONTACTS) + `/${parsedUserData.id}`);
+        const contactData: ContactData = await response.json();
+        if (contactData.contactsList) {
+          setContacts(contactData.contactsList);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading contacts:', error);
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - date.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return `${diffDays} days ago`;
+  };
+
+  const filteredContacts = contacts.filter(contact =>
+    `${contact.name} ${contact.surname}`.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <View style={styles.container}>
@@ -42,20 +71,26 @@ export default function ContactsScreen() {
         </View>
 
         <ScrollView style={styles.contactsList}>
-          {contacts.map((contact) => (
-            <View key={contact.id} style={styles.contactCard}>
+          {filteredContacts.map((contact, index) => (
+            <View key={index} style={styles.contactCard}>
               <View style={styles.contactLeft}>
-                <Image source={contact.image} style={styles.contactImage} />
+                <Image 
+                  source={require('../../../assets/images/profile.png')} 
+                  style={styles.contactImage} 
+                />
                 <View style={styles.contactInfo}>
-                  <Text style={styles.contactName}>{contact.name}</Text>
+                  <Text style={styles.contactName}>
+                    {contact.name} {contact.surname}
+                  </Text>
                   <View style={styles.contactSubInfo}>
-                    <Text style={styles.contactPosition}>{contact.position}</Text>
-                    <Text style={styles.contactCompany}> | {contact.company}</Text>
+                    <Text style={styles.contactPosition}>{contact.number}</Text>
                   </View>
                 </View>
               </View>
               <View style={styles.contactRight}>
-                <Text style={styles.dateAdded}>{contact.dateAdded}</Text>
+                <Text style={styles.dateAdded}>
+                  {formatDate(contact.createdAt)}
+                </Text>
                 <TouchableOpacity style={styles.shareButton}>
                   <MaterialIcons name="share" size={24} color={COLORS.gray} />
                 </TouchableOpacity>

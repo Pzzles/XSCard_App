@@ -9,6 +9,7 @@ export const ENDPOINTS = {
     GET_USER: '/Users',
     GET_CARD: '/Cards',
     ADD_CARD: '/AddCard',
+    GET_CONTACTS: '/Contacts',
     // Add other endpoints here as needed
 };
 

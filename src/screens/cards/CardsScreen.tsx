@@ -12,6 +12,7 @@ interface UserData {
   surname: string;
   email: string;
   company: string;
+  phone: string;  // Changed from phoneNumber to phone
   occupation: string;
   status: string;
 }
@@ -146,7 +147,7 @@ export default function CardsScreen() {
           {/* Phone Section */}
           <View style={styles.contactSection}>
             <MaterialIcons name="phone" size={24} color={COLORS.secondary} />
-            <Text style={styles.contactText}>{cardData?.PhoneNumber || 'No phone number'}</Text>
+            <Text style={styles.contactText}>{userData?.phone || 'No phone number'}</Text>
           </View>
 
           {/* Social Links */}

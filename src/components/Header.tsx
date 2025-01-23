@@ -9,6 +9,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 type RootStackParamList = {
   Home: undefined;
   AddCards: undefined;
+  EditCard: undefined;
   // ... other screens ...
 };
 
@@ -21,6 +22,10 @@ export default function Header({ title }: HeaderProps) {
 
   const handleAddPress = () => {
     navigation.navigate('AddCards');
+  };
+
+  const handleEditPress = () => {
+    navigation.navigate('EditCard');
   };
 
   return (
@@ -37,7 +42,7 @@ export default function Header({ title }: HeaderProps) {
         <TouchableOpacity style={styles.icon} onPress={handleAddPress}>
           <MaterialIcons name="add" size={24} color={COLORS.black} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.icon}>
+        <TouchableOpacity style={styles.icon} onPress={handleEditPress}>
           <MaterialIcons name="edit" size={24} color={COLORS.black} />
         </TouchableOpacity>
       </View>
@@ -80,4 +85,4 @@ const styles = StyleSheet.create({
   iconContainer: {
     flexDirection: 'row',
   },
-}); 
+});

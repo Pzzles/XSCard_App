@@ -76,21 +76,10 @@ app.get('/Users/:id', async (req, res) => {
             return res.status(404).send({ message: 'User is not found' });
         }
 
-        // Fetch associated card data
-        const cardsRef = db.collection('cards');
-        const cardSnapshot = await cardsRef.where('UserId', '==', db.doc(`users/${id}`)).get();
-        
-        let userData = {
+        const userData = {
             id: userDoc.id,
-            ...userDoc.data(),
-            phoneNumber: null  // Changed from phone to phoneNumber to match card collection
+            ...userDoc.data()
         };
-
-        // Add phone number if card exists
-        if (!cardSnapshot.empty) {
-            const cardData = cardSnapshot.docs[0].data();
-            userData.phoneNumber = cardData.PhoneNumber;  // Using PhoneNumber from cards collection
-        }
         
         res.status(200).send(userData);
     } catch (error) {
@@ -103,10 +92,10 @@ app.get('/Users/:id', async (req, res) => {
 });
 
 app.post('/AddUser', async (req, res) => {
-    const { name, surname, email, password, occupation, company, status } = req.body;
+    const { name, surname, email, password, occupation, company, status, phone } = req.body;
     
     // Validate all required fields
-    const requiredFields = ['name', 'surname', 'email', 'password', 'occupation', 'company', 'status'];
+    const requiredFields = ['name', 'surname', 'email', 'password', 'occupation', 'company', 'status', 'phone'];
     const missingFields = requiredFields.filter(field => !req.body[field]);
     
     if (missingFields.length > 0) {
@@ -125,6 +114,7 @@ app.post('/AddUser', async (req, res) => {
             occupation,
             company,
             status,
+            phone,
             createdAt: new Date().toISOString()
         };
 
@@ -294,7 +284,7 @@ app.get('/Cards/:id', async (req, res) => {
 });
 
 app.post('/AddCard', async (req, res) => {
-    const { CardId, Company, Email, PhoneNumber, UserId, socialLinks, title } = req.body;
+    const { Company, Email, PhoneNumber, UserId, socialLinks, title } = req.body;
     
     // Validate required fields
     const requiredFields = ['Company', 'Email', 'PhoneNumber', 'UserId', 'title'];
@@ -318,13 +308,12 @@ app.post('/AddCard', async (req, res) => {
             createdAt: new Date().toISOString()
         };
 
-        // Use UserId as the document ID
-        const docRef = db.collection('cards').doc(UserId);
-        await docRef.set(cardData);
+        // Add document with auto-generated ID instead of using UserId
+        const docRef = await db.collection('cards').add(cardData);
         
         res.status(201).send({ 
             message: 'Card added successfully',
-            cardId: UserId,
+            cardId: docRef.id,
             cardData
         });
     } catch (error) {
