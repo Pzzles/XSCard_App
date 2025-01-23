@@ -20,43 +20,9 @@ export default function SignUpScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleSignUp = async () => {
-    try {
-      const response = await fetch('https://b3f2-102-217-178-202.ngrok-free.app/AddUser', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          firstName,
-          lastName,
-          email,
-          phoneNumber,
-          companyName,
-          status,
-          password
-        })
-      });
-
-      const data = await response.json();
-      
-      if (response.ok && data.success) {
-        navigation.navigate('MainApp');
-      } else {
-        Alert.alert(
-          'Signup Failed',
-          data.message || 'Something went wrong during signup. Please try again.',
-          [{ text: 'OK' }]
-        );
-      }
-    } catch (error) {
-      Alert.alert(
-        'Error',
-        'Network error occurred. Please check your connection and try again.',
-        [{ text: 'OK' }]
-      );
-      console.error('Error during signup:', error);
-    }
+  const handleSignUp = () => {
+    // Navigate directly to main app
+    navigation.navigate('MainApp');
   };
 
   return (

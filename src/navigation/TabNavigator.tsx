@@ -5,10 +5,13 @@ import { COLORS } from '../constants/colors';
 import CardsScreen from '../screens/cards/CardsScreen';
 import ContactsScreen from '../screens/contacts/ContactScreen';
 import { RootTabParamList } from '../types';
+import { createStackNavigator } from '@react-navigation/stack';
+import AddCards from '../screens/AddCards';
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
+const Stack = createStackNavigator();
 
-export default function TabNavigator() {
+function TabNavigator() {
   return (
     <Tab.Navigator
       screenOptions={{
@@ -36,5 +39,18 @@ export default function TabNavigator() {
         }}
       />
     </Tab.Navigator>
+  );
+}
+
+export default function AppNavigator() {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+      }}
+    >
+      <Stack.Screen name="MainTabs" component={TabNavigator} />
+      <Stack.Screen name="AddCards" component={AddCards} />
+    </Stack.Navigator>
   );
 }
