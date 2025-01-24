@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View, Image, TouchableOpacity, Animated, ScrollView, ImageStyle } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
@@ -85,14 +85,12 @@ export default function CardsScreen() {
   };
 
   useEffect(() => {
-    Animated.loop(
-      Animated.timing(borderRotation, {
-        toValue: 1,
-        duration: 2000,
-        useNativeDriver: true,
-      })
-    ).start();
-  }, [borderRotation]);
+    Animated.timing(borderRotation, {
+      toValue: 1,
+      duration: 2000,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   const rotateInterpolate = borderRotation.interpolate({
     inputRange: [0, 1],
@@ -103,7 +101,7 @@ export default function CardsScreen() {
     <View style={styles.container}>
       <Header title="XS Card" />
       {/* Scrollable Content */}
-      <ScrollView style={[styles.contentContainer, { marginTop: 120 }]}>
+      <ScrollView style={[styles.contentContainer, { marginTop: 100 }]}>
         <View style={styles.scrollContent}>
           <View style={styles.qrContainer}>
             {qrCode ? (
@@ -132,22 +130,30 @@ export default function CardsScreen() {
               </Animated.View>
             </View>
           </View>
-          <Text style={styles.name}>
+          <Text style={[styles.name, styles.leftAligned]}>
             {userData ? `${userData.name} ${userData.surname}` : 'Loading...'}
           </Text>
-          <Text style={styles.position}>{cardData?.title || userData?.occupation || 'Loading...'}</Text>
-          <Text style={styles.company}>{cardData?.Company || userData?.company || 'Loading...'}</Text>
+          <Text style={[styles.position, styles.leftAligned]}>
+            {cardData?.title || userData?.occupation || 'Loading...'}
+          </Text>
+          <Text style={[styles.company, styles.leftAligned]}>
+            {cardData?.Company || userData?.company || 'Loading...'}
+          </Text>
           
           {/* Email Section */}
-          <View style={styles.contactSection}>
-            <MaterialIcons name="email" size={24} color={COLORS.secondary} />
-            <Text style={styles.contactText}>{cardData?.Email || userData?.email || 'Loading...'}</Text>
+          <View style={[styles.contactBorder, styles.contactSection, styles.leftAligned]}>
+            <MaterialCommunityIcons name="email-outline" size={30} color={COLORS.secondary} />
+            <Text style={styles.contactText}>
+              {cardData?.Email || userData?.email || 'Loading...'}
+            </Text>
           </View>
 
           {/* Phone Section */}
-          <View style={styles.contactSection}>
-            <MaterialIcons name="phone" size={24} color={COLORS.secondary} />
-            <Text style={styles.contactText}>{userData?.phone || 'No phone number'}</Text>
+          <View style={[styles.contactBorder, styles.contactSection, styles.leftAligned]}>
+            <MaterialCommunityIcons name="phone-outline" size={30} color={COLORS.secondary} />
+            <Text style={styles.contactText}>
+              {userData?.phone || 'No phone number'}
+            </Text>
           </View>
 
           {/* Social Links */}
@@ -178,18 +184,17 @@ export default function CardsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.white,
   },
   contentContainer: {
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
     alignItems: 'center',
   },
   qrContainer: {
-    width: 300,
-    height: 300,
+    width: 150,
+    height: 150,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
@@ -206,7 +211,7 @@ const styles = StyleSheet.create({
     marginLeft: -20,
     marginRight: -20,
     alignSelf: 'center',
-    marginBottom: 60,
+    marginBottom: 50,
   },
   logo: {
     width: '100%',
@@ -227,7 +232,7 @@ const styles = StyleSheet.create({
     height: 120,
     borderRadius: 60,
     borderWidth: 5,
-    borderColor: COLORS.primary,
+    borderColor: COLORS.white,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'transparent',
@@ -238,36 +243,52 @@ const styles = StyleSheet.create({
     borderRadius: 55,
   },
   name: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontWeight: '600',
     marginBottom: 5,
-    marginTop: 20,
+    marginTop: 0,
+    fontFamily: 'Montserrat-Bold',
+    marginLeft:25,
   },
   position: {
-    fontSize: 16,
-    color: COLORS.secondary,
+    fontSize: 17,
     marginBottom: 5,
+    fontFamily: 'Montserrat-Regular',
+    marginLeft:25,
   },
   company: {
-    fontSize: 18,
+    fontSize: 17,
     marginBottom: 20,
+    fontFamily: 'Montserrat-Regular',
+    marginLeft:25,
   },
   contactSection: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 15,
+    marginLeft:25,
   },
   contactText: {
     marginLeft: 10,
     fontSize: 16,
+    fontFamily: 'Montserrat-Regular',
   },
   sendButton: {
     flexDirection: 'row',
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.secondary,
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 25,
     alignItems: 'center',
+    marginBottom: 20,
+    shadowColor: '#000', // Shadow color
+    shadowOffset: {
+      width: 0,
+      height: 2, // Vertical shadow offset
+    },
+    shadowOpacity: 0.3, // Shadow opacity
+    shadowRadius: 4, // Shadow blur radius
+    elevation: 3, // For Android shadow
   },
   sendButtonIcon: {
     fontSize: 24,
@@ -277,6 +298,7 @@ const styles = StyleSheet.create({
     color: COLORS.light,
     fontSize: 16,
     fontWeight: 'bold',
+    fontFamily: 'Montserrat-Bold',
   },
   socialLinksContainer: {
     marginVertical: 15,
@@ -291,5 +313,22 @@ const styles = StyleSheet.create({
   socialLinkText: {
     color: COLORS.primary,
     fontSize: 14,
+  },
+  leftAligned: {
+    alignSelf: 'flex-start',
+  },
+  contactBorder: {
+    borderWidth: 1,
+    borderColor: 'rgba(27, 43, 91, 0.5)', // #1B2B5B with 50% opacity
+    borderRadius: 8, // Optional: to make the corners rounded
+    padding: 10, // Optional: to add some padding inside the border
+    marginBottom: 15, // Space between sections
+    shadowColor: '#1B2B5B', // Shadow color
+    shadowOffset: {
+      width: 0,
+      height: 2, // Slightly increased height for a more natural shadow
+    },
+    shadowOpacity: 0.5, // Further reduced shadow opacity for a softer effect
+    shadowRadius: 8, // Reduced elevation for Android shadow
   },
 });

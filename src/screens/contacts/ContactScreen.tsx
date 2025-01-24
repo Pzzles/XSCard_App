@@ -24,11 +24,11 @@ export default function ContactsScreen() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactDocId, setContactDocId] = useState<string>('');
 
-  useEffect(() => {
-    loadContacts();
-    const intervalId = setInterval(loadContacts, 30000);
-    return () => clearInterval(intervalId);
-  }, []);
+  // useEffect(() => {
+  //   loadContacts();
+  //   const intervalId = setInterval(loadContacts, 30000);
+  //   return () => clearInterval(intervalId);
+  // }, []);
 
   const loadContacts = async () => {
     try {
