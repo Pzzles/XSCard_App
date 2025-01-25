@@ -150,6 +150,11 @@ END:VCARD`;
             link.href = URL.createObjectURL(blob);
             link.download = `${userData.name}_${userData.surname}.vcf`;
             link.click();
+
+            // Close the webpage after successful save
+            setTimeout(() => {
+                window.close();
+            }, 5000); // Give 1 second for the vCard download to start
         }
 
         // Load user data when page loads
