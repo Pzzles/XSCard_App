@@ -9,6 +9,7 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@expo-google-fonts/montserrat": "^0.2.3",
     "@expo/vector-icons": "*",
     "@react-native-async-storage/async-storage": "^2.1.0",
     "@react-navigation/bottom-tabs": "*",
@@ -17,11 +18,13 @@
     "expo": "*",
     "expo-linear-gradient": "~14.0.2",
     "expo-status-bar": "*",
+    "multer": "^1.4.5-lts.1",
     "react": "*",
     "react-native": "*",
     "react-native-gesture-handler": "~2.20.2",
     "react-native-safe-area-context": "*",
-    "react-native-screens": "*"
+    "react-native-screens": "*",
+    "expo-image-picker": "~16.0.4"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
