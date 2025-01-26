@@ -10,6 +10,7 @@ interface Contact {
   name: string;
   surname: string;
   number: string;
+  howWeMet: string; // Add howWeMet field
   createdAt: string;
 }
 
@@ -69,27 +70,44 @@ export default function ContactsScreen() {
     }
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: any) => {
     try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) {
-        return 'Invalid date';
-      }
+      let date;
       
-      const now = new Date();
-      const diffTime = now.getTime() - date.getTime();
-      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-      
-      if (diffDays === 0) {
-        return 'Today';
-      } else if (diffDays === 1) {
-        return 'Yesterday';
+      // Handle Firestore timestamp
+      if (dateString && dateString._seconds) {
+        // Convert Firestore timestamp to Date
+        date = new Date(dateString._seconds * 1000);
+      } else if (typeof dateString === 'string') {
+        // Handle ISO string
+        date = new Date(dateString);
+      } else if (dateString instanceof Date) {
+        date = dateString;
       } else {
-        return `${diffDays} days ago`;
+        console.error('Unsupported date format:', dateString);
+        return 'Recently';
       }
+  
+      // Check if the date is valid
+      if (!date || isNaN(date.getTime())) {
+        console.error('Invalid date value:', dateString);
+        return 'Recently';
+      }
+  
+      // Format the date
+      const options: Intl.DateTimeFormatOptions = {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      };
+  
+      return new Intl.DateTimeFormat('en-US', options).format(date);
     } catch (error) {
-      console.error('Error formatting date:', error);
-      return 'Invalid date';
+      console.error('Error formatting date:', error, dateString);
+      return 'Recently';
     }
   };
 
@@ -126,13 +144,14 @@ export default function ContactsScreen() {
                   </Text>
                   <View style={styles.contactSubInfo}>
                     <Text style={styles.contactPosition}>{contact.number}</Text>
+                    <View style={styles.metContainer}>
+                      <Text style={styles.contactHowWeMet}>Met at: {contact.howWeMet}</Text>
+                      <Text style={styles.contactDate}>Date: {formatDate(contact.createdAt)}</Text>
+                    </View>
                   </View>
                 </View>
               </View>
               <View style={styles.contactRight}>
-                <Text style={styles.dateAdded}>
-                  {formatDate(contact.createdAt)}
-                </Text>
                 <View style={styles.actionButtons}>
                   <TouchableOpacity style={styles.shareButton}>
                     <MaterialIcons name="share" size={24} color={COLORS.gray} />
@@ -219,8 +238,9 @@ const styles = StyleSheet.create({
     color: COLORS.black,
   },
   contactSubInfo: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     marginTop: 4,
+    gap: 2,
   },
   contactPosition: {
     fontSize: 14,
@@ -251,5 +271,18 @@ const styles = StyleSheet.create({
   },
   error: {
     color: COLORS.error,
+  },
+  contactHowWeMet: {
+    fontSize: 12,
+    color: COLORS.gray,
+    fontStyle: 'italic',
+  },
+  metContainer: {
+    marginTop: 2,
+  },
+  contactDate: {
+    fontSize: 11,
+    color: COLORS.gray,
+    marginTop: 2,
   },
 });

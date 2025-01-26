@@ -24,6 +24,13 @@ app.get('/saveContact', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'saveContact.html'));
 });
 
+// Handle howWeMet field
+app.post('/saveContact', (req, res) => {
+    const { howWeMet } = req.body;
+    // Process the howWeMet field as needed
+    res.send({ message: 'Contact saved successfully', howWeMet });
+});
+
 // Error handler
 app.use((error, req, res, next) => {
     console.error('Error:', error);

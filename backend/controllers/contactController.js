@@ -105,7 +105,8 @@ exports.saveContactInfo = async (req, res) => {
             name: contactInfo.name,
             surname: contactInfo.surname,
             number: contactInfo.phone,
-            createdAt: new Date()
+            howWeMet: contactInfo.howWeMet,
+            createdAt: new Date().toISOString() // Ensure consistent date format
         });
 
         await contactsRef.set({

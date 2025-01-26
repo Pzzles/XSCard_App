@@ -58,6 +58,9 @@
         <div class="form-group">
             <input type="tel" id="scannerPhone" placeholder="Your Phone Number">
         </div>
+        <div class="form-group">
+            <input type="text" id="howWeMet" placeholder="How we met">
+        </div>
         <button class="submit-btn" onclick="handleSubmit()">Save Contact</button>
     </div>
 
@@ -90,8 +93,9 @@
             const scannerName = document.getElementById('scannerName').value;
             const scannerSurname = document.getElementById('scannerSurname').value;
             const scannerPhone = document.getElementById('scannerPhone').value;
+            const howWeMet = document.getElementById('howWeMet').value;
 
-            if (!scannerName || !scannerSurname || !scannerPhone) {
+            if (!scannerName || !scannerSurname || !scannerPhone || !howWeMet) {
                 alert('Please fill in all your details');
                 return false;
             }
@@ -108,6 +112,7 @@
                             name: scannerName,
                             surname: scannerSurname,
                             phone: scannerPhone,
+                            howWeMet: howWeMet,
                             createdAt: new Date().toISOString()
                         }
                     })
