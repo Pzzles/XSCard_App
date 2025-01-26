@@ -73,7 +73,7 @@ export default function SignUpScreen() {
           
           <TextInput
             style={styles.input}
-            placeholder="First name..."
+            placeholder="First name"
             value={firstName}
             onChangeText={setFirstName}
             placeholderTextColor="#999"
@@ -81,7 +81,7 @@ export default function SignUpScreen() {
 
           <TextInput
             style={styles.input}
-            placeholder="Last name..."
+            placeholder="Last name"
             value={lastName}
             onChangeText={setLastName}
             placeholderTextColor="#999"
@@ -89,7 +89,7 @@ export default function SignUpScreen() {
 
           <TextInput
             style={styles.input}
-            placeholder="Mail..."
+            placeholder="Mail"
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -99,7 +99,7 @@ export default function SignUpScreen() {
 
           <TextInput
             style={styles.input}
-            placeholder="Phone number..."
+            placeholder="Phone number"
             value={phoneNumber}
             onChangeText={setPhoneNumber}
             keyboardType="phone-pad"
@@ -108,7 +108,7 @@ export default function SignUpScreen() {
 
           <TextInput
             style={styles.input}
-            placeholder="Company name..."
+            placeholder="Company name"
             value={companyName}
             onChangeText={setCompanyName}
             placeholderTextColor="#999"
@@ -116,7 +116,7 @@ export default function SignUpScreen() {
 
           <TextInput
             style={styles.input}
-            placeholder="Occupation... (e.g. Software Developer)"
+            placeholder="Occupation (e.g. Software Developer)"
             value={occupation}
             onChangeText={setOccupation}
             placeholderTextColor="#999"
@@ -125,7 +125,7 @@ export default function SignUpScreen() {
           <View style={styles.passwordContainer}>
             <TextInput
               style={[styles.input, styles.passwordInput]}
-              placeholder="Password..."
+              placeholder="Password"
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPassword}

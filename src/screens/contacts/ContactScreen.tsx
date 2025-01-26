@@ -114,55 +114,69 @@ export default function ContactsScreen() {
           />
         </View>
 
-        <ScrollView style={styles.contactsList}>
-          {filteredContacts.map((contact, index) => (
-            <View key={index} style={styles.contactCard}>
-              <View style={styles.contactLeft}>
-                <Image 
-                  source={require('../../../assets/images/profile.png')} 
-                  style={styles.contactImage} 
-                />
-                <View style={styles.contactInfo}>
-                  <Text style={styles.contactName}>
-                    {contact.name} {contact.surname}
+        {filteredContacts.length === 0 ? (
+          <View style={styles.emptyStateContainer}>
+            <MaterialIcons name="people" size={64} color={COLORS.gray} />
+            <Text style={styles.emptyStateTitle}>No contact yet</Text>
+            <Text style={styles.emptyStateDescription}>
+              When you share your card and they share their details back, it will appear here
+            </Text>
+            <TouchableOpacity style={styles.shareCardButton}>
+              <MaterialIcons name="share" size={24} color={COLORS.white} />
+              <Text style={styles.shareCardButtonText}>Share my card</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <ScrollView style={styles.contactsList}>
+            {filteredContacts.map((contact, index) => (
+              <View key={index} style={styles.contactCard}>
+                <View style={styles.contactLeft}>
+                  <Image 
+                    source={require('../../../assets/images/profile.png')} 
+                    style={styles.contactImage} 
+                  />
+                  <View style={styles.contactInfo}>
+                    <Text style={styles.contactName}>
+                      {contact.name} {contact.surname}
+                    </Text>
+                    <View style={styles.contactSubInfo}>
+                      <Text style={styles.contactPosition}>{contact.number}</Text>
+                    </View>
+                  </View>
+                </View>
+                <View style={styles.contactRight}>
+                  <Text style={styles.dateAdded}>
+                    {formatDate(contact.createdAt)}
                   </Text>
-                  <View style={styles.contactSubInfo}>
-                    <Text style={styles.contactPosition}>{contact.number}</Text>
+                  <View style={styles.actionButtons}>
+                    <TouchableOpacity style={styles.shareButton}>
+                      <MaterialIcons name="share" size={24} color={COLORS.gray} />
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={styles.deleteButton}
+                      onPress={() => {
+                        Alert.alert(
+                          'Delete Contact',
+                          'Are you sure you want to delete this contact?',
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            { 
+                              text: 'Delete', 
+                              onPress: () => deleteContact(index),
+                              style: 'destructive'
+                            }
+                          ]
+                        );
+                      }}
+                    >
+                      <MaterialIcons name="delete" size={24} color={COLORS.error} />
+                    </TouchableOpacity>
                   </View>
                 </View>
               </View>
-              <View style={styles.contactRight}>
-                <Text style={styles.dateAdded}>
-                  {formatDate(contact.createdAt)}
-                </Text>
-                <View style={styles.actionButtons}>
-                  <TouchableOpacity style={styles.shareButton}>
-                    <MaterialIcons name="share" size={24} color={COLORS.gray} />
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={styles.deleteButton}
-                    onPress={() => {
-                      Alert.alert(
-                        'Delete Contact',
-                        'Are you sure you want to delete this contact?',
-                        [
-                          { text: 'Cancel', style: 'cancel' },
-                          { 
-                            text: 'Delete', 
-                            onPress: () => deleteContact(index),
-                            style: 'destructive'
-                          }
-                        ]
-                      );
-                    }}
-                  >
-                    <MaterialIcons name="delete" size={24} color={COLORS.error} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          ))}
-        </ScrollView>
+            ))}
+          </ScrollView>
+        )}
       </View>
     </View>
   );
@@ -171,17 +185,19 @@ export default function ContactsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.white,
   },
   contactsContainer: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.white,
   },
   searchContainer: {
     padding: 15,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.white,
+    backgroundColor: '#F5F5F5',
+    margin: 15,
+    borderRadius: 8,
   },
   searchIcon: {
     marginRight: 10,
@@ -253,5 +269,39 @@ const styles = StyleSheet.create({
   },
   error: {
     color: COLORS.error,
+  },
+  emptyStateContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  emptyStateTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.black,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateDescription: {
+    fontSize: 16,
+    color: COLORS.gray,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 24,
+  },
+  shareCardButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.secondary,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 25,
+    gap: 8,
+  },
+  shareCardButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
