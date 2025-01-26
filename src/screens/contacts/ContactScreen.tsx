@@ -26,8 +26,6 @@ export default function ContactsScreen() {
 
   useEffect(() => {
     loadContacts();
-    const intervalId = setInterval(loadContacts, 30000);
-    return () => clearInterval(intervalId);
   }, []);
 
   const loadContacts = async () => {
