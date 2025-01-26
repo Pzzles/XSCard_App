@@ -1,24 +1,52 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import React, { useState, useRef } from 'react';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Image } from 'react-native';
+import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Animated } from 'react-native';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
 import { useNavigation } from '@react-navigation/native';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Add this interface for the form data type
+interface FormData {
+  firstName: string;
+  lastName: string;
+  occupation: string;
+  company: string;
+  email: string;
+  phoneNumber: string;
+  whatsapp?: string;
+  x?: string;
+  facebook?: string;
+  linkedin?: string;
+  website?: string;
+  tiktok?: string;
+  instagram?: string;
+  [key: string]: string | undefined;  // Index signature to allow dynamic social media fields
+}
+
 export default function EditCard() {
   const navigation = useNavigation();
   const [error, setError] = useState('');
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     firstName: '',
     lastName: '',
     occupation: '',
     company: '',
     email: '',
     phoneNumber: '',
+    whatsapp: '',
+    x: '',
+    facebook: '',
+    linkedin: '',
+    website: '',
+    tiktok: '',
+    instagram: '',
   });
   const [selectedColor, setSelectedColor] = useState('#1B2B5B'); // Default color
+  const [selectedSocials, setSelectedSocials] = useState<string[]>([]);
+  const scrollViewRef = useRef<ScrollView>(null);
 
   // Add this array of colors
   const cardColors = [
@@ -32,6 +60,25 @@ export default function EditCard() {
     '#B56576', // Pink
     '#4DAA57', // Green
     '#264653', // Dark Teal
+  ];
+
+  // Add this type for the socials array
+  interface Social {
+    id: string;
+    icon: keyof typeof MaterialCommunityIcons.glyphMap;  // This ensures the icon name is valid
+    label: string;
+    color: string;
+  }
+
+  // Update the socials array with the correct type
+  const socials: Social[] = [
+    { id: 'whatsapp', icon: 'whatsapp', label: 'WhatsApp', color: '#25D366' },
+    { id: 'x', icon: 'twitter', label: 'X', color: '#000000' },
+    { id: 'facebook', icon: 'facebook', label: 'Facebook', color: '#1877F2' },
+    { id: 'linkedin', icon: 'linkedin', label: 'LinkedIn', color: '#0A66C2' },
+    { id: 'website', icon: 'web', label: 'Website', color: '#4285F4' },
+    { id: 'tiktok', icon: 'music-note', label: 'TikTok', color: '#000000' },
+    { id: 'instagram', icon: 'instagram', label: 'Instagram', color: '#E4405F' },
   ];
 
   const handleCancel = () => {
@@ -62,6 +109,25 @@ export default function EditCard() {
     }
   };
 
+  const handleSocialSelect = (socialId: string) => {
+    if (selectedSocials.includes(socialId)) {
+      setSelectedSocials(selectedSocials.filter(id => id !== socialId));
+      setFormData({
+        ...formData,
+        [socialId]: undefined
+      });
+    } else {
+      setSelectedSocials([...selectedSocials, socialId]);
+      // Scroll to personal details section
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({
+          y: 500, // Adjust this value based on your layout
+          animated: true
+        });
+      }, 100);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Header title="Edit Card" />
@@ -72,11 +138,14 @@ export default function EditCard() {
           <Text style={styles.cancelButton}>Cancel</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={handlePreview}>
-          <Text style={styles.saveButton}>Preview card</Text>
+          <Text style={styles.saveButton}>Save</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView 
+        ref={scrollViewRef}
+        style={styles.content}
+      >
         {/* Warning Message */}
         <View style={styles.colorSection}>
           <Text style={styles.sectionTitle}>Card color</Text>
@@ -103,16 +172,49 @@ export default function EditCard() {
 
         {/* Images & Layout Section */}
         <Text style={styles.sectionTitle}>Images & layout</Text>
-        <View style={styles.imageButtons}>
-          <TouchableOpacity style={styles.imageButton}>
-            <MaterialIcons name="add" size={24} color={COLORS.black} />
-            <Text style={styles.buttonText}>Profile Picture</Text>
+        <View style={styles.logoContainer}>
+          <Image
+            style={styles.logo}
+            source={require('../../../assets/images/logoplaceholder.jpg')}
+          />
+          <TouchableOpacity style={styles.editLogoButton}>
+            <MaterialIcons name="edit" size={24} color={COLORS.white} />
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.imageButton}>
-            <MaterialIcons name="add" size={24} color={COLORS.black} />
-            <Text style={styles.buttonText}>Company logo</Text>
-          </TouchableOpacity>
+          {/* Profile Image Overlaying Logo */}
+          <View style={styles.profileOverlayContainer}>
+            <View style={styles.profileImageContainer}>
+              <Image
+                style={styles.profileImage}
+                source={require('../../../assets/images/profile.png')}
+              />
+              <TouchableOpacity style={styles.editProfileButton}>
+                <MaterialIcons name="edit" size={24} color={COLORS.white} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        {/* Link Socials Section */}
+        <Text style={styles.sectionTitle}>Link Socials</Text>
+        <View style={styles.socialsGrid}>
+          {socials.map((social) => (
+            <TouchableOpacity
+              key={social.id}
+              style={[
+                styles.socialItem,
+                selectedSocials.includes(social.id) && styles.selectedSocialItem
+              ]}
+              onPress={() => handleSocialSelect(social.id)}
+            >
+              <MaterialCommunityIcons
+                name={social.icon || 'link'}
+                size={24}
+                color={social.color}
+              />
+              <Text style={styles.socialLabel}>{social.label}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         {/* Personal Details Section */}
@@ -163,6 +265,38 @@ export default function EditCard() {
             onChangeText={(text) => setFormData({...formData, phoneNumber: text})}
             keyboardType="phone-pad"
           />
+
+          {/* Social Media URL Inputs */}
+          {selectedSocials.map((socialId) => (
+            <Animated.View 
+              key={socialId}
+              style={styles.socialInputContainer}
+            >
+              <View style={styles.socialInputHeader}>
+                <MaterialCommunityIcons
+                  name={socials.find(s => s.id === socialId)?.icon || 'link'}
+                  size={24}
+                  color={socials.find(s => s.id === socialId)?.color}
+                />
+                <Text style={styles.socialInputLabel}>
+                  {socials.find(s => s.id === socialId)?.label}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => handleSocialSelect(socialId)}
+                  style={styles.removeSocialButton}
+                >
+                  <MaterialIcons name="close" size={24} color="#666" />
+                </TouchableOpacity>
+              </View>
+              <TextInput
+                style={styles.input}
+                placeholder={`Enter your ${socials.find(s => s.id === socialId)?.label} URL...`}
+                placeholderTextColor="#999"
+                value={formData[socialId]}
+                onChangeText={(text) => setFormData({...formData, [socialId]: text})}
+              />
+            </Animated.View>
+          ))}
         </View>
       </ScrollView>
     </View>
@@ -177,7 +311,8 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 16,
-    marginTop: 200,
+    marginTop: 130,
+    marginBottom: 20,
   },
   warningBox: {
     flexDirection: 'row',
@@ -231,7 +366,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     position: 'absolute',
-    top: 140,
+    top: 96,
     left: 0,
     right: 0,
     zIndex: 1,
@@ -263,6 +398,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   colorSection: {
+    marginTop: 20,
     marginBottom: 24,
   },
   colorContainer: {
@@ -284,5 +420,102 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: 'rgba(0, 0, 0, 0.3)',
     borderRadius: 20,
+  },
+  logoContainer: {
+    width: '100%',
+    position: 'relative',
+    overflow: 'visible',
+    marginLeft: -20,
+    marginRight: -20,
+    alignSelf: 'center',
+    marginBottom: 50,
+  },
+  logo: {
+    width: '100%',
+    height: undefined,
+    aspectRatio: 16/9,
+    resizeMode: 'cover',
+    marginHorizontal: 0,
+  },
+  profileOverlayContainer: {
+    position: 'absolute',
+    bottom: -40,
+    left: '50%',
+    transform: [{ translateX: -60 }],
+    alignItems: 'center',
+  },
+  profileImageContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 5,
+    borderColor: COLORS.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  profileImage: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+  },
+  editLogoButton: {
+    position: 'absolute',
+    right: 20,
+    top: 20,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 20,
+    padding: 8,
+  },
+  editProfileButton: {
+    position: 'absolute',
+    right: -5,
+    bottom: -5,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 20,
+    padding: 8,
+  },
+  socialsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 24,
+  },
+  socialItem: {
+    width: '22%',
+    aspectRatio: 1,
+    backgroundColor: '#F8F8F8',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 8,
+  },
+  selectedSocialItem: {
+    backgroundColor: '#E8E8E8',
+    borderWidth: 2,
+    borderColor: COLORS.secondary,
+  },
+  socialLabel: {
+    fontSize: 12,
+    marginTop: 4,
+    textAlign: 'center',
+    color: COLORS.black,
+  },
+  socialInputContainer: {
+    marginBottom: 12,
+  },
+  socialInputHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  socialInputLabel: {
+    marginLeft: 8,
+    flex: 1,
+    fontSize: 14,
+    color: COLORS.black,
+  },
+  removeSocialButton: {
+    padding: 4,
   },
 });
