@@ -15,6 +15,7 @@ interface UserData {
   phone: string;  // Changed from phoneNumber to phone
   occupation: string;
   status: string;
+  profileImage: string | null;
 }
 
 interface CardData {
@@ -127,7 +128,10 @@ export default function CardsScreen() {
               <Animated.View style={[styles.profileImageContainer, { transform: [{ rotate: rotateInterpolate }] }]}>
                 <Image
                   style={styles.profileImage}
-                  source={require('../../../assets/images/profile.png')}
+                  source={userData?.profileImage ? 
+                    { uri: `${API_BASE_URL}${userData.profileImage}` } : 
+                    require('../../../assets/images/profile.png')
+                  }
                 />
               </Animated.View>
             </View>

@@ -3,6 +3,8 @@ process.removeAllListeners('warning');
 
 const express = require('express');
 const path = require('path');
+const multer = require('multer');
+const fs = require('fs');
 const app = express();
 const port = 8383;
 
@@ -11,6 +13,26 @@ const userRoutes = require('./routes/userRoutes');
 const cardRoutes = require('./routes/cardRoutes');
 const contactRoutes = require('./routes/contactRoutes');
 
+// Configure multer for file upload
+const storage = multer.diskStorage({
+  destination: function(req, file, cb) {
+    const profilesDir = path.join(__dirname, 'public', 'profiles');
+    
+    // Create profiles directory if it doesn't exist
+    if (!fs.existsSync(profilesDir)) {
+      fs.mkdirSync(profilesDir, { recursive: true });
+    }
+    
+    cb(null, profilesDir);
+  },
+  filename: function(req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage: storage });
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -18,6 +40,14 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/', userRoutes);
 app.use('/', cardRoutes);
 app.use('/', contactRoutes);
+
+// Modify the user creation route to handle file upload
+app.post('/api/users', upload.single('profileImage'), (req, res, next) => {
+  if (req.file) {
+    req.body.profileImage = `/profiles/${req.file.filename}`;
+  }
+  next();
+});
 
 // Handle saveContact page route
 app.get('/saveContact', (req, res) => {

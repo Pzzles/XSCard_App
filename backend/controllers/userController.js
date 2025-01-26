@@ -70,8 +70,15 @@ exports.addUser = async (req, res) => {
 
     try {
         const userData = {
-            name, surname, email, password,
-            occupation, company, status, phone,
+            name, 
+            surname, 
+            email, 
+            password,
+            occupation, 
+            company, 
+            status, 
+            phone,
+            profileImage: req.file ? `/profiles/${req.file.filename}` : null,
             createdAt: new Date().toISOString()
         };
 
@@ -83,7 +90,8 @@ exports.addUser = async (req, res) => {
             userData
         });
     } catch (error) {
-        res.status(500).send({ message: 'Internal Server Error', error });
+        console.error('Error adding user:', error);
+        res.status(500).send({ message: 'Internal Server Error', error: error.message });
     }
 };
 
