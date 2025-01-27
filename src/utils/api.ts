@@ -8,6 +8,7 @@ export const ENDPOINTS = {
     GET_CARD: '/Cards',
     ADD_CARD: '/AddCard',
     GET_CONTACTS: '/Contacts',
+    UPDATE_USER: '/UpdateUser',
 };
 
 export const buildUrl = (endpoint: string) => `${API_BASE_URL}${endpoint}`;

@@ -1,10 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Image } from 'react-native';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Animated } from 'react-native';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, CommonActions } from '@react-navigation/native';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -29,6 +29,7 @@ interface FormData {
 export default function EditCard() {
   const navigation = useNavigation();
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState<FormData>({
     firstName: '',
     lastName: '',
@@ -47,6 +48,44 @@ export default function EditCard() {
   const [selectedColor, setSelectedColor] = useState('#1B2B5B'); // Default color
   const [selectedSocials, setSelectedSocials] = useState<string[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      const storedUserData = await AsyncStorage.getItem('userData');
+      if (storedUserData) {
+        const parsedUserData = JSON.parse(storedUserData);
+        
+        const response = await fetch(buildUrl(ENDPOINTS.GET_USER) + `/${parsedUserData.id}`);
+        const userData = await response.json();
+
+        setFormData({
+          firstName: userData.name || '',
+          lastName: userData.surname || '',
+          occupation: userData.occupation || '',
+          company: userData.company || '',
+          email: userData.email || '',
+          phoneNumber: userData.phone || '',
+          whatsapp: userData.whatsapp || '',
+          x: userData.x || '',
+          facebook: userData.facebook || '',
+          linkedin: userData.linkedin || '',
+          website: userData.website || '',
+          tiktok: userData.tiktok || '',
+          instagram: userData.instagram || '',
+        });
+
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+      setError('Failed to load user data');
+      setLoading(false);
+    }
+  };
 
   // Add this array of colors
   const cardColors = [
@@ -94,18 +133,66 @@ export default function EditCard() {
     return true;
   };
 
-  const handlePreview = async () => {
+  const handleSave = async () => {
     try {
       if (!validateForm()) {
         return;
       }
 
-      // Logic for previewing the card can be added here
-      Alert.alert('Preview', 'This is where you would preview the card.');
+      const storedUserData = await AsyncStorage.getItem('userData');
+      if (!storedUserData) {
+        setError('User data not found');
+        return;
+      }
+
+      const { id } = JSON.parse(storedUserData);
+
+      const response = await fetch(buildUrl(ENDPOINTS.UPDATE_USER) + `/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: formData.firstName,
+          surname: formData.lastName,
+          occupation: formData.occupation,
+          company: formData.company,
+          email: formData.email,
+          phone: formData.phoneNumber,
+          whatsapp: formData.whatsapp,
+          x: formData.x,
+          facebook: formData.facebook,
+          linkedin: formData.linkedin,
+          website: formData.website,
+          tiktok: formData.tiktok,
+          instagram: formData.instagram,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update user');
+      }
+
+      // Get fresh user data
+      const updatedUserResponse = await fetch(buildUrl(ENDPOINTS.GET_USER) + `/${id}`);
+      const updatedUserData = await updatedUserResponse.json();
+
+      // Update AsyncStorage with fresh data
+      await AsyncStorage.setItem('userData', JSON.stringify(updatedUserData));
+
+      Alert.alert('Success', 'Profile updated successfully', [
+        {
+          text: 'OK',
+          onPress: () => {
+            // Simply go back to previous screen
+            navigation.goBack();
+          }
+        }
+      ]);
 
     } catch (error) {
-      console.error('Error previewing card:', error);
-      Alert.alert('Error', 'Failed to preview card. Please try again.');
+      console.error('Error updating user:', error);
+      setError('Failed to update profile');
     }
   };
 
@@ -137,7 +224,7 @@ export default function EditCard() {
         <TouchableOpacity onPress={handleCancel}>
           <Text style={styles.cancelButton}>Cancel</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={handlePreview}>
+        <TouchableOpacity onPress={handleSave}>
           <Text style={styles.saveButton}>Save</Text>
         </TouchableOpacity>
       </View>

@@ -5,6 +5,7 @@ import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
 
 interface UserData {
   id: string;
@@ -44,9 +45,17 @@ export default function CardsScreen() {
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const [phoneNumber, setPhoneNumber] = useState('');
 
-  useEffect(() => {
-    loadUserData();
-  }, []);
+  // Add loading state
+  const [isLoading, setIsLoading] = useState(true);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setIsLoading(true);
+      loadUserData().finally(() => {
+        setIsLoading(false);
+      });
+    }, [])
+  );
 
   const loadUserData = async () => {
     try {

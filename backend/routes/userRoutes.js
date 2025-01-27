@@ -27,6 +27,7 @@ router.post('/AddUser', upload.single('profileImage'), userController.addUser);
 router.post('/SignIn', userController.signIn);
 router.get('/Users', userController.getAllUsers);
 router.get('/Users/:id', userController.getUserById);
+router.patch('/UpdateUser/:id', userController.updateUser);
 router.delete('/Users/:id', userController.deleteUser);
 
 module.exports = router;
