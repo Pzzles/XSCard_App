@@ -4,7 +4,7 @@ import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Animated } from 'react-native';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, CommonActions } from '@react-navigation/native';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -173,8 +173,22 @@ export default function EditCard() {
         throw new Error('Failed to update user');
       }
 
-      Alert.alert('Success', 'Profile updated successfully');
-      navigation.goBack();
+      // Get fresh user data
+      const updatedUserResponse = await fetch(buildUrl(ENDPOINTS.GET_USER) + `/${id}`);
+      const updatedUserData = await updatedUserResponse.json();
+
+      // Update AsyncStorage with fresh data
+      await AsyncStorage.setItem('userData', JSON.stringify(updatedUserData));
+
+      Alert.alert('Success', 'Profile updated successfully', [
+        {
+          text: 'OK',
+          onPress: () => {
+            // Simply go back to previous screen
+            navigation.goBack();
+          }
+        }
+      ]);
 
     } catch (error) {
       console.error('Error updating user:', error);
