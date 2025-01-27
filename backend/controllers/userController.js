@@ -175,3 +175,37 @@ exports.signIn = async (req, res) => {
         });
     }
 };
+
+exports.updateUser = async (req, res) => {
+    const { id } = req.params;
+    const updateData = req.body;
+
+    try {
+        const userRef = db.collection('users').doc(id);
+        const doc = await userRef.get();
+
+        if (!doc.exists) {
+            return res.status(404).send({ message: 'User not found' });
+        }
+
+        await userRef.update(updateData);
+        
+        // Fetch updated user data
+        const updatedDoc = await userRef.get();
+        const userData = {
+            id: updatedDoc.id,
+            ...updatedDoc.data()
+        };
+
+        res.status(200).send({
+            message: 'User updated successfully',
+            user: userData
+        });
+    } catch (error) {
+        console.error('Update error:', error);
+        res.status(500).send({
+            message: 'Failed to update user',
+            error: error.message
+        });
+    }
+};
