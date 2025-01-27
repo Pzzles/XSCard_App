@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View, Image, TouchableOpacity, Animated, ScrollView, ImageStyle } from 'react-native';
+import { StyleSheet, Text, View, Image, TouchableOpacity, Animated, ScrollView, ImageStyle, Modal, Linking, Alert, TextInput } from 'react-native';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
@@ -27,11 +27,22 @@ interface CardData {
   socialLinks: string[];
 }
 
+interface ShareOption {
+  id: string;
+  name: string;
+  icon: 'whatsapp' | 'send' | 'email';
+  color: string;
+  action: (contact: string) => void;
+}
+
 export default function CardsScreen() {
   const [qrCode, setQrCode] = useState<string>('');
   const [userData, setUserData] = useState<UserData | null>(null);
   const [cardData, setCardData] = useState<CardData | null>(null);
   const borderRotation = useRef(new Animated.Value(0)).current;
+  const [isShareModalVisible, setIsShareModalVisible] = useState(false);
+  const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
+  const [phoneNumber, setPhoneNumber] = useState('');
 
   useEffect(() => {
     loadUserData();
@@ -97,6 +108,42 @@ export default function CardsScreen() {
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
+
+  const shareOptions: ShareOption[] = [
+    {
+      id: 'whatsapp',
+      name: 'WhatsApp',
+      icon: 'whatsapp',
+      color: '#25D366',
+      action: (number: string) => {
+        const message = 'Check out my digital business card!';
+        const whatsappUrl = `whatsapp://send?phone=${number}&text=${encodeURIComponent(message)}`;
+        Linking.openURL(whatsappUrl).catch(() => {
+          Alert.alert('Error', 'WhatsApp is not installed on your device');
+        });
+      }
+    },
+    // ... add other share options ...
+  ];
+
+  const handleShare = () => {
+    setIsShareModalVisible(true);
+  };
+
+  const handlePlatformSelect = (platform: string) => {
+    setSelectedPlatform(platform);
+    setPhoneNumber('');
+  };
+
+  const handleSend = () => {
+    const platform = shareOptions.find(opt => opt.id === selectedPlatform);
+    if (platform && phoneNumber) {
+      platform.action(phoneNumber);
+      setIsShareModalVisible(false);
+      setSelectedPlatform(null);
+      setPhoneNumber('');
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -175,12 +222,25 @@ export default function CardsScreen() {
             </View>
           )}
 
-          <TouchableOpacity style={styles.sendButton}>
-            <MaterialIcons name="send" style={[styles.sendButtonIcon, { color: COLORS.light }]} />
-            <Text style={styles.sendButtonText}>Send</Text>
+          <TouchableOpacity onPress={handleShare} style={styles.shareButton}>
+            <MaterialIcons name="share" size={24} color={COLORS.white} />
+            <Text style={styles.shareButtonText}>Share</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Add Modal component */}
+      <Modal
+        visible={isShareModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setIsShareModalVisible(false);
+          setSelectedPlatform(null);
+        }}
+      >
+        {/* ... Modal content ... */}
+      </Modal>
     </View>
   );
 }
@@ -334,5 +394,34 @@ const styles = StyleSheet.create({
     },
     shadowOpacity: 0.5, // Further reduced shadow opacity for a softer effect
     shadowRadius: 8, // Reduced elevation for Android shadow
+  },
+  shareButton: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.secondary,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 25,
+    alignItems: 'center',
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  shareButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: 'bold',
+    fontFamily: 'Montserrat-Bold',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

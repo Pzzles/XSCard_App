@@ -23,7 +23,7 @@ export const pickImage = async (useCamera: boolean = false) => {
   const options = {
     mediaTypes: MediaTypeOptions.Images,
     allowsEditing: true,
-    aspect: [1, 1],
+    aspect: [1, 1] as [number, number],
     quality: 0.8,
   };
 

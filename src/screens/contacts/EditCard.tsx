@@ -223,35 +223,35 @@ export default function EditCard() {
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
           <TextInput 
             style={styles.input}
-            placeholder="First name..."
+            placeholder="First name"
             placeholderTextColor="#999"
             value={formData.firstName}
             onChangeText={(text) => setFormData({...formData, firstName: text})}
           />
           <TextInput 
             style={styles.input}
-            placeholder="Occupation..."
+            placeholder="Occupation"
             placeholderTextColor="#999"
             value={formData.occupation}
             onChangeText={(text) => setFormData({...formData, occupation: text})}
           />
           <TextInput 
             style={styles.input}
-            placeholder="Last name..."
+            placeholder="Last name"
             placeholderTextColor="#999"
             value={formData.lastName}
             onChangeText={(text) => setFormData({...formData, lastName: text})}
           />
           <TextInput 
             style={styles.input}
-            placeholder="Company name..."
+            placeholder="Company name"
             placeholderTextColor="#999"
             value={formData.company}
             onChangeText={(text) => setFormData({...formData, company: text})}
           />
           <TextInput 
             style={styles.input}
-            placeholder="Email..."
+            placeholder="Email"
             placeholderTextColor="#999"
             value={formData.email}
             onChangeText={(text) => setFormData({...formData, email: text})}
@@ -259,7 +259,7 @@ export default function EditCard() {
           />
           <TextInput 
             style={styles.input}
-            placeholder="Phone number..."
+            placeholder="Phone number"
             placeholderTextColor="#999"
             value={formData.phoneNumber}
             onChangeText={(text) => setFormData({...formData, phoneNumber: text})}
@@ -290,7 +290,7 @@ export default function EditCard() {
               </View>
               <TextInput
                 style={styles.input}
-                placeholder={`Enter your ${socials.find(s => s.id === socialId)?.label} URL...`}
+                placeholder={`${socials.find(s => s.id === socialId)?.label} URL`}
                 placeholderTextColor="#999"
                 value={formData[socialId]}
                 onChangeText={(text) => setFormData({...formData, [socialId]: text})}
