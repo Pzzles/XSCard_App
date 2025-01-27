@@ -7,4 +7,5 @@ export const COLORS = {
   black: '#000000',
   background: '#F5F5F5',
   error: '#FF0000',
+  disabled: '#D3D3D3',
 };

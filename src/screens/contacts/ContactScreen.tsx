@@ -240,7 +240,7 @@ export default function ContactsScreen() {
                   </Text>
 
                   <View style={styles.actionButtons}>
-                    <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
+                    <TouchableOpacity style={styles.shareButton}>
                       <MaterialIcons name="share" size={24} color={COLORS.gray} />
                     </TouchableOpacity>
                     <TouchableOpacity 
@@ -344,17 +344,19 @@ export default function ContactsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.white,
   },
   contactsContainer: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.white,
   },
   searchContainer: {
     padding: 15,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.white,
+    backgroundColor: '#F5F5F5',
+    margin: 15,
+    borderRadius: 8,
   },
   searchIcon: {
     marginRight: 10,
@@ -428,6 +430,122 @@ const styles = StyleSheet.create({
   error: {
     color: COLORS.error,
   },
+  emptyStateContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  emptyStateTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.black,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateDescription: {
+    fontSize: 16,
+    color: COLORS.gray,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 24,
+  },
+  shareCardButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.secondary,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 25,
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  shareCardButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    padding: 20,
+    width: '80%',
+    maxWidth: 400,
+  },
+  closeButton: {
+    position: 'absolute',
+    right: 15,
+    top: 15,
+    zIndex: 1,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 20,
+    color: COLORS.black,
+  },
+  shareOptions: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    flexWrap: 'wrap',
+    gap: 20,
+  },
+  shareOption: {
+    alignItems: 'center',
+    width: 80,
+  },
+  iconCircle: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  optionText: {
+    fontSize: 14,
+    color: COLORS.black,
+    textAlign: 'center',
+  },
+  inputContainer: {
+    width: '100%',
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: COLORS.gray + '50',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 20,
+    fontSize: 16,
+  },
+  sendButton: {
+    backgroundColor: COLORS.primary,
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  sendButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
   contactHowWeMet: {
     fontSize: 12,
     color: COLORS.gray,
@@ -440,102 +558,5 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.gray,
     marginTop: 2,
-  },
-  emptyStateContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyStateTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: COLORS.gray,
-    marginBottom: 10,
-  },
-  emptyStateDescription: {
-    fontSize: 16,
-    color: COLORS.gray,
-    textAlign: 'center',
-    padding: 20,
-  },
-  shareCardButton: {
-    backgroundColor: COLORS.primary,
-    padding: 15,
-    borderRadius: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  shareCardButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.white,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: COLORS.white,
-    padding: 20,
-    borderRadius: 10,
-    width: '80%',
-    maxHeight: '80%',
-  },
-  closeButton: {
-    alignItems: 'flex-end',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.black,
-    marginBottom: 20,
-  },
-  shareOptions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  shareOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  optionText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.black,
-  },
-  inputContainer: {
-    marginTop: 20,
-  },
-  input: {
-    padding: 10,
-    borderWidth: 1,
-    borderColor: COLORS.gray,
-    borderRadius: 5,
-  },
-  sendButton: {
-    backgroundColor: COLORS.primary,
-    padding: 10,
-    borderRadius: 5,
-    alignItems: 'center',
-  },
-  sendButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.white,
-  },
-  disabledButton: {
-    backgroundColor: COLORS.gray,
   },
 });

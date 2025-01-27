@@ -248,7 +248,63 @@ export default function CardsScreen() {
           setSelectedPlatform(null);
         }}
       >
-        {/* ... Modal content ... */}
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => {
+                setIsShareModalVisible(false);
+                setSelectedPlatform(null);
+              }}
+            >
+              <MaterialIcons name="close" size={24} color={COLORS.black} />
+            </TouchableOpacity>
+
+            {!selectedPlatform ? (
+              <>
+                <Text style={styles.modalTitle}>Share via</Text>
+                <View style={styles.shareOptions}>
+                  {shareOptions.map((option) => (
+                    <TouchableOpacity
+                      key={option.id}
+                      style={styles.shareOption}
+                      onPress={() => handlePlatformSelect(option.id)}
+                    >
+                      <View style={[styles.iconCircle, { backgroundColor: option.color }]}>
+                        {option.id === 'whatsapp' ? (
+                          <MaterialCommunityIcons name="whatsapp" size={24} color={COLORS.white} />
+                        ) : (
+                          <MaterialIcons name={option.icon as 'send' | 'email'} size={24} color={COLORS.white} />
+                        )}
+                      </View>
+                      <Text style={styles.optionText}>{option.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            ) : (
+              <View style={styles.inputContainer}>
+                <Text style={styles.modalTitle}>
+                  Enter {selectedPlatform === 'email' ? 'email address' : 'phone number'}
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder={selectedPlatform === 'email' ? 'Enter email' : 'Enter phone number'}
+                  value={phoneNumber}
+                  onChangeText={setPhoneNumber}
+                  keyboardType={selectedPlatform === 'email' ? 'email-address' : 'phone-pad'}
+                />
+                <TouchableOpacity
+                  style={[styles.sendButton, !phoneNumber && styles.disabledButton]}
+                  onPress={handleSend}
+                  disabled={!phoneNumber}
+                >
+                  <Text style={styles.sendButtonText}>Send</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -432,5 +488,58 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: COLORS.white,
+    padding: 20,
+    borderRadius: 20,
+    width: '80%',
+    alignItems: 'center',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 20,
+  },
+  shareOptions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  shareOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  iconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  optionText: {
+    fontSize: 16,
+  },
+  inputContainer: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  input: {
+    width: '80%',
+    height: 40,
+    borderColor: COLORS.secondary,
+    borderWidth: 1,
+    marginBottom: 20,
+    padding: 10,
+  },
+  disabledButton: {
+    backgroundColor: COLORS.disabled,
   },
 });
