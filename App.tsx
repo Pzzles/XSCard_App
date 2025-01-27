@@ -1,20 +1,48 @@
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { COLORS } from './src/constants/colors';
+import AuthNavigator from './src/navigation/AuthNavigator';
+// import TabNavigator from './src/navigation/TabNavigator';
 
 export default function App() {
   return (
-    <View style={styles.container}>
-      <Text>Luuuuh yumy</Text>
-      <StatusBar style="auto" />
-    </View>
+    <SafeAreaProvider>
+      <StatusBar style="dark" backgroundColor={COLORS.white} />
+      <NavigationContainer
+        theme={{
+          dark: false,
+          colors: {
+            primary: COLORS.primary,
+            background: COLORS.background,
+            card: COLORS.white,
+            text: COLORS.black,
+            border: COLORS.gray + '20',
+            notification: COLORS.primary,
+          },
+          fonts: {
+            regular: {
+              fontFamily: 'System',
+              fontWeight: '400',
+            },
+            medium: {
+              fontFamily: 'System',
+              fontWeight: '500',
+            },
+            bold: {
+              fontFamily: 'System',
+              fontWeight: '700',
+            },
+            heavy: {
+              fontFamily: 'System',
+              fontWeight: '900',
+            },
+          },
+        }}
+      >
+        <AuthNavigator />
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
