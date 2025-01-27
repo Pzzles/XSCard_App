@@ -58,6 +58,9 @@
         <div class="form-group">
             <input type="tel" id="scannerPhone" placeholder="Your Phone Number">
         </div>
+        <div class="form-group">
+            <input type="text" id="howWeMet" placeholder="How we met">
+        </div>
         <button class="submit-btn" onclick="handleSubmit()">Save Contact</button>
     </div>
 
@@ -76,7 +79,7 @@
                 document.getElementById('userData').innerHTML = `
                     <p><strong>Name:</strong> ${userData.name} ${userData.surname}</p>
                     <p><strong>Email:</strong> ${userData.email}</p>
-                    <p><strong>Phone:</strong> ${userData.phoneNumber || 'No phone number available'}</p>
+                    <p><strong>Phone:</strong> ${userData.phone || 'No phone number available'}</p>
                     <p><strong>Occupation:</strong> ${userData.occupation}</p>
                     <p><strong>Company:</strong> ${userData.company}</p>
                 `;
@@ -90,8 +93,9 @@
             const scannerName = document.getElementById('scannerName').value;
             const scannerSurname = document.getElementById('scannerSurname').value;
             const scannerPhone = document.getElementById('scannerPhone').value;
+            const howWeMet = document.getElementById('howWeMet').value;
 
-            if (!scannerName || !scannerSurname || !scannerPhone) {
+            if (!scannerName || !scannerSurname || !scannerPhone || !howWeMet) {
                 alert('Please fill in all your details');
                 return false;
             }
@@ -108,6 +112,7 @@
                             name: scannerName,
                             surname: scannerSurname,
                             phone: scannerPhone,
+                            howWeMet: howWeMet,
                             createdAt: new Date().toISOString()
                         }
                     })
@@ -150,6 +155,11 @@ END:VCARD`;
             link.href = URL.createObjectURL(blob);
             link.download = `${userData.name}_${userData.surname}.vcf`;
             link.click();
+
+            // Close the webpage after successful save
+            setTimeout(() => {
+                window.close();
+            }, 5000); // Give 1 second for the vCard download to start
         }
 
         // Load user data when page loads

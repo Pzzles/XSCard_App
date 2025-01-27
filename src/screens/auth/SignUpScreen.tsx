@@ -7,7 +7,8 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { AuthStackParamList } from '../../types';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
-
+import * as ImagePicker from 'expo-image-picker';
+import { pickImage, requestPermissions } from '../../utils/imageUtils';
 
 type SignUpScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'SignUp'>;
 
@@ -21,33 +22,77 @@ export default function SignUpScreen() {
   const [occupation, setOccupation] = useState(''); // Changed from status
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+
+  const handleImagePick = async () => {
+    const { cameraGranted, galleryGranted } = await requestPermissions();
+    
+    if (!cameraGranted || !galleryGranted) {
+      Alert.alert('Permission Required', 'Camera and gallery permissions are required to use this feature.');
+      return;
+    }
+
+    Alert.alert(
+      'Select Image Source',
+      'Choose where you want to pick your profile picture from',
+      [
+        {
+          text: 'Camera',
+          onPress: async () => {
+            const imageUri = await pickImage(true);
+            if (imageUri) setProfileImage(imageUri);
+          },
+        },
+        {
+          text: 'Gallery',
+          onPress: async () => {
+            const imageUri = await pickImage(false);
+            if (imageUri) setProfileImage(imageUri);
+          },
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
 
   const handleSignUp = async () => {
     try {
+      // Create form data for multipart/form-data
+      const formData = new FormData();
+      formData.append('name', firstName);
+      formData.append('surname', lastName);
+      formData.append('email', email);
+      formData.append('phone', phoneNumber);
+      formData.append('password', password);
+      formData.append('occupation', occupation);
+      formData.append('company', companyName);
+      formData.append('status', 'active');
+
+      if (profileImage) {
+        const imageName = profileImage.split('/').pop() || 'profile.jpg';
+        formData.append('profileImage', {
+          uri: profileImage,
+          type: 'image/jpeg',
+          name: imageName,
+        } as any);
+      }
+
       const response = await fetch(buildUrl(ENDPOINTS.ADD_USER), {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'multipart/form-data',
         },
-        body: JSON.stringify({
-          name: firstName,
-          surname: lastName,
-          email,
-          phone: phoneNumber,  // Added phone field to payload
-          password,
-          occupation,
-          company: companyName,
-          status: 'active',
-        }),
+        body: formData,
       });
 
       if (response.ok) {
         Alert.alert(
           'Success',
           'Account created successfully! Please sign in.',
-          [
-            { text: 'OK', onPress: () => navigation.navigate('SignIn') }
-          ]
+          [{ text: 'OK', onPress: () => navigation.navigate('SignIn') }]
         );
       } else {
         Alert.alert('Error', 'Failed to create account. Please try again.');
@@ -152,8 +197,15 @@ export default function SignUpScreen() {
 
           <View style={styles.uploadSection}>
             <Text style={styles.uploadLabel}>Profile Picture:</Text>
-            <TouchableOpacity style={styles.uploadButton}>
-              <MaterialIcons name="add" size={24} color={COLORS.white} />
+            <TouchableOpacity style={styles.uploadButton} onPress={handleImagePick}>
+              {profileImage ? (
+                <Image 
+                  source={{ uri: profileImage }} 
+                  style={styles.profilePreview} 
+                />
+              ) : (
+                <MaterialIcons name="add" size={24} color={COLORS.white} />
+              )}
             </TouchableOpacity>
           </View>
 
@@ -282,5 +334,10 @@ const styles = StyleSheet.create({
     right: 0,
     height: 40,
     zIndex: 1,
+  },
+  profilePreview: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
 });
