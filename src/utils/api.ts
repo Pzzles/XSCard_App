@@ -1,4 +1,4 @@
-export const API_BASE_URL = 'https://3c7e-105-245-44-231.ngrok-free.app';
+export const API_BASE_URL = 'https://eda0-41-13-28-8.ngrok-free.app';
 // API endpoints
 export const ENDPOINTS = {
     ADD_USER: '/AddUser',
@@ -9,6 +9,7 @@ export const ENDPOINTS = {
     ADD_CARD: '/AddCard',
     GET_CONTACTS: '/Contacts',
     UPDATE_USER: '/UpdateUser',
+    UPDATE_PROFILE_IMAGE: '/Users/:id/profile-image',
 };
 
 export const buildUrl = (endpoint: string) => `${API_BASE_URL}${endpoint}`;
