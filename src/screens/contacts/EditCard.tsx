@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Image } from 'react-native';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Animated } from 'react-native';
-import { COLORS } from '../../constants/colors';
+import { COLORS, CARD_COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
 import { useNavigation, CommonActions } from '@react-navigation/native';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
@@ -94,20 +94,6 @@ export default function EditCard() {
     }
   };
 
-  // Add this array of colors
-  const cardColors = [
-    '#1B2B5B', // Navy Blue
-    '#E63946', // Red
-    '#2A9D8F', // Teal
-    '#E9C46A', // Yellow
-    '#F4A261', // Orange
-    '#6D597A', // Purple
-    '#355070', // Dark Blue
-    '#B56576', // Pink
-    '#4DAA57', // Green
-    '#264653', // Dark Teal
-  ];
-
   // Add this type for the socials array
   interface Social {
     id: string;
@@ -169,6 +155,7 @@ export default function EditCard() {
         ...(formData.website && { website: formData.website }),
         ...(formData.tiktok && { tiktok: formData.tiktok }),
         ...(formData.instagram && { instagram: formData.instagram }),
+        colorScheme: selectedColor // Add color to user update
       };
 
       const response = await fetch(buildUrl(ENDPOINTS.UPDATE_USER) + `/${id}`, {
@@ -190,19 +177,16 @@ export default function EditCard() {
       // Update AsyncStorage with fresh data
       await AsyncStorage.setItem('userData', JSON.stringify(updatedUserData));
 
-      Alert.alert('Success', 'Profile updated successfully', [
+      Alert.alert('Success', 'Card updated successfully', [
         {
           text: 'OK',
-          onPress: () => {
-            // Simply go back to previous screen
-            navigation.goBack();
-          }
+          onPress: () => navigation.goBack()
         }
       ]);
 
     } catch (error) {
-      console.error('Error updating user:', error);
-      setError('Failed to update profile');
+      console.error('Error updating card:', error);
+      setError('Failed to update card');
     }
   };
 
@@ -368,7 +352,7 @@ export default function EditCard() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.colorContainer}
           >
-            {cardColors.map((color, index) => (
+            {CARD_COLORS.map((color, index) => (
               <TouchableOpacity
                 key={index}
                 onPress={() => setSelectedColor(color)}

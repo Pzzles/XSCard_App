@@ -33,5 +33,6 @@ router.get('/Users/:id', userController.getUserById);
 router.patch('/UpdateUser/:id', upload.single('profileImage'), userController.updateUser);
 router.delete('/Users/:id', userController.deleteUser);
 router.patch('/Users/:id/profile-image', upload.single('profileImage'), userController.updateProfileImage);
+router.patch('/Users/:id/color', userController.updateUserColor);
 
 module.exports = router;

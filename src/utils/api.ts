@@ -10,6 +10,7 @@ export const ENDPOINTS = {
     GET_CONTACTS: '/Contacts',
     UPDATE_USER: '/UpdateUser',
     UPDATE_PROFILE_IMAGE: '/Users/:id/profile-image',
+    UPDATE_USER_COLOR: '/Users/:id/color', // Changed from Cards to Users
 };
 
 export const buildUrl = (endpoint: string) => `${API_BASE_URL}${endpoint}`;

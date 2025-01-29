@@ -261,3 +261,42 @@ exports.updateProfileImage = async (req, res) => {
       });
     }
   };
+
+exports.updateUserColor = async (req, res) => {
+    const { id } = req.params;
+    const { color } = req.body;
+    
+    if (!color) {
+        return res.status(400).send({ message: 'Color is required' });
+    }
+
+    try {
+        const userRef = db.collection('users').doc(id);
+        const doc = await userRef.get();
+
+        if (!doc.exists) {
+            return res.status(404).send({ message: 'User not found' });
+        }
+
+        await userRef.update({
+            colorScheme: color
+        });
+
+        const updatedDoc = await userRef.get();
+        const userData = {
+            id: updatedDoc.id,
+            ...updatedDoc.data()
+        };
+
+        res.status(200).send({ 
+            message: 'User color updated successfully',
+            user: userData
+        });
+    } catch (error) {
+        console.error('Error updating user color:', error);
+        res.status(500).send({ 
+            message: 'Failed to update user color',
+            error: error.message 
+        });
+    }
+};

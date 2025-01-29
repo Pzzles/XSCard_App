@@ -18,6 +18,7 @@ interface UserData {
   status: string;
   profileImage: string | null;
   companyLogo: string | null;  // Add this line
+  colorScheme?: string;
 }
 
 interface CardData {
@@ -27,6 +28,7 @@ interface CardData {
   PhoneNumber: string;
   title: string;
   socialLinks: string[];
+  colorScheme?: string;
 }
 
 interface ShareOption {
@@ -45,6 +47,7 @@ export default function CardsScreen() {
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [cardColor, setCardColor] = useState(COLORS.secondary);
 
   // Add loading state
   const [isLoading, setIsLoading] = useState(true);
@@ -60,23 +63,26 @@ export default function CardsScreen() {
 
   const loadUserData = async () => {
     try {
-      // Get logged in user data from AsyncStorage
       const storedUserData = await AsyncStorage.getItem('userData');
       if (storedUserData) {
         const parsedUserData = JSON.parse(storedUserData);
         
-        // Fetch user details
+        // Fetch user details first to get the color scheme
         const userResponse = await fetch(buildUrl(ENDPOINTS.GET_USER) + `/${parsedUserData.id}`);
         const userData = await userResponse.json();
         setUserData(userData);
 
-        // Use hardcoded card ID for now
-        const cardId = parsedUserData.id;
-        const cardResponse = await fetch(buildUrl(ENDPOINTS.GET_CARD) + `/${cardId}`);
+        // Set color from user data
+        if (userData.colorScheme) {
+          setCardColor(userData.colorScheme);
+        }
+
+        // Then fetch card data
+        const cardResponse = await fetch(buildUrl(ENDPOINTS.GET_CARD) + `/${parsedUserData.id}`);
         const cardData = await cardResponse.json();
         setCardData(cardData);
 
-        // Generate QR code using logged in user's ID
+        // Generate QR code
         fetchQRCode(parsedUserData.id);
       }
     } catch (error) {
@@ -155,6 +161,52 @@ export default function CardsScreen() {
     }
   };
 
+  // Move styles outside of StyleSheet for dynamic values
+  const dynamicStyles = {
+    sendButton: {
+      flexDirection: 'row',
+      backgroundColor: cardColor,
+      paddingVertical: 10,
+      paddingHorizontal: 20,
+      borderRadius: 25,
+      alignItems: 'center',
+      marginBottom: 20,
+      shadowColor: '#000',
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      shadowOpacity: 0.3,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+    shareButton: {
+      flexDirection: 'row',
+      backgroundColor: cardColor,
+      paddingVertical: 10,
+      paddingHorizontal: 20,
+      borderRadius: 25,
+      alignItems: 'center',
+      marginBottom: 20,
+      shadowColor: '#000',
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      shadowOpacity: 0.3,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+    input: {
+      width: '80%',
+      height: 40,
+      borderColor: cardColor,
+      borderWidth: 1,
+      marginBottom: 20,
+      padding: 10,
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Header title="XS Card" />
@@ -203,14 +255,14 @@ export default function CardsScreen() {
           </Text>
           
           <View style={[styles.contactBorder, styles.contactSection, styles.leftAligned]}>
-            <MaterialCommunityIcons name="email-outline" size={30} color={COLORS.secondary} />
+            <MaterialCommunityIcons name="email-outline" size={30} color={cardColor} />
             <Text style={styles.contactText}>
               {cardData?.Email || userData?.email || 'Loading...'}
             </Text>
           </View>
 
           <View style={[styles.contactBorder, styles.contactSection, styles.leftAligned]}>
-            <MaterialCommunityIcons name="phone-outline" size={30} color={COLORS.secondary} />
+            <MaterialCommunityIcons name="phone-outline" size={30} color={cardColor} />
             <Text style={styles.contactText}>
               {userData?.phone || 'No phone number'}
             </Text>
@@ -230,7 +282,7 @@ export default function CardsScreen() {
             </View>
           )}
 
-          <TouchableOpacity onPress={handleShare} style={styles.shareButton}>
+          <TouchableOpacity onPress={handleShare} style={[styles.shareButton, dynamicStyles.shareButton]}>
             <MaterialIcons name="share" size={24} color={COLORS.white} />
             <Text style={styles.shareButtonText}>Share</Text>
           </TouchableOpacity>
@@ -286,18 +338,18 @@ export default function CardsScreen() {
                   Enter {selectedPlatform === 'email' ? 'email address' : 'phone number'}
                 </Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, dynamicStyles.input]}
                   placeholder={selectedPlatform === 'email' ? 'Enter email' : 'Enter phone number'}
                   value={phoneNumber}
                   onChangeText={setPhoneNumber}
                   keyboardType={selectedPlatform === 'email' ? 'email-address' : 'phone-pad'}
                 />
                 <TouchableOpacity
-                  style={[styles.sendButton, !phoneNumber && styles.disabledButton]}
+                  style={[styles.sendButton, dynamicStyles.sendButton, !phoneNumber && styles.disabledButton]}
                   onPress={handleSend}
                   disabled={!phoneNumber}
                 >
-                  <Text style={styles.sendButtonText}>Send</Text>
+                  <Text style={styles.buttonText}>Send</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -308,6 +360,7 @@ export default function CardsScreen() {
   );
 }
 
+// Keep static styles in StyleSheet
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -400,33 +453,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Montserrat-Regular',
   },
-  sendButton: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.secondary,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 25,
-    alignItems: 'center',
-    marginBottom: 20,
-    shadowColor: '#000', // Shadow color
-    shadowOffset: {
-      width: 0,
-      height: 2, // Vertical shadow offset
-    },
-    shadowOpacity: 0.3, // Shadow opacity
-    shadowRadius: 4, // Shadow blur radius
-    elevation: 3, // For Android shadow
-  },
-  sendButtonIcon: {
-    fontSize: 24,
-    marginRight: 10,
-  },
-  sendButtonText: {
-    color: COLORS.light,
-    fontSize: 16,
-    fontWeight: 'bold',
-    fontFamily: 'Montserrat-Bold',
-  },
   socialLinksContainer: {
     marginVertical: 15,
     width: '100%',
@@ -458,23 +484,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5, // Further reduced shadow opacity for a softer effect
     shadowRadius: 8, // Reduced elevation for Android shadow
   },
-  shareButton: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.secondary,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 25,
-    alignItems: 'center',
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
-  },
+  shareButton: {}, // Keep empty or remove if using only dynamic style
+  sendButton: {}, // Keep empty or remove if using only dynamic style
+  input: {}, // Keep empty or remove if using only dynamic style
   shareButtonText: {
     color: COLORS.white,
     fontSize: 16,
@@ -529,15 +541,13 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
-  input: {
-    width: '80%',
-    height: 40,
-    borderColor: COLORS.secondary,
-    borderWidth: 1,
-    marginBottom: 20,
-    padding: 10,
-  },
   disabledButton: {
     backgroundColor: COLORS.disabled,
+  },
+  buttonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: 'bold',
+    fontFamily: 'Montserrat-Bold',
   },
 });

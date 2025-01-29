@@ -180,3 +180,36 @@ exports.generateQR = async (req, res) => {
         });
     }
 };
+
+exports.updateCardColor = async (req, res) => {
+    const { id } = req.params;
+    const { color } = req.body;
+    
+    if (!color) {
+        return res.status(400).send({ message: 'Color is required' });
+    }
+
+    try {
+        const cardRef = db.collection('cards').doc(id);
+        const doc = await cardRef.get();
+
+        if (!doc.exists) {
+            return res.status(404).send({ message: 'Card not found' });
+        }
+
+        await cardRef.update({
+            colorScheme: color
+        });
+
+        res.status(200).send({ 
+            message: 'Card color updated successfully',
+            color
+        });
+    } catch (error) {
+        console.error('Error updating card color:', error);
+        res.status(500).send({ 
+            message: 'Failed to update card color',
+            error: error.message 
+        });
+    }
+};
