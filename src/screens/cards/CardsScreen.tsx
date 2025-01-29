@@ -17,6 +17,7 @@ interface UserData {
   occupation: string;
   status: string;
   profileImage: string | null;
+  companyLogo: string | null;  // Add this line
 }
 
 interface CardData {
@@ -157,7 +158,6 @@ export default function CardsScreen() {
   return (
     <View style={styles.container}>
       <Header title="XS Card" />
-      {/* Scrollable Content */}
       <ScrollView style={[styles.contentContainer, { marginTop: 100 }]}>
         <View style={styles.scrollContent}>
           <View style={styles.qrContainer}>
@@ -175,9 +175,11 @@ export default function CardsScreen() {
           <View style={styles.logoContainer}>
             <Image
               style={styles.logo}
-              source={require('../../../assets/images/logoplaceholder.jpg')}
+              source={userData?.companyLogo ? 
+                { uri: `${API_BASE_URL}${userData.companyLogo}` } : 
+                require('../../../assets/images/logoplaceholder.jpg')
+              }
             />
-            {/* Profile Image Overlaying Logo */}
             <View style={styles.profileOverlayContainer}>
               <Animated.View style={[styles.profileImageContainer, { transform: [{ rotate: rotateInterpolate }] }]}>
                 <Image
@@ -200,7 +202,6 @@ export default function CardsScreen() {
             {cardData?.Company || userData?.company || 'Loading...'}
           </Text>
           
-          {/* Email Section */}
           <View style={[styles.contactBorder, styles.contactSection, styles.leftAligned]}>
             <MaterialCommunityIcons name="email-outline" size={30} color={COLORS.secondary} />
             <Text style={styles.contactText}>
@@ -208,7 +209,6 @@ export default function CardsScreen() {
             </Text>
           </View>
 
-          {/* Phone Section */}
           <View style={[styles.contactBorder, styles.contactSection, styles.leftAligned]}>
             <MaterialCommunityIcons name="phone-outline" size={30} color={COLORS.secondary} />
             <Text style={styles.contactText}>
@@ -216,7 +216,6 @@ export default function CardsScreen() {
             </Text>
           </View>
 
-          {/* Social Links */}
           {cardData?.socialLinks && cardData.socialLinks.length > 0 && (
             <View style={styles.socialLinksContainer}>
               {cardData.socialLinks.map((link, index) => (
@@ -238,7 +237,6 @@ export default function CardsScreen() {
         </View>
       </ScrollView>
 
-      {/* Add Modal component */}
       <Modal
         visible={isShareModalVisible}
         transparent={true}
