@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, Image, TouchableOpacity, Animated, ScrollView, 
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
-import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
+import { API_BASE_URL, ENDPOINTS, buildUrl, buildSaveContactUrl } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -132,7 +132,12 @@ export default function CardsScreen() {
       icon: 'whatsapp',
       color: '#25D366',
       action: (number: string) => {
-        const message = 'Check out my digital business card!' + 'Link';
+        if (!userData?.id) {
+          Alert.alert('Error', 'User data not available');
+          return;
+        }
+        const saveContactUrl = buildSaveContactUrl(userData.id);
+        const message = `Check out my digital business card! ${saveContactUrl}`;
         const whatsappUrl = `whatsapp://send?phone=${number}&text=${encodeURIComponent(message)}`;
         Linking.openURL(whatsappUrl).catch(() => {
           Alert.alert('Error', 'WhatsApp is not installed on your device');
@@ -439,24 +444,24 @@ const styles = StyleSheet.create({
     borderRadius: 55,
   },
   name: {
-    fontSize: 22,
-    fontWeight: '600',
+    fontSize: 24,  // Increased from 22
+    fontWeight: '700',  // Changed from '600'
     marginBottom: 5,
     marginTop: 0,
     fontFamily: 'Montserrat-Bold',
-    marginLeft:25,
+    marginLeft: 25,
   },
   position: {
-    fontSize: 17,
+    fontSize: 18,  // Increased from 17
     marginBottom: 5,
-    fontFamily: 'Montserrat-Regular',
-    marginLeft:25,
+    fontFamily: 'Montserrat-SemiBold',  // Changed from 'Montserrat-Regular'
+    marginLeft: 25,
   },
   company: {
-    fontSize: 17,
+    fontSize: 18,  // Increased from 17
     marginBottom: 20,
-    fontFamily: 'Montserrat-Regular',
-    marginLeft:25,
+    fontFamily: 'Montserrat-SemiBold',  // Changed from 'Montserrat-Regular'
+    marginLeft: 25,
   },
   contactSection: {
     flexDirection: 'row',
@@ -467,7 +472,7 @@ const styles = StyleSheet.create({
   contactText: {
     marginLeft: 10,
     fontSize: 16,
-    fontFamily: 'Montserrat-Regular',
+    fontFamily: 'Montserrat-SemiBold',  // Changed from 'Montserrat-Regular'
   },
   socialLinksContainer: {
     marginVertical: 15,

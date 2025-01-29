@@ -11,6 +11,11 @@ export const ENDPOINTS = {
     UPDATE_USER: '/UpdateUser',
     UPDATE_PROFILE_IMAGE: '/Users/:id/profile-image',
     UPDATE_USER_COLOR: '/Users/:id/color', // Changed from Cards to Users
+    SAVE_CONTACT: '/saveContact',
 };
 
 export const buildUrl = (endpoint: string) => `${API_BASE_URL}${endpoint}`;
+
+export const buildSaveContactUrl = (userId: string) => {
+    return `${API_BASE_URL}${ENDPOINTS.SAVE_CONTACT}?userId=${userId}`;
+};
