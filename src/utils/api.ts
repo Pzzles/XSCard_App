@@ -1,4 +1,4 @@
-export const API_BASE_URL = 'https://eda0-41-13-28-8.ngrok-free.app';
+export const API_BASE_URL = 'https://61c4-197-184-168-6.ngrok-free.app';
 // API endpoints
 export const ENDPOINTS = {
     ADD_USER: '/AddUser',

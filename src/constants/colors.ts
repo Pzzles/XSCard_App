@@ -21,5 +21,5 @@ export const CARD_COLORS = [
   '#B56576', // Pink
   '#4DAA57', // Green
   '#264653', // Dark Teal
-  '#FF4B6E',    // Pinkish red
+  '#FF4B6E', // Pinkish red
 ];

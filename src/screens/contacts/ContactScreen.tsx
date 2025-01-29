@@ -5,6 +5,7 @@ import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
 
 interface Contact {
   name: string;
@@ -28,6 +29,11 @@ interface ShareOption {
   action: (contact: string) => void;
 }
 
+interface UserData {
+  id: string;
+  colorScheme?: string;
+}
+
 export default function ContactsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -35,18 +41,32 @@ export default function ContactsScreen() {
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [cardColor, setCardColor] = useState(COLORS.secondary);
 
-  useEffect(() => {
-    loadContacts();
-  }, []);
+  useFocusEffect(
+    React.useCallback(() => {
+      loadContacts();
+    }, [])
+  );
 
   const loadContacts = async () => {
     try {
       const storedUserData = await AsyncStorage.getItem('userData');
       if (storedUserData) {
         const parsedUserData = JSON.parse(storedUserData);
-        const response = await fetch(buildUrl(ENDPOINTS.GET_CONTACTS) + `/${parsedUserData.id}`);
-        const contactData: ContactData = await response.json();
+        
+        // Fetch user details to get the color scheme
+        const response = await fetch(buildUrl(ENDPOINTS.GET_USER) + `/${parsedUserData.id}`);
+        const userData: UserData = await response.json();
+        
+        // Set color from user data
+        if (userData.colorScheme) {
+          setCardColor(userData.colorScheme);
+        }
+
+        // Continue with existing contacts loading logic
+        const contactResponse = await fetch(buildUrl(ENDPOINTS.GET_CONTACTS) + `/${parsedUserData.id}`);
+        const contactData: ContactData = await contactResponse.json();
         if (contactData) {
           setContacts(contactData.contactsList || []);
           setContactDocId(contactData.id); // Store the contact document ID
@@ -185,6 +205,27 @@ export default function ContactsScreen() {
     }
   };
 
+  // Add dynamic styles
+  const dynamicStyles = {
+    shareCardButton: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      backgroundColor: cardColor,
+      paddingVertical: 12,
+      paddingHorizontal: 24,
+      borderRadius: 25,
+      gap: 8,
+      shadowColor: '#000',
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+      elevation: 5,
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Header title="Contacts" />
@@ -207,7 +248,7 @@ export default function ContactsScreen() {
             <Text style={styles.emptyStateDescription}>
               When you share your card and they share their details back, it will appear here
             </Text>
-            <TouchableOpacity style={styles.shareCardButton} onPress={handleShare}>
+            <TouchableOpacity style={dynamicStyles.shareCardButton} onPress={handleShare}>
               <MaterialIcons name="share" size={24} color={COLORS.white} />
               <Text style={styles.shareCardButtonText}>Share my card</Text>
             </TouchableOpacity>
@@ -449,23 +490,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 24,
     lineHeight: 24,
-  },
-  shareCardButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.secondary,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 25,
-    gap: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
   },
   shareCardButtonText: {
     color: COLORS.white,

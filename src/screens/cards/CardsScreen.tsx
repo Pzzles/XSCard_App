@@ -132,7 +132,7 @@ export default function CardsScreen() {
       icon: 'whatsapp',
       color: '#25D366',
       action: (number: string) => {
-        const message = 'Check out my digital business card!';
+        const message = 'Check out my digital business card!' + 'Link';
         const whatsappUrl = `whatsapp://send?phone=${number}&text=${encodeURIComponent(message)}`;
         Linking.openURL(whatsappUrl).catch(() => {
           Alert.alert('Error', 'WhatsApp is not installed on your device');
@@ -204,7 +204,21 @@ export default function CardsScreen() {
       borderWidth: 1,
       marginBottom: 20,
       padding: 10,
-    }
+    },
+    contactBorder: {
+      borderWidth: 1,
+      borderColor: cardColor,
+      borderRadius: 8,
+      padding: 10,
+      marginBottom: 15,
+      shadowColor: '#1B2B5B',
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      shadowOpacity: 0.5,
+      shadowRadius: 8,
+    },
   };
 
   return (
@@ -254,14 +268,16 @@ export default function CardsScreen() {
             {cardData?.Company || userData?.company || 'Loading...'}
           </Text>
           
-          <View style={[styles.contactBorder, styles.contactSection, styles.leftAligned]}>
+          {/* Update the email contact section */}
+          <View style={[styles.contactSection, styles.leftAligned, dynamicStyles.contactBorder]}>
             <MaterialCommunityIcons name="email-outline" size={30} color={cardColor} />
             <Text style={styles.contactText}>
               {cardData?.Email || userData?.email || 'Loading...'}
             </Text>
           </View>
 
-          <View style={[styles.contactBorder, styles.contactSection, styles.leftAligned]}>
+          {/* Update the phone contact section */}
+          <View style={[styles.contactSection, styles.leftAligned, dynamicStyles.contactBorder]}>
             <MaterialCommunityIcons name="phone-outline" size={30} color={cardColor} />
             <Text style={styles.contactText}>
               {userData?.phone || 'No phone number'}
@@ -469,20 +485,6 @@ const styles = StyleSheet.create({
   },
   leftAligned: {
     alignSelf: 'flex-start',
-  },
-  contactBorder: {
-    borderWidth: 1,
-    borderColor: 'rgba(27, 43, 91, 0.5)', // #1B2B5B with 50% opacity
-    borderRadius: 8, // Optional: to make the corners rounded
-    padding: 10, // Optional: to add some padding inside the border
-    marginBottom: 15, // Space between sections
-    shadowColor: '#1B2B5B', // Shadow color
-    shadowOffset: {
-      width: 0,
-      height: 2, // Slightly increased height for a more natural shadow
-    },
-    shadowOpacity: 0.5, // Further reduced shadow opacity for a softer effect
-    shadowRadius: 8, // Reduced elevation for Android shadow
   },
   shareButton: {}, // Keep empty or remove if using only dynamic style
   sendButton: {}, // Keep empty or remove if using only dynamic style
