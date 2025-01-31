@@ -3,8 +3,8 @@ import { Platform } from 'react-native';
 // Helper function to get the appropriate base URL
 const getBaseUrl = () => {
     if (__DEV__) {  // Development mode
-        // Replace with your computer's IP address
-        return 'http://192.168.0.101:8383';  // Use your actual local IP here
+
+        return 'http:your IP address//:8383';
     }
     // Production URL (you can change this later)
     return 'https://your-production-url.com';
