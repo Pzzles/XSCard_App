@@ -1,4 +1,17 @@
-export const API_BASE_URL = 'https://61c4-197-184-168-6.ngrok-free.app';
+import { Platform } from 'react-native';
+
+// Helper function to get the appropriate base URL
+const getBaseUrl = () => {
+    if (__DEV__) {  // Development mode
+        // Replace with your computer's IP address
+        return 'http://192.168.0.101:8383';  // Use your actual local IP here
+    }
+    // Production URL (you can change this later)
+    return 'https://your-production-url.com';
+};
+
+export const API_BASE_URL = getBaseUrl();
+
 // API endpoints
 export const ENDPOINTS = {
     ADD_USER: '/AddUser',
