@@ -6,7 +6,6 @@ router.get('/Cards', cardController.getAllCards);
 router.get('/Cards/:id', cardController.getCardById);
 router.post('/AddCard', cardController.addCard);
 router.patch('/Cards/:id', cardController.updateCard);
-router.patch('/Cards/:id/color', cardController.updateCardColor);
 router.delete('/Cards/:id', cardController.deleteCard);
 router.get('/generateQR/:userId', cardController.generateQR);
 

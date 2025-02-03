@@ -1,17 +1,4 @@
-import { Platform } from 'react-native';
-
-// Helper function to get the appropriate base URL
-const getBaseUrl = () => {
-    if (__DEV__) {  // Development mode
-
-        return 'http:your IP address//:8383';
-    }
-    // Production URL (you can change this later)
-    return 'https://your-production-url.com';
-};
-
-export const API_BASE_URL = getBaseUrl();
-
+export const API_BASE_URL = 'https://951b-197-184-168-6.ngrok-free.app';
 // API endpoints
 export const ENDPOINTS = {
     ADD_USER: '/AddUser',
@@ -22,8 +9,6 @@ export const ENDPOINTS = {
     ADD_CARD: '/AddCard',
     GET_CONTACTS: '/Contacts',
     UPDATE_USER: '/UpdateUser',
-    UPDATE_PROFILE_IMAGE: '/Users/:id/profile-image',
-    UPDATE_USER_COLOR: '/Users/:id/color', // Changed from Cards to Users
 };
 
 export const buildUrl = (endpoint: string) => `${API_BASE_URL}${endpoint}`;

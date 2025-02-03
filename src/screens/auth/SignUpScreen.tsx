@@ -23,7 +23,6 @@ export default function SignUpScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(null);
-  const [companyLogo, setCompanyLogo] = useState<string | null>(null);
 
   const handleImagePick = async () => {
     const { cameraGranted, galleryGranted } = await requestPermissions();
@@ -59,40 +58,6 @@ export default function SignUpScreen() {
     );
   };
 
-  const handleLogoUpload = async () => {
-    const { cameraGranted, galleryGranted } = await requestPermissions();
-    
-    if (!cameraGranted || !galleryGranted) {
-      Alert.alert('Permission Required', 'Camera and gallery permissions are required to use this feature.');
-      return;
-    }
-
-    Alert.alert(
-      'Select Logo Source',
-      'Choose where you want to pick your company logo from',
-      [
-        {
-          text: 'Camera',
-          onPress: async () => {
-            const imageUri = await pickImage(true);
-            if (imageUri) setCompanyLogo(imageUri);
-          },
-        },
-        {
-          text: 'Gallery',
-          onPress: async () => {
-            const imageUri = await pickImage(false);
-            if (imageUri) setCompanyLogo(imageUri);
-          },
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-      ]
-    );
-  };
-
   const handleSignUp = async () => {
     try {
       // Create form data for multipart/form-data
@@ -112,15 +77,6 @@ export default function SignUpScreen() {
           uri: profileImage,
           type: 'image/jpeg',
           name: imageName,
-        } as any);
-      }
-
-      if (companyLogo) {
-        const logoName = companyLogo.split('/').pop() || 'logo.jpg';
-        formData.append('companyLogo', {
-          uri: companyLogo,
-          type: 'image/jpeg',
-          name: logoName,
         } as any);
       }
 
@@ -162,7 +118,7 @@ export default function SignUpScreen() {
           
           <TextInput
             style={styles.input}
-            placeholder="First name"
+            placeholder="First name..."
             value={firstName}
             onChangeText={setFirstName}
             placeholderTextColor="#999"
@@ -170,7 +126,7 @@ export default function SignUpScreen() {
 
           <TextInput
             style={styles.input}
-            placeholder="Last name"
+            placeholder="Last name..."
             value={lastName}
             onChangeText={setLastName}
             placeholderTextColor="#999"
@@ -178,7 +134,7 @@ export default function SignUpScreen() {
 
           <TextInput
             style={styles.input}
-            placeholder="Mail"
+            placeholder="Mail..."
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -188,7 +144,7 @@ export default function SignUpScreen() {
 
           <TextInput
             style={styles.input}
-            placeholder="Phone number"
+            placeholder="Phone number..."
             value={phoneNumber}
             onChangeText={setPhoneNumber}
             keyboardType="phone-pad"
@@ -197,7 +153,7 @@ export default function SignUpScreen() {
 
           <TextInput
             style={styles.input}
-            placeholder="Company name"
+            placeholder="Company name..."
             value={companyName}
             onChangeText={setCompanyName}
             placeholderTextColor="#999"
@@ -205,7 +161,7 @@ export default function SignUpScreen() {
 
           <TextInput
             style={styles.input}
-            placeholder="Occupation (e.g. Software Developer)"
+            placeholder="Occupation... (e.g. Software Developer)"
             value={occupation}
             onChangeText={setOccupation}
             placeholderTextColor="#999"
@@ -214,7 +170,7 @@ export default function SignUpScreen() {
           <View style={styles.passwordContainer}>
             <TextInput
               style={[styles.input, styles.passwordInput]}
-              placeholder="Password"
+              placeholder="Password..."
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
@@ -234,15 +190,8 @@ export default function SignUpScreen() {
 
           <View style={styles.uploadSection}>
             <Text style={styles.uploadLabel}>Company Logo:</Text>
-            <TouchableOpacity style={styles.uploadButton} onPress={handleLogoUpload}>
-              {companyLogo ? (
-                <Image 
-                  source={{ uri: companyLogo }} 
-                  style={styles.profilePreview} 
-                />
-              ) : (
-                <MaterialIcons name="add" size={24} color={COLORS.white} />
-              )}
+            <TouchableOpacity style={styles.uploadButton}>
+              <MaterialIcons name="add" size={24} color={COLORS.white} />
             </TouchableOpacity>
           </View>
 

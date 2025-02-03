@@ -78,8 +78,7 @@ exports.addUser = async (req, res) => {
             company, 
             status, 
             phone,
-            profileImage: req.files?.profileImage ? `/profiles/${req.files.profileImage[0].filename}` : null,
-            companyLogo: req.files?.companyLogo ? `/profiles/${req.files.companyLogo[0].filename}` : null,
+            profileImage: req.file ? `/profiles/${req.file.filename}` : null,
             createdAt: new Date().toISOString()
         };
 
@@ -179,25 +178,9 @@ exports.signIn = async (req, res) => {
 
 exports.updateUser = async (req, res) => {
     const { id } = req.params;
+    const updateData = req.body;
+
     try {
-        let updateData = {};
-
-        // Handle file upload if present
-        if (req.file) {
-            updateData.profileImage = `/profiles/${req.file.filename}`;
-        } 
-        // Handle JSON data if present
-        else if (Object.keys(req.body).length > 0) {
-            updateData = req.body;
-        }
-
-        // Check if there's any data to update
-        if (Object.keys(updateData).length === 0) {
-            return res.status(400).send({ 
-                message: 'No update data provided'
-            });
-        }
-
         const userRef = db.collection('users').doc(id);
         const doc = await userRef.get();
 
@@ -223,80 +206,6 @@ exports.updateUser = async (req, res) => {
         res.status(500).send({
             message: 'Failed to update user',
             error: error.message
-        });
-    }
-};
-
-exports.updateProfileImage = async (req, res) => {
-    const { id } = req.params;
-    
-    try {
-      if (!req.file) {
-        return res.status(400).send({ message: 'No image file provided' });
-      }
-  
-      const userRef = db.collection('users').doc(id);
-      const doc = await userRef.get();
-  
-      if (!doc.exists) {
-        return res.status(404).send({ message: 'User not found' });
-      }
-  
-      const profileImage = `/profiles/${req.file.filename}`;
-      await userRef.update({ profileImage });
-  
-      // Get updated user data
-      const updatedDoc = await userRef.get();
-      const userData = {
-        id: updatedDoc.id,
-        ...updatedDoc.data()
-      };
-  
-      res.status(200).send(userData);
-    } catch (error) {
-      console.error('Error updating profile image:', error);
-      res.status(500).send({
-        message: 'Failed to update profile image',
-        error: error.message
-      });
-    }
-  };
-
-exports.updateUserColor = async (req, res) => {
-    const { id } = req.params;
-    const { color } = req.body;
-    
-    if (!color) {
-        return res.status(400).send({ message: 'Color is required' });
-    }
-
-    try {
-        const userRef = db.collection('users').doc(id);
-        const doc = await userRef.get();
-
-        if (!doc.exists) {
-            return res.status(404).send({ message: 'User not found' });
-        }
-
-        await userRef.update({
-            colorScheme: color
-        });
-
-        const updatedDoc = await userRef.get();
-        const userData = {
-            id: updatedDoc.id,
-            ...updatedDoc.data()
-        };
-
-        res.status(200).send({ 
-            message: 'User color updated successfully',
-            user: userData
-        });
-    } catch (error) {
-        console.error('Error updating user color:', error);
-        res.status(500).send({ 
-            message: 'Failed to update user color',
-            error: error.message 
         });
     }
 };
