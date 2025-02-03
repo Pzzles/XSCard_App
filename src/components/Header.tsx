@@ -39,9 +39,9 @@ export default function Header({ title }: HeaderProps) {
       </View>
 
       <View style={styles.iconContainer}>
-        <TouchableOpacity style={styles.icon} onPress={handleAddPress}>
+        {/*<TouchableOpacity style={styles.icon} onPress={handleAddPress}>
           <MaterialIcons name="add" size={24} color={COLORS.black} />
-        </TouchableOpacity>
+        </TouchableOpacity>*/}
         <TouchableOpacity style={styles.icon} onPress={handleEditPress}>
           <MaterialIcons name="edit" size={24} color={COLORS.black} />
         </TouchableOpacity>
