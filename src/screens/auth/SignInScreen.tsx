@@ -62,7 +62,7 @@ export default function SignInScreen() {
 
       <TextInput
         style={styles.input}
-        placeholder="Mail"
+        placeholder="Mail..."
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
@@ -73,7 +73,7 @@ export default function SignInScreen() {
       <View style={styles.passwordContainer}>
         <TextInput
           style={[styles.input, styles.passwordInput]}
-          placeholder="Password"
+          placeholder="Password..."
           value={password}
           onChangeText={setPassword}
           secureTextEntry={!showPassword}
