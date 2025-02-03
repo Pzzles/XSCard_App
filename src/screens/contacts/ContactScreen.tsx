@@ -198,7 +198,8 @@ export default function ContactsScreen() {
   const handleSend = () => {
     const platform = shareOptions.find(opt => opt.id === selectedPlatform);
     if (platform && phoneNumber) {
-      platform.action(phoneNumber);
+      const formattedNumber = phoneNumber.startsWith('0') ? `+27${phoneNumber.slice(1)}` : `+27${phoneNumber}`;
+      platform.action(formattedNumber);
       setIsShareModalVisible(false);
       setSelectedPlatform(null);
       setPhoneNumber('');
@@ -223,7 +224,29 @@ export default function ContactsScreen() {
       shadowOpacity: 0.25,
       shadowRadius: 3.84,
       elevation: 5,
-    }
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: COLORS.gray + '50',
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 20,
+      fontSize: 16,
+    },
+    sendButton: {
+      backgroundColor: COLORS.secondary,
+      padding: 15,
+      borderRadius: 8,
+      alignItems: 'center' as 'flex-start' | 'center' | 'flex-end',
+    },
+    sendButtonText: {
+      color: COLORS.white,
+      fontSize: 16,
+      fontWeight: '500',
+    },
+    disabledButton: {
+      opacity: 0.5,
+    },
   };
 
   return (
@@ -356,14 +379,14 @@ export default function ContactsScreen() {
                   Enter {selectedPlatform === 'email' ? 'email address' : 'phone number'}
                 </Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, dynamicStyles.input]}
                   placeholder={selectedPlatform === 'email' ? 'Enter email' : 'Enter phone number'}
                   value={phoneNumber}
                   onChangeText={setPhoneNumber}
                   keyboardType={selectedPlatform === 'email' ? 'email-address' : 'phone-pad'}
                 />
                 <TouchableOpacity
-                  style={[styles.sendButton, !phoneNumber && styles.disabledButton]}
+                  style={[dynamicStyles.sendButton, styles.sendButton]}
                   onPress={handleSend}
                   disabled={!phoneNumber}
                 >
@@ -548,28 +571,6 @@ const styles = StyleSheet.create({
   inputContainer: {
     width: '100%',
   },
-  input: {
-    borderWidth: 1,
-    borderColor: COLORS.gray + '50',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 20,
-    fontSize: 16,
-  },
-  sendButton: {
-    backgroundColor: COLORS.primary,
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  sendButtonText: {
-    color: COLORS.white,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  disabledButton: {
-    opacity: 0.5,
-  },
   contactHowWeMet: {
     fontSize: 12,
     color: COLORS.gray,
@@ -582,5 +583,27 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.gray,
     marginTop: 2,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: COLORS.gray + '50',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 20,
+    fontSize: 16,
+  },
+  sendButton: {
+    backgroundColor: COLORS.primary,
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center' as 'flex-start' | 'center' | 'flex-end',
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  sendButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '500',
   },
 });

@@ -636,7 +636,7 @@ const styles = StyleSheet.create({
     marginLeft: -20,
     marginRight: -20,
     alignSelf: 'center',
-    marginBottom: 50,
+    marginBottom: 80,
   },
   logo: {
     width: '100%',
