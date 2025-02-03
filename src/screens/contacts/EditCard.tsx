@@ -647,7 +647,7 @@ const styles = StyleSheet.create({
   },
   profileOverlayContainer: {
     position: 'absolute',
-    bottom: -40,
+    bottom: -80,
     left: '50%',
     transform: [{ translateX: -60 }],
     alignItems: 'center',

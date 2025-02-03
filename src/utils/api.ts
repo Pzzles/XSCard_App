@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 const getBaseUrl = () => {
     if (__DEV__) {  // Development mode
 
-        return 'http:your IP address//:8383';
+        return 'http://192.168.0.193:8383';
     }
     // Production URL (you can change this later)
     return 'https://your-production-url.com';

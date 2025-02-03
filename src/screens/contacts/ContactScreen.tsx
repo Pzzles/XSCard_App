@@ -276,10 +276,6 @@ export default function ContactsScreen() {
                   </View>
                 </View>
                 <View style={styles.contactRight}>
-                  <Text style={styles.dateAdded}>
-                    {formatDate(contact.createdAt)}
-                  </Text>
-
                   <View style={styles.actionButtons}>
                     <TouchableOpacity style={styles.shareButton}>
                       <MaterialIcons name="share" size={24} color={COLORS.gray} />
@@ -413,11 +409,15 @@ const styles = StyleSheet.create({
   contactCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: 15,
+    marginTop: 5,      // Top padding
+    marginBottom: 5,   // Bottom padding
+    marginLeft: 7,     // Left padding (increased)
+    marginRight: 7,    // Right padding (increased)
     backgroundColor: COLORS.white,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray + '20',
-  },
+    borderWidth: 1,      // Border on all sides
+    borderColor: COLORS.gray + '20',  // Border color
+    borderRadius: 8,     // Optional: rounded corners
+  },  
   contactLeft: {
     flexDirection: 'row',
     alignItems: 'center',
