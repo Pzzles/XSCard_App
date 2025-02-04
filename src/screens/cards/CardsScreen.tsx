@@ -133,7 +133,12 @@ export default function CardsScreen() {
       icon: 'whatsapp',
       color: '#25D366',
       action: (number: string) => {
-        const message = 'Check out my digital business card!' + 'Link';
+        if (!userData?.id) {
+          Alert.alert('Error', 'User data not available');
+          return;
+        }
+        const saveContactUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
+        const message = `Check out my digital business card! ${saveContactUrl}`;
         const whatsappUrl = `whatsapp://send?phone=${number}&text=${encodeURIComponent(message)}`;
         Linking.openURL(whatsappUrl).catch(() => {
           Alert.alert('Error', 'WhatsApp is not installed on your device');
@@ -184,11 +189,11 @@ export default function CardsScreen() {
       }
 
       // Open the wallet pass URL
-      if (data.passUrl) {
-        await Linking.openURL(data.passUrl);
-      } else {
-        throw new Error('No pass URL received');
-      }
+      // if (data.passUrl) {
+      //   await Linking.openURL(data.passUrl);
+      // } else {
+      //   throw new Error('No pass URL received');
+      // }
 
     } catch (error) {
       console.error('Error adding to wallet:', error);
