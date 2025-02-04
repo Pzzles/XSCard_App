@@ -1,4 +1,9 @@
 const { db } = require('../firebase.js');
+const axios = require('axios');
+
+const PASSCREATOR_API_KEY = 'bsZ6=JCt!b-Y-k%S%eY2NUAcLo4eZSwkEs9xTsA2!-4N1GNltyH.!aXjCe/_WBAbu.s_Qws&hDek8dyL';
+const PASSCREATOR_BASE_URL = 'https://app.passcreator.com';
+const TEMPLATE_ID = 'e1f5f7b2-48b3-4992-b064-6ad584928c95';
 
 exports.getAllUsers = async (req, res) => {
     try {
@@ -297,6 +302,68 @@ exports.updateUserColor = async (req, res) => {
         res.status(500).send({ 
             message: 'Failed to update user color',
             error: error.message 
+        });
+    }
+};
+
+exports.addToWallet = async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        // Get user data from database
+        const userRef = db.collection('users').doc(id);
+        const userDoc = await userRef.get();
+
+        if (!userDoc.exists) {
+            return res.status(404).send({ message: 'User not found' });
+        }
+
+        const userData = userDoc.data();
+
+        // Prepare data for Passcreator API
+        const passData = {
+            template: 'your_template_id', // Your Passcreator template ID
+            data: {
+                fullName: `${userData.name} ${userData.surname}`,
+                jobTitle: userData.occupation,
+                company: userData.company,
+                email: userData.email,
+                phone: userData.phone,
+                // Add QR code data
+                qrCodeData: `${process.env.FRONTEND_URL}/profile/${id}`,
+                // Add profile image if exists
+                profileImage: userData.profileImage ? 
+                    `${process.env.BACKEND_URL}${userData.profileImage}` : 
+                    undefined,
+                // Add company logo if exists
+                companyLogo: userData.companyLogo ? 
+                    `${process.env.BACKEND_URL}${userData.companyLogo}` : 
+                    undefined,
+            }
+        };
+
+        // Call Passcreator API
+        const response = await axios.post(`${PASSCREATOR_BASE_URL}/api/pass?passtemplate=${TEMPLATE_ID}&zapierStyle=true`, passData, {
+            headers: {
+                'Authorization': `Bearer ${PASSCREATOR_API_KEY}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        // Get the pass URL from the response
+        const passUrl = response.data.url;
+
+        // Return the pass URL to the client
+        res.status(200).send({
+            message: 'Wallet pass created successfully',
+            passUrl: passUrl
+        });
+
+    } catch (error) {
+        console.error('Error creating wallet pass:', error);
+        res.status(500).send({
+            message: 'Failed to create wallet pass',
+            error: error.message
         });
     }
 };

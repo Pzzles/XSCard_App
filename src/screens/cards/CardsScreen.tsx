@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View, Image, TouchableOpacity, Animated, ScrollView, ImageStyle, Modal, Linking, Alert, TextInput } from 'react-native';
+import { StyleSheet, Text, View, Image, TouchableOpacity, Animated, ScrollView, ImageStyle, Modal, Linking, Alert, TextInput, ViewStyle, ActivityIndicator } from 'react-native';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
@@ -51,6 +51,7 @@ export default function CardsScreen() {
 
   // Add loading state
   const [isLoading, setIsLoading] = useState(true);
+  const [isWalletLoading, setIsWalletLoading] = useState(false);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -161,15 +162,51 @@ export default function CardsScreen() {
     }
   };
 
+  const handleAddToWallet = async () => {
+    if (!userData?.id) {
+      Alert.alert('Error', 'User data not available');
+      return;
+    }
+
+    setIsWalletLoading(true);
+    try {
+      const response = await fetch(buildUrl(ENDPOINTS.ADD_TO_WALLET.replace(':id', userData.id)), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to create wallet pass');
+      }
+
+      // Open the wallet pass URL
+      if (data.passUrl) {
+        await Linking.openURL(data.passUrl);
+      } else {
+        throw new Error('No pass URL received');
+      }
+
+    } catch (error) {
+      console.error('Error adding to wallet:', error);
+      Alert.alert('Error', 'Failed to add to Google Wallet');
+    } finally {
+      setIsWalletLoading(false);
+    }
+  };
+
   // Move styles outside of StyleSheet for dynamic values
-  const dynamicStyles = {
+  const dynamicStyles: Record<string, ViewStyle> = {
     sendButton: {
       flexDirection: 'row',
       backgroundColor: cardColor,
       paddingVertical: 10,
       paddingHorizontal: 20,
       borderRadius: 25,
-      alignItems: 'center',
+      alignItems: 'center' as const,
       marginBottom: 20,
       shadowColor: '#000',
       shadowOffset: {
@@ -186,7 +223,7 @@ export default function CardsScreen() {
       paddingVertical: 10,
       paddingHorizontal: 20,
       borderRadius: 25,
-      alignItems: 'center',
+      alignItems: 'center' as const,
       marginBottom: 20,
       shadowColor: '#000',
       shadowOffset: {
@@ -218,6 +255,25 @@ export default function CardsScreen() {
       },
       shadowOpacity: 0.5,
       shadowRadius: 8,
+    },
+    walletButton: {
+      flexDirection: 'row',
+      backgroundColor: COLORS.white,
+      paddingVertical: 10,
+      paddingHorizontal: 20,
+      borderRadius: 25,
+      alignItems: 'center' as const,
+      marginBottom: 20,
+      borderWidth: 2,
+      borderColor: cardColor,
+      shadowColor: '#000',
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      shadowOpacity: 0.3,
+      shadowRadius: 4,
+      elevation: 3,
     },
   };
 
@@ -301,6 +357,23 @@ export default function CardsScreen() {
           <TouchableOpacity onPress={handleShare} style={[styles.shareButton, dynamicStyles.shareButton]}>
             <MaterialIcons name="share" size={24} color={COLORS.white} />
             <Text style={styles.shareButtonText}>Share</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            onPress={handleAddToWallet} 
+            style={[styles.walletButton, dynamicStyles.walletButton]}
+            disabled={isWalletLoading}
+          >
+            {isWalletLoading ? (
+              <ActivityIndicator size="small" color={cardColor} />
+            ) : (
+              <>
+                <MaterialCommunityIcons name="wallet" size={24} color={cardColor} />
+                <Text style={[styles.walletButtonText, { color: cardColor }]}>
+                  Add to Google Wallet
+                </Text>
+              </>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -548,6 +621,15 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: COLORS.white,
+    fontSize: 16,
+    fontWeight: 'bold',
+    fontFamily: 'Montserrat-Bold',
+  },
+  walletButton: {
+    marginTop: 10,
+  },
+  walletButtonText: {
+    marginLeft: 8,
     fontSize: 16,
     fontWeight: 'bold',
     fontFamily: 'Montserrat-Bold',

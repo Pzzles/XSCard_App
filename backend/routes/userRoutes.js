@@ -34,5 +34,6 @@ router.patch('/UpdateUser/:id', upload.single('profileImage'), userController.up
 router.delete('/Users/:id', userController.deleteUser);
 router.patch('/Users/:id/profile-image', upload.single('profileImage'), userController.updateProfileImage);
 router.patch('/Users/:id/color', userController.updateUserColor);
+router.post('/Users/:id/wallet', userController.addToWallet);
 
 module.exports = router;
