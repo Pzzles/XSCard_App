@@ -341,10 +341,13 @@ exports.addToWallet = async (req, res) => {
             }
         });
 
+        // Send back all relevant URLs
         res.status(200).send({
             message: 'Wallet pass created successfully',
-            passUrl: response.data.url,
-            linkToPassPage: response.data.linkToPassPage // Include the linkToPassPage from response
+            passUri: response.data.uri,
+            passFileUrl: response.data.linkToPassFile,
+            passPageUrl: response.data.linkToPassPage,
+            identifier: response.data.identifier
         });
 
     } catch (error) {

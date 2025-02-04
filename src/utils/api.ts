@@ -1,5 +1,14 @@
 import { Platform } from 'react-native';
 
+// Add these types near the top of the file
+export interface PasscreatorResponse {
+    message: string;
+    passUri: string;
+    passFileUrl: string;
+    passPageUrl: string;
+    identifier: string;
+}
+
 // Helper function to get the appropriate base URL
 const getBaseUrl = () => {
     if (__DEV__) {  // Development mode

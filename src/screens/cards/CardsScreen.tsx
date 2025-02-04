@@ -188,12 +188,12 @@ export default function CardsScreen() {
         throw new Error(data.message || 'Failed to create wallet pass');
       }
 
-      // Open the wallet pass URL
-      // if (data.passUrl) {
-      //   await Linking.openURL(data.passUrl);
-      // } else {
-      //   throw new Error('No pass URL received');
-      // }
+      // Open the pass page URL in browser
+      if (data.passPageUrl) {
+        await Linking.openURL(data.passPageUrl);
+      } else {
+        throw new Error('No pass page URL received');
+      }
 
     } catch (error) {
       console.error('Error adding to wallet:', error);
