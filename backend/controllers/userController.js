@@ -1,4 +1,10 @@
 const { db } = require('../firebase.js');
+const axios = require('axios');
+const config = require('../config/config');
+
+const PASSCREATOR_API_KEY = 'bsZ6=JCt!b-Y-k%S%eY2NUAcLo4eZSwkEs9xTsA2!-4N1GNltyH.!aXjCe/_WBAbu.s_Qws&hDek8dyL';
+const PASSCREATOR_BASE_URL = 'https://app.passcreator.com';
+const TEMPLATE_ID = '2e06f305-b6b6-46c1-a300-4ebbe49862c3';
 
 exports.getAllUsers = async (req, res) => {
     try {
@@ -297,6 +303,55 @@ exports.updateUserColor = async (req, res) => {
         res.status(500).send({ 
             message: 'Failed to update user color',
             error: error.message 
+        });
+    }
+};
+
+exports.addToWallet = async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const userRef = db.collection('users').doc(id);
+        const userDoc = await userRef.get();
+
+        if (!userDoc.exists) {
+            return res.status(404).send({ message: 'User not found' });
+        }
+
+        const userData = userDoc.data();
+        
+        // Create full URLs for images using PASSCREATOR_PUBLIC_URL
+        const thumbnailUrl = userData.profileImage ? `${config.PASSCREATOR_PUBLIC_URL}${userData.profileImage}` : null;
+        const logoUrl = userData.companyLogo ? `${config.PASSCREATOR_PUBLIC_URL}${userData.companyLogo}` : null;
+
+        const passData = {
+            name: `${userData.name} ${userData.surname}`,
+            company: userData.company,
+            jobTitle: userData.occupation,
+            urlToThumbnail: thumbnailUrl,
+            urlToLogo: logoUrl,
+            barcodeValue: `${config.PASSCREATOR_PUBLIC_URL}/saveContact.html?userId=${id}`
+        };
+
+        // Call Passcreator API
+        const response = await axios.post(`${PASSCREATOR_BASE_URL}/api/pass?passtemplate=${TEMPLATE_ID}&zapierStyle=true`, passData, {
+            headers: {
+                'Authorization': PASSCREATOR_API_KEY,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        res.status(200).send({
+            message: 'Wallet pass created successfully',
+            passUrl: response.data.url,
+            linkToPassPage: response.data.linkToPassPage // Include the linkToPassPage from response
+        });
+
+    } catch (error) {
+        console.error('Error creating wallet pass:', error);
+        res.status(500).send({
+            message: 'Failed to create wallet pass',
+            error: error.message
         });
     }
 };
