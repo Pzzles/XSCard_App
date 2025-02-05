@@ -1,6 +1,27 @@
-// Base URL for the API
-// export const API_BASE_URL = 'https://dd9e-197-184-173-167.ngrok-free.app';
-export const API_BASE_URL = 'https://934b-197-184-173-167.ngrok-free.app';
+import { Platform } from 'react-native';
+
+// Add these types near the top of the file
+export interface PasscreatorResponse {
+    message: string;
+    passUri: string;
+    passFileUrl: string;
+    passPageUrl: string;
+    identifier: string;
+}
+
+// Helper function to get the appropriate base URL
+const getBaseUrl = () => {
+    if (__DEV__) {  // Development mode
+       // return 'http://192.168.124.148:8383'; // home
+        return 'https://2fda-197-185-243-220.ngrok-free.app'; // internet
+       // return 'http://192.168.0.101:8383'; // work
+    }
+    // Production URL (you can change this later)
+    return 'https://your-production-url.com';
+};
+
+export const API_BASE_URL = getBaseUrl();
+
 // API endpoints
 export const ENDPOINTS = {
     ADD_USER: '/AddUser',
@@ -10,8 +31,11 @@ export const ENDPOINTS = {
     GET_CARD: '/Cards',
     ADD_CARD: '/AddCard',
     GET_CONTACTS: '/Contacts',
-    // Add other endpoints here as needed
+    UPDATE_USER: '/UpdateUser',
+    UPDATE_PROFILE_IMAGE: '/Users/:id/profile-image',
+    UPDATE_COMPANY_LOGO: '/Users/:id/company-logo', // Add this line
+    UPDATE_USER_COLOR: '/Users/:id/color', // Changed from Cards to Users
+    ADD_TO_WALLET: '/Users/:id/wallet',
 };
 
-// Helper function to build complete URLs
 export const buildUrl = (endpoint: string) => `${API_BASE_URL}${endpoint}`;

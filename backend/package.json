@@ -10,9 +10,13 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "axios": "^1.7.9",
     "express": "^4.21.2",
     "firebase-admin": "^13.0.2",
+    "module": "^1.0.0",
     "mssql": "^11.0.1",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.10.0",
     "qrcode": "^1.5.4"
   }
 }
