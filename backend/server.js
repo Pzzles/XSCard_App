@@ -5,8 +5,21 @@ const express = require('express');
 const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
+const nodemailer = require('nodemailer');
 const app = express();
 const port = 8383;
+
+// Email transporter configuration
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: 'tshehlap@gmail.com',
+    pass: 'gyjx fwfn ybha miud'//process.env.EMAIL_PASSWORD // Make sure to set this in your environment variables
+  }
+});
+
+// Export transporter for use in other files
+exports.transporter = transporter;
 
 // Import routes
 const userRoutes = require('./routes/userRoutes');
