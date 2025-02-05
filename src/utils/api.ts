@@ -13,7 +13,7 @@ export interface PasscreatorResponse {
 const getBaseUrl = () => {
     if (__DEV__) {  // Development mode
        // return 'http://192.168.124.148:8383'; // home
-        return 'https://2969-197-185-221-152.ngrok-free.app'; // internet
+        return 'https://2fda-197-185-243-220.ngrok-free.app'; // internet
        // return 'http://192.168.0.101:8383'; // work
     }
     // Production URL (you can change this later)
@@ -33,6 +33,7 @@ export const ENDPOINTS = {
     GET_CONTACTS: '/Contacts',
     UPDATE_USER: '/UpdateUser',
     UPDATE_PROFILE_IMAGE: '/Users/:id/profile-image',
+    UPDATE_COMPANY_LOGO: '/Users/:id/company-logo', // Add this line
     UPDATE_USER_COLOR: '/Users/:id/color', // Changed from Cards to Users
     ADD_TO_WALLET: '/Users/:id/wallet',
 };

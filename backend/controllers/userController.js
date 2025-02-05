@@ -268,6 +268,40 @@ exports.updateProfileImage = async (req, res) => {
     }
   };
 
+exports.updateCompanyLogo = async (req, res) => {
+    const { id } = req.params;
+    
+    try {
+        if (!req.file) {
+            return res.status(400).send({ message: 'No image file provided' });
+        }
+
+        const userRef = db.collection('users').doc(id);
+        const doc = await userRef.get();
+
+        if (!doc.exists) {
+            return res.status(404).send({ message: 'User not found' });
+        }
+
+        const companyLogo = `/profiles/${req.file.filename}`;
+        await userRef.update({ companyLogo });
+
+        const updatedDoc = await userRef.get();
+        const userData = {
+            id: updatedDoc.id,
+            ...updatedDoc.data()
+        };
+
+        res.status(200).send(userData);
+    } catch (error) {
+        console.error('Error updating company logo:', error);
+        res.status(500).send({
+            message: 'Failed to update company logo',
+            error: error.message
+        });
+    }
+};
+
 exports.updateUserColor = async (req, res) => {
     const { id } = req.params;
     const { color } = req.body;
