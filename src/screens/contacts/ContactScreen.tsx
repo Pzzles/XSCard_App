@@ -276,14 +276,8 @@ export default function ContactsScreen() {
                   </View>
                 </View>
                 <View style={styles.contactRight}>
-                  <Text style={styles.dateAdded}>
-                    {formatDate(contact.createdAt)}
-                  </Text>
 
                   <View style={styles.actionButtons}>
-                    <TouchableOpacity style={styles.shareButton}>
-                      <MaterialIcons name="share" size={24} color={COLORS.gray} />
-                    </TouchableOpacity>
                     <TouchableOpacity 
                       style={styles.deleteButton}
                       onPress={() => {

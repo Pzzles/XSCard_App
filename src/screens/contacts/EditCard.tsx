@@ -752,7 +752,7 @@ const styles = StyleSheet.create({
     marginLeft: -20,
     marginRight: -20,
     alignSelf: 'center',
-    marginBottom: 50,
+    marginBottom: 80,
   },
   logo: {
     width: '100%',
@@ -763,7 +763,7 @@ const styles = StyleSheet.create({
   },
   profileOverlayContainer: {
     position: 'absolute',
-    bottom: -40,
+    bottom: -80,
     left: '50%',
     transform: [{ translateX: -60 }],
     alignItems: 'center',

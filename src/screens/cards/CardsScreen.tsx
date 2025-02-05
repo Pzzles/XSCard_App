@@ -473,6 +473,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 20,
     backgroundColor: '#fff',
+    marginTop:20,
   },
   qrCode: {
     width: '100%',
@@ -496,7 +497,7 @@ const styles = StyleSheet.create({
   },
   profileOverlayContainer: {
     position: 'absolute',
-    bottom: -40,
+    bottom: -80,
     left: '50%',
     transform: [{ translateX: -60 }], // Half of profile image width
     alignItems: 'center',
@@ -520,7 +521,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '600',
     marginBottom: 5,
-    marginTop: 0,
+    marginTop: 20,
     fontFamily: 'Montserrat-Bold',
     marginLeft:25,
   },
