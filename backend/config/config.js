@@ -1,7 +1,7 @@
 // Development and production URLs
 const config = {
     development: {
-        PASSCREATOR_PUBLIC_URL: 'https://2fda-197-185-243-220.ngrok-free.app',
+        PASSCREATOR_PUBLIC_URL: 'http://192.168.0.193:8383',
     },
     production: {
         PASSCREATOR_PUBLIC_URL: 'https://your-production-url.com',
