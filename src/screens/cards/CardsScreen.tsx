@@ -330,7 +330,7 @@ export default function CardsScreen() {
           </Text>
           
           {/* Update the email contact section */}
-          <View style={[styles.contactSection, styles.leftAligned, dynamicStyles.contactBorder]}>
+          <View style={[styles.contactSection, styles.leftAligned]}>
             <MaterialCommunityIcons name="email-outline" size={30} color={cardColor} />
             <Text style={styles.contactText}>
               {cardData?.Email || userData?.email || 'Loading...'}
@@ -338,7 +338,7 @@ export default function CardsScreen() {
           </View>
 
           {/* Update the phone contact section */}
-          <View style={[styles.contactSection, styles.leftAligned, dynamicStyles.contactBorder]}>
+          <View style={[styles.contactSection, styles.leftAligned]}>
             <MaterialCommunityIcons name="phone-outline" size={30} color={cardColor} />
             <Text style={styles.contactText}>
               {userData?.phone || 'No phone number'}
