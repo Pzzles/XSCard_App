@@ -24,6 +24,15 @@ export default function SignUpScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [companyLogo, setCompanyLogo] = useState<string | null>(null);
+  const [errors, setErrors] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phoneNumber: '',
+    companyName: '',
+    occupation: '',
+    password: '',
+  });
 
   const handleImagePick = async () => {
     const { cameraGranted, galleryGranted } = await requestPermissions();
@@ -93,7 +102,89 @@ export default function SignUpScreen() {
     );
   };
 
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  const validatePhone = (phone: string) => {
+    const phoneRegex = /^\+?[\d\s-]{10,}$/;
+    return phoneRegex.test(phone);
+  };
+
+  const validatePassword = (password: string) => {
+    // At least 8 characters, 1 uppercase, 1 lowercase, 1 number
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+    return passwordRegex.test(password);
+  };
+
+  const validateForm = () => {
+    const newErrors = {
+      firstName: '',
+      lastName: '',
+      email: '',
+      phoneNumber: '',
+      companyName: '',
+      occupation: '',
+      password: '',
+    };
+
+    let isValid = true;
+
+    if (!firstName.trim()) {
+      newErrors.firstName = 'First name is required';
+      isValid = false;
+    }
+
+    if (!lastName.trim()) {
+      newErrors.lastName = 'Last name is required';
+      isValid = false;
+    }
+
+    if (!email.trim()) {
+      newErrors.email = 'Email is required';
+      isValid = false;
+    } else if (!validateEmail(email)) {
+      newErrors.email = 'Please enter a valid email address';
+      isValid = false;
+    }
+
+    if (!phoneNumber.trim()) {
+      newErrors.phoneNumber = 'Phone number is required';
+      isValid = false;
+    } else if (!validatePhone(phoneNumber)) {
+      newErrors.phoneNumber = 'Please enter a valid phone number';
+      isValid = false;
+    }
+
+    if (!companyName.trim()) {
+      newErrors.companyName = 'Company name is required';
+      isValid = false;
+    }
+
+    if (!occupation.trim()) {
+      newErrors.occupation = 'Occupation is required';
+      isValid = false;
+    }
+
+    if (!password) {
+      newErrors.password = 'Password is required';
+      isValid = false;
+    } else if (!validatePassword(password)) {
+      newErrors.password = 'Password must be at least 8 characters and contain uppercase, lowercase, and numbers';
+      isValid = false;
+    }
+
+    setErrors(newErrors);
+    return isValid;
+  };
+
   const handleSignUp = async () => {
+    if (!validateForm()) {
+      Alert.alert('Validation Error', 'Please check all fields and try again.');
+      return;
+    }
+
     try {
       // Create form data for multipart/form-data
       const formData = new FormData();
@@ -161,62 +252,89 @@ export default function SignUpScreen() {
           <Text style={styles.title}>Sign Up</Text>
           
           <TextInput
-            style={styles.input}
+            style={[styles.input, errors.firstName ? styles.inputError : null]}
             placeholder="First name"
             value={firstName}
-            onChangeText={setFirstName}
+            onChangeText={(text) => {
+              setFirstName(text);
+              setErrors(prev => ({ ...prev, firstName: '' }));
+            }}
             placeholderTextColor="#999"
           />
+          {errors.firstName ? <Text style={styles.errorText}>{errors.firstName}</Text> : null}
 
           <TextInput
-            style={styles.input}
+            style={[styles.input, errors.lastName ? styles.inputError : null]}
             placeholder="Last name"
             value={lastName}
-            onChangeText={setLastName}
+            onChangeText={(text) => {
+              setLastName(text);
+              setErrors(prev => ({ ...prev, lastName: '' }));
+            }}
             placeholderTextColor="#999"
           />
+          {errors.lastName ? <Text style={styles.errorText}>{errors.lastName}</Text> : null}
 
           <TextInput
-            style={styles.input}
+            style={[styles.input, errors.email ? styles.inputError : null]}
             placeholder="Mail"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(text) => {
+              setEmail(text);
+              setErrors(prev => ({ ...prev, email: '' }));
+            }}
             keyboardType="email-address"
             autoCapitalize="none"
             placeholderTextColor="#999"
           />
+          {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
 
           <TextInput
-            style={styles.input}
+            style={[styles.input, errors.phoneNumber ? styles.inputError : null]}
             placeholder="Phone number"
             value={phoneNumber}
-            onChangeText={setPhoneNumber}
+            onChangeText={(text) => {
+              setPhoneNumber(text);
+              setErrors(prev => ({ ...prev, phoneNumber: '' }));
+            }}
             keyboardType="phone-pad"
             placeholderTextColor="#999"
           />
+          {errors.phoneNumber ? <Text style={styles.errorText}>{errors.phoneNumber}</Text> : null}
 
           <TextInput
-            style={styles.input}
+            style={[styles.input, errors.companyName ? styles.inputError : null]}
             placeholder="Company name"
             value={companyName}
-            onChangeText={setCompanyName}
+            onChangeText={(text) => {
+              setCompanyName(text);
+              setErrors(prev => ({ ...prev, companyName: '' }));
+            }}
             placeholderTextColor="#999"
           />
+          {errors.companyName ? <Text style={styles.errorText}>{errors.companyName}</Text> : null}
 
           <TextInput
-            style={styles.input}
+            style={[styles.input, errors.occupation ? styles.inputError : null]}
             placeholder="Occupation (e.g. Software Developer)"
             value={occupation}
-            onChangeText={setOccupation}
+            onChangeText={(text) => {
+              setOccupation(text);
+              setErrors(prev => ({ ...prev, occupation: '' }));
+            }}
             placeholderTextColor="#999"
           />
+          {errors.occupation ? <Text style={styles.errorText}>{errors.occupation}</Text> : null}
 
           <View style={styles.passwordContainer}>
             <TextInput
-              style={[styles.input, styles.passwordInput]}
+              style={[styles.input, styles.passwordInput, errors.password ? styles.inputError : null]}
               placeholder="Password"
               value={password}
-              onChangeText={setPassword}
+              onChangeText={(text) => {
+                setPassword(text);
+                setErrors(prev => ({ ...prev, password: '' }));
+              }}
               secureTextEntry={!showPassword}
               placeholderTextColor="#999"
             />
@@ -231,6 +349,7 @@ export default function SignUpScreen() {
               />
             </TouchableOpacity>
           </View>
+          {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
 
           <View style={styles.uploadSection}>
             <Text style={styles.uploadLabel}>Company Logo:</Text>
@@ -390,5 +509,16 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
+  },
+  inputError: {
+    borderColor: 'red',
+    borderWidth: 1,
+  },
+  errorText: {
+    color: 'red',
+    fontSize: 12,
+    marginTop: -10,
+    marginBottom: 10,
+    marginLeft: 15,
   },
 });
