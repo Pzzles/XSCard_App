@@ -201,6 +201,236 @@ export default function EditCard() {
     }
   };
 
+  const handleProfileImageEdit = async () => {
+    Alert.alert(
+      "Update Profile Image",
+      "Would you like to update your profile image?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Choose Method",
+          onPress: () => showImageSourceOptions()
+        }
+      ]
+    );
+  };
+
+  const showImageSourceOptions = () => {
+    Alert.alert(
+      "Select Image Source",
+      "Choose where you want to pick your image from",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Camera",
+          onPress: () => pickImage('camera')
+        },
+        {
+          text: "Gallery",
+          onPress: () => pickImage('gallery')
+        }
+      ]
+    );
+  };
+
+  const pickImage = async (source: 'camera' | 'gallery') => {
+    try {
+      let result;
+      
+      if (source === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Sorry, we need camera permissions to make this work!');
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 1,
+        });
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Sorry, we need gallery permissions to make this work!');
+          return;
+        }
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 1,
+        });
+      }
+
+      if (!result.canceled) {
+        const storedUserData = await AsyncStorage.getItem('userData');
+        if (!storedUserData) {
+          setError('User data not found');
+          return;
+        }
+
+        const { id } = JSON.parse(storedUserData);
+
+        // Create form data
+        const formData = new FormData();
+        formData.append('profileImage', {
+          uri: result.assets[0].uri,
+          type: 'image/jpeg',
+          name: 'profile-image.jpg',
+        } as any);
+
+        // Use separate profile image endpoint
+        const response = await fetch(buildUrl(ENDPOINTS.UPDATE_PROFILE_IMAGE).replace(':id', id), {
+          method: 'PATCH',
+          body: formData,
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to update profile image');
+        }
+
+        const updatedUserData = await response.json();
+        
+        // Update the local state
+        setFormData(prev => ({
+          ...prev,
+          profileImage: updatedUserData.profileImage // Data comes directly, not nested
+        }));
+
+        // Update AsyncStorage
+        await AsyncStorage.setItem('userData', JSON.stringify(updatedUserData));
+
+        Alert.alert('Success', 'Profile image updated successfully');
+      }
+    } catch (error) {
+      console.error('Error updating profile image:', error);
+      Alert.alert('Error', 'Failed to update profile image');
+    }
+  };
+
+  const handleLogoEdit = async () => {
+    Alert.alert(
+      "Update Company Logo",
+      "Would you like to update your company logo?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Choose Method",
+          onPress: () => showLogoSourceOptions()
+        }
+      ]
+    );
+  };
+
+  const showLogoSourceOptions = () => {
+    Alert.alert(
+      "Select Image Source",
+      "Choose where you want to pick your logo from",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Camera",
+          onPress: () => pickLogo('camera')
+        },
+        {
+          text: "Gallery",
+          onPress: () => pickLogo('gallery')
+        }
+      ]
+    );
+  };
+
+  const pickLogo = async (source: 'camera' | 'gallery') => {
+    try {
+      let result;
+      
+      if (source === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Sorry, we need camera permissions to make this work!');
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [16, 9],
+          quality: 1,
+        });
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Sorry, we need gallery permissions to make this work!');
+          return;
+        }
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [16, 9],
+          quality: 1,
+        });
+      }
+
+      if (!result.canceled) {
+        const storedUserData = await AsyncStorage.getItem('userData');
+        if (!storedUserData) {
+          setError('User data not found');
+          return;
+        }
+
+        const { id } = JSON.parse(storedUserData);
+
+        const formData = new FormData();
+        formData.append('companyLogo', {
+          uri: result.assets[0].uri,
+          type: 'image/jpeg',
+          name: 'company-logo.jpg',
+        } as any);
+
+        const response = await fetch(buildUrl(ENDPOINTS.UPDATE_COMPANY_LOGO).replace(':id', id), {
+          method: 'PATCH',
+          body: formData,
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to update company logo');
+        }
+
+        const updatedUserData = await response.json();
+        
+        setFormData(prev => ({
+          ...prev,
+          companyLogo: updatedUserData.companyLogo
+        }));
+
+        await AsyncStorage.setItem('userData', JSON.stringify(updatedUserData));
+
+        Alert.alert('Success', 'Company logo updated successfully');
+      }
+    } catch (error) {
+      console.error('Error updating company logo:', error);
+      Alert.alert('Error', 'Failed to update company logo');
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Header title="Edit Card" />
@@ -250,7 +480,10 @@ export default function EditCard() {
             style={styles.logo}
             source={require('../../../assets/images/logoplaceholder.jpg')}
           />
-          <TouchableOpacity style={styles.editLogoButton}>
+          <TouchableOpacity 
+            style={styles.editLogoButton}
+            onPress={handleLogoEdit}
+          >
             <MaterialIcons name="edit" size={24} color={COLORS.white} />
           </TouchableOpacity>
           
@@ -501,7 +734,7 @@ const styles = StyleSheet.create({
     marginLeft: -20,
     marginRight: -20,
     alignSelf: 'center',
-    marginBottom: 50,
+    marginBottom: 80,
   },
   logo: {
     width: '100%',
@@ -512,7 +745,7 @@ const styles = StyleSheet.create({
   },
   profileOverlayContainer: {
     position: 'absolute',
-    bottom: -40,
+    bottom: -80,
     left: '50%',
     transform: [{ translateX: -60 }],
     alignItems: 'center',

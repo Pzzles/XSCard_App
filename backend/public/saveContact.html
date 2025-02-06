@@ -3,65 +3,178 @@
 <head>
     <title>Save Contact</title>
     <style>
+        :root {
+            --primary: #FF4B6E;
+            --secondary: #1B2B5B;
+            --white: #FFFFFF;
+            --black: #000000;
+        }
+
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--white);
+        }
+
+        .container {
             max-width: 600px;
             margin: 20px auto;
             padding: 20px;
         }
-        .contact-card {
-            border: 1px solid #ddd;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
+
+        .logo-container {
+            width: 100%;
+            position: relative;
+            overflow: visible;
+            margin-bottom: 70px;
         }
-        .submit-btn {
-            background-color: #4CAF50;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
+
+        .company-logo {
+            width: 100%;
+            aspect-ratio: 16/9;
+            object-fit: cover;
+        }
+
+        .profile-overlay {
+            position: absolute;
+            bottom: -60px;
+            left: 50%;
+            transform: translateX(-60px);
+        }
+
+        .profile-container {
+            width: 120px;
+            height: 120px;
+            border-radius: 60px;
+            border: 5px solid var(--white);
+            overflow: hidden;
+            background-color: #f0f0f0;
+        }
+
+        .profile-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .contact-info {
+            margin-top: 20px;
+            padding: 0 25px;
+        }
+
+        .name {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 5px;
+            margin-top: 20px;
+        }
+
+        .position {
+            font-size: 17px;
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        .company {
+            font-size: 17px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .contact-section {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid var(--secondary);
+            border-radius: 8px;
+        }
+
+        .contact-icon {
+            margin-right: 10px;
+            color: var(--secondary);
+        }
+
+        .contact-text {
+            margin-left: 10px;
             font-size: 16px;
         }
-        .submit-btn:hover {
-            background-color: #45a049;
+
+        .form-container {
+            margin-top: 30px;
+            padding: 0 25px;
         }
+
         .form-group {
             margin-bottom: 15px;
         }
+
         .form-group input {
             width: 100%;
-            padding: 8px;
-            margin-top: 5px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+            padding: 12px;
+            border: 1px solid var(--secondary);
+            border-radius: 8px;
+            font-size: 16px;
+            box-sizing: border-box;
         }
-        .divider {
-            margin: 20px 0;
-            border-top: 1px solid #ddd;
+
+        .submit-btn {
+            background-color: var(--secondary);
+            color: var(--white);
+            padding: 12px 24px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            width: 100%;
+            margin-top: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .submit-btn:hover {
+            opacity: 0.9;
         }
     </style>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 </head>
 <body>
-    <div class="contact-card">
-        <h2>Contact Details</h2>
-        <div id="userData"></div>
-        <div class="divider"></div>
-        <h3>Your Information</h3>
-        <div class="form-group">
-            <input type="text" id="scannerName" placeholder="Your Name">
+    <div class="container">
+        <div class="logo-container">
+            <img id="companyLogo" class="company-logo" src="/assets/images/logoplaceholder.jpg" alt="Company Logo">
+            <div class="profile-overlay">
+                <div class="profile-container">
+                    <img id="profileImage" class="profile-image" src="/assets/images/profile.png" alt="Profile Image">
+                </div>
+            </div>
         </div>
-        <div class="form-group">
-            <input type="text" id="scannerSurname" placeholder="Your Surname">
+
+        <div class="contact-info">
+            <div id="userData"></div>
         </div>
-        <div class="form-group">
-            <input type="tel" id="scannerPhone" placeholder="Your Phone Number">
+
+        <div class="form-container">
+            <div class="form-group">
+                <input type="text" id="scannerName" placeholder="Your Name">
+            </div>
+            <div class="form-group">
+                <input type="text" id="scannerSurname" placeholder="Your Surname">
+            </div>
+            <div class="form-group">
+                <input type="tel" id="scannerPhone" placeholder="Your Phone Number">
+            </div>
+            <div class="form-group">
+                <input type="text" id="howWeMet" placeholder="How we met">
+            </div>
+            <button class="submit-btn" onclick="handleSubmit()">
+                <span class="material-icons">save</span>
+                Save Contact
+            </button>
         </div>
-        <div class="form-group">
-            <input type="text" id="howWeMet" placeholder="How we met">
-        </div>
-        <button class="submit-btn" onclick="handleSubmit()">Save Contact</button>
     </div>
 
     <script>
@@ -76,12 +189,31 @@
                 const response = await fetch(`/Users/${userId}`);
                 userData = await response.json();
                 
+                // Update profile image if available
+                if (userData.profileImage) {
+                    document.getElementById('profileImage').src = userData.profileImage;
+                }
+
+                // Update company logo if available
+                if (userData.companyLogo) {
+                    document.getElementById('companyLogo').src = userData.companyLogo;
+                }
+
+                // Update user information with styled elements
                 document.getElementById('userData').innerHTML = `
-                    <p><strong>Name:</strong> ${userData.name} ${userData.surname}</p>
-                    <p><strong>Email:</strong> ${userData.email}</p>
-                    <p><strong>Phone:</strong> ${userData.phone || 'No phone number available'}</p>
-                    <p><strong>Occupation:</strong> ${userData.occupation}</p>
-                    <p><strong>Company:</strong> ${userData.company}</p>
+                    <h2 class="name">${userData.name} ${userData.surname}</h2>
+                    <p class="position">${userData.occupation}</p>
+                    <p class="company">${userData.company}</p>
+                    
+                    <div class="contact-section">
+                        <span class="material-icons contact-icon">email</span>
+                        <span class="contact-text">${userData.email}</span>
+                    </div>
+                    
+                    <div class="contact-section">
+                        <span class="material-icons contact-icon">phone</span>
+                        <span class="contact-text">${userData.phone || 'No phone number available'}</span>
+                    </div>
                 `;
             } catch (error) {
                 console.error('Error:', error);

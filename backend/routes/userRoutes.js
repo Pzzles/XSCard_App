@@ -29,5 +29,10 @@ router.get('/Users', userController.getAllUsers);
 router.get('/Users/:id', userController.getUserById);
 router.patch('/UpdateUser/:id', userController.updateUser);
 router.delete('/Users/:id', userController.deleteUser);
+router.patch('/Users/:id/profile-image', upload.single('profileImage'), userController.updateProfileImage);
+router.patch('/Users/:id/company-logo', upload.single('companyLogo'), userController.updateCompanyLogo);
+router.patch('/Users/:id/color', userController.updateUserColor);
+router.post('/Users/:id/wallet', userController.addToWallet);
+
 
 module.exports = router;

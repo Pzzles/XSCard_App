@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View, Image, TouchableOpacity, Animated, ScrollView, ImageStyle } from 'react-native';
+import { StyleSheet, Text, View, Image, TouchableOpacity, Animated, ScrollView, ImageStyle, Modal, Linking, Alert, TextInput, ViewStyle, ActivityIndicator } from 'react-native';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
@@ -32,6 +32,16 @@ export default function CardsScreen() {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [cardData, setCardData] = useState<CardData | null>(null);
   const borderRotation = useRef(new Animated.Value(0)).current;
+
+  const [isShareModalVisible, setIsShareModalVisible] = useState(false);
+  const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [cardColor, setCardColor] = useState(COLORS.secondary);
+
+  // Add loading state
+  const [isLoading, setIsLoading] = useState(true);
+  const [isWalletLoading, setIsWalletLoading] = useState(false);
+
 
   useEffect(() => {
     loadUserData();
@@ -97,6 +107,163 @@ export default function CardsScreen() {
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
+
+  const shareOptions: ShareOption[] = [
+    {
+      id: 'whatsapp',
+      name: 'WhatsApp',
+      icon: 'whatsapp',
+      color: '#25D366',
+      action: (number: string) => {
+        if (!userData?.id) {
+          Alert.alert('Error', 'User data not available');
+          return;
+        }
+        const saveContactUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
+        const message = `Check out my digital business card! ${saveContactUrl}`;
+        const whatsappUrl = `whatsapp://send?phone=${number}&text=${encodeURIComponent(message)}`;
+        Linking.openURL(whatsappUrl).catch(() => {
+          Alert.alert('Error', 'WhatsApp is not installed on your device');
+        });
+      }
+    },
+    // ... add other share options ...
+  ];
+
+  const handleShare = () => {
+    setIsShareModalVisible(true);
+  };
+
+  const handlePlatformSelect = (platform: string) => {
+    setSelectedPlatform(platform);
+    setPhoneNumber('');
+  };
+
+  const handleSend = () => {
+    const platform = shareOptions.find(opt => opt.id === selectedPlatform);
+    if (platform && phoneNumber) {
+      platform.action(phoneNumber);
+      setIsShareModalVisible(false);
+      setSelectedPlatform(null);
+      setPhoneNumber('');
+    }
+  };
+
+  const handleAddToWallet = async () => {
+    if (!userData?.id) {
+      Alert.alert('Error', 'User data not available');
+      return;
+    }
+
+    setIsWalletLoading(true);
+    try {
+      const response = await fetch(buildUrl(ENDPOINTS.ADD_TO_WALLET.replace(':id', userData.id)), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to create wallet pass');
+      }
+
+      // Open the pass page URL in browser
+      if (data.passPageUrl) {
+        await Linking.openURL(data.passPageUrl);
+      } else {
+        throw new Error('No pass page URL received');
+      }
+
+    } catch (error) {
+      console.error('Error adding to wallet:', error);
+      Alert.alert('Error', 'Failed to add to Google Wallet');
+    } finally {
+      setIsWalletLoading(false);
+    }
+  };
+
+  // Move styles outside of StyleSheet for dynamic values
+  const dynamicStyles: Record<string, ViewStyle> = {
+    sendButton: {
+      flexDirection: 'row',
+      backgroundColor: cardColor,
+      paddingVertical: 10,
+      paddingHorizontal: 20,
+      borderRadius: 25,
+      alignItems: 'center' as const,
+      marginBottom: 20,
+      shadowColor: '#000',
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      shadowOpacity: 0.3,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+    shareButton: {
+      flexDirection: 'row',
+      backgroundColor: cardColor,
+      paddingVertical: 10,
+      paddingHorizontal: 20,
+      borderRadius: 25,
+      alignItems: 'center' as const,
+      marginBottom: 20,
+      shadowColor: '#000',
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      shadowOpacity: 0.3,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+    input: {
+      width: '80%',
+      height: 40,
+      borderColor: cardColor,
+      borderWidth: 1,
+      marginBottom: 20,
+      padding: 10,
+    },
+    contactBorder: {
+      borderWidth: 1,
+      borderColor: cardColor,
+      borderRadius: 8,
+      padding: 10,
+      marginBottom: 15,
+      shadowColor: '#1B2B5B',
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      shadowOpacity: 0.5,
+      shadowRadius: 8,
+    },
+    walletButton: {
+      flexDirection: 'row',
+      backgroundColor: COLORS.white,
+      paddingVertical: 10,
+      paddingHorizontal: 20,
+      borderRadius: 25,
+      alignItems: 'center' as const,
+      marginBottom: 20,
+      borderWidth: 2,
+      borderColor: cardColor,
+      shadowColor: '#000',
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      shadowOpacity: 0.3,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+  };
+
 
   return (
     <View style={styles.container}>
@@ -179,6 +346,23 @@ export default function CardsScreen() {
             <MaterialIcons name="send" style={[styles.sendButtonIcon, { color: COLORS.light }]} />
             <Text style={styles.sendButtonText}>Send</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity 
+            onPress={handleAddToWallet} 
+            style={[styles.walletButton, dynamicStyles.walletButton]}
+            disabled={isWalletLoading}
+          >
+            {isWalletLoading ? (
+              <ActivityIndicator size="small" color={cardColor} />
+            ) : (
+              <>
+                <MaterialCommunityIcons name="wallet" size={24} color={cardColor} />
+                <Text style={[styles.walletButtonText, { color: cardColor }]}>
+                  Add to Google Wallet
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </View>
@@ -203,6 +387,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 20,
     backgroundColor: '#fff',
+    marginTop:20,
   },
   qrCode: {
     width: '100%',
@@ -226,7 +411,7 @@ const styles = StyleSheet.create({
   },
   profileOverlayContainer: {
     position: 'absolute',
-    bottom: -40,
+    bottom: -80,
     left: '50%',
     transform: [{ translateX: -60 }], // Half of profile image width
     alignItems: 'center',
@@ -250,7 +435,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '600',
     marginBottom: 5,
-    marginTop: 0,
+    marginTop: 20,
     fontFamily: 'Montserrat-Bold',
     marginLeft:25,
   },
@@ -334,5 +519,14 @@ const styles = StyleSheet.create({
     },
     shadowOpacity: 0.5, // Further reduced shadow opacity for a softer effect
     shadowRadius: 8, // Reduced elevation for Android shadow
+  },
+  walletButton: {
+    marginTop: 10,
+  },
+  walletButtonText: {
+    marginLeft: 8,
+    fontSize: 16,
+    fontWeight: 'bold',
+    fontFamily: 'Montserrat-Bold',
   },
 });

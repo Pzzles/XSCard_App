@@ -130,24 +130,63 @@ export default function ContactsScreen() {
           />
         </View>
 
-        <ScrollView style={styles.contactsList}>
-          {filteredContacts.map((contact, index) => (
-            <View key={index} style={styles.contactCard}>
-              <View style={styles.contactLeft}>
-                <Image 
-                  source={require('../../../assets/images/profile.png')} 
-                  style={styles.contactImage} 
-                />
-                <View style={styles.contactInfo}>
-                  <Text style={styles.contactName}>
-                    {contact.name} {contact.surname}
-                  </Text>
-                  <View style={styles.contactSubInfo}>
-                    <Text style={styles.contactPosition}>{contact.number}</Text>
-                    <View style={styles.metContainer}>
-                      <Text style={styles.contactHowWeMet}>Met at: {contact.howWeMet}</Text>
-                      <Text style={styles.contactDate}>Date: {formatDate(contact.createdAt)}</Text>
+        {filteredContacts.length === 0 ? (
+          <View style={styles.emptyStateContainer}>
+            <MaterialIcons name="people" size={64} color={COLORS.gray} />
+            <Text style={styles.emptyStateTitle}>No contact yet</Text>
+            <Text style={styles.emptyStateDescription}>
+              When you share your card and they share their details back, it will appear here
+            </Text>
+            <TouchableOpacity style={dynamicStyles.shareCardButton} onPress={handleShare}>
+              <MaterialIcons name="share" size={24} color={COLORS.white} />
+              <Text style={styles.shareCardButtonText}>Share my card</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <ScrollView style={styles.contactsList}>
+            {filteredContacts.map((contact, index) => (
+              <View key={index} style={styles.contactCard}>
+                <View style={styles.contactLeft}>
+                  <Image 
+                    source={require('../../../assets/images/profile.png')} 
+                    style={styles.contactImage} 
+                  />
+                  <View style={styles.contactInfo}>
+                    <Text style={styles.contactName}>
+                      {contact.name} {contact.surname}
+                    </Text>
+                    <View style={styles.contactSubInfo}>
+                      <Text style={styles.contactPosition}>{contact.number}</Text>
+                      <View style={styles.metContainer}>
+                        <Text style={styles.contactHowWeMet}>Met at: {contact.howWeMet}</Text>
+                        <Text style={styles.contactDate}>Date: {formatDate(contact.createdAt)}</Text>
+                      </View>
                     </View>
+                  </View>
+                </View>
+                <View style={styles.contactRight}>
+
+                  <View style={styles.actionButtons}>
+                    <TouchableOpacity 
+                      style={styles.deleteButton}
+                      onPress={() => {
+                        Alert.alert(
+                          'Delete Contact',
+                          'Are you sure you want to delete this contact?',
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            { 
+                              text: 'Delete', 
+                              onPress: () => deleteContact(index),
+                              style: 'destructive'
+                            }
+                          ]
+                        );
+                      }}
+                    >
+                      <MaterialIcons name="delete" size={24} color={COLORS.error} />
+                    </TouchableOpacity>
+
                   </View>
                 </View>
               </View>
@@ -216,8 +255,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 15,
     backgroundColor: COLORS.white,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray + '20',
+    borderRadius: 12,
+    margin: 5,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 0,
+    elevation: 1,
+    borderWidth: 1,
+    borderColor: COLORS.gray + '20',
   },
   contactLeft: {
     flexDirection: 'row',

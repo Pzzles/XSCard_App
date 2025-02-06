@@ -1,4 +1,10 @@
 const { db } = require('../firebase.js');
+const axios = require('axios');
+const config = require('../config/config');
+
+const PASSCREATOR_API_KEY = 'bsZ6=JCt!b-Y-k%S%eY2NUAcLo4eZSwkEs9xTsA2!-4N1GNltyH.!aXjCe/_WBAbu.s_Qws&hDek8dyL';
+const PASSCREATOR_BASE_URL = 'https://app.passcreator.com';
+const TEMPLATE_ID = '2e06f305-b6b6-46c1-a300-4ebbe49862c3';
 
 exports.getAllUsers = async (req, res) => {
     try {
@@ -205,6 +211,167 @@ exports.updateUser = async (req, res) => {
         console.error('Update error:', error);
         res.status(500).send({
             message: 'Failed to update user',
+            error: error.message
+        });
+    }
+};
+
+
+exports.updateProfileImage = async (req, res) => {
+    const { id } = req.params;
+    
+    try {
+      if (!req.file) {
+        return res.status(400).send({ message: 'No image file provided' });
+      }
+  
+      const userRef = db.collection('users').doc(id);
+      const doc = await userRef.get();
+  
+      if (!doc.exists) {
+        return res.status(404).send({ message: 'User not found' });
+      }
+  
+      const profileImage = `/profiles/${req.file.filename}`;
+      await userRef.update({ profileImage });
+  
+      // Get updated user data
+      const updatedDoc = await userRef.get();
+      const userData = {
+        id: updatedDoc.id,
+        ...updatedDoc.data()
+      };
+  
+      res.status(200).send(userData);
+    } catch (error) {
+      console.error('Error updating profile image:', error);
+      res.status(500).send({
+        message: 'Failed to update profile image',
+        error: error.message
+      });
+    }
+  };
+
+exports.updateCompanyLogo = async (req, res) => {
+    const { id } = req.params;
+    
+    try {
+        if (!req.file) {
+            return res.status(400).send({ message: 'No image file provided' });
+        }
+
+        const userRef = db.collection('users').doc(id);
+        const doc = await userRef.get();
+
+        if (!doc.exists) {
+            return res.status(404).send({ message: 'User not found' });
+        }
+
+        const companyLogo = `/profiles/${req.file.filename}`;
+        await userRef.update({ companyLogo });
+
+        const updatedDoc = await userRef.get();
+        const userData = {
+            id: updatedDoc.id,
+            ...updatedDoc.data()
+        };
+
+        res.status(200).send(userData);
+    } catch (error) {
+        console.error('Error updating company logo:', error);
+        res.status(500).send({
+            message: 'Failed to update company logo',
+            error: error.message
+        });
+    }
+};
+
+exports.updateUserColor = async (req, res) => {
+    const { id } = req.params;
+    const { color } = req.body;
+    
+    if (!color) {
+        return res.status(400).send({ message: 'Color is required' });
+    }
+
+    try {
+        const userRef = db.collection('users').doc(id);
+        const doc = await userRef.get();
+
+        if (!doc.exists) {
+            return res.status(404).send({ message: 'User not found' });
+        }
+
+        await userRef.update({
+            colorScheme: color
+        });
+
+        const updatedDoc = await userRef.get();
+        const userData = {
+            id: updatedDoc.id,
+            ...updatedDoc.data()
+        };
+
+        res.status(200).send({ 
+            message: 'User color updated successfully',
+            user: userData
+        });
+    } catch (error) {
+        console.error('Error updating user color:', error);
+        res.status(500).send({ 
+            message: 'Failed to update user color',
+            error: error.message 
+        });
+    }
+};
+
+exports.addToWallet = async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const userRef = db.collection('users').doc(id);
+        const userDoc = await userRef.get();
+
+        if (!userDoc.exists) {
+            return res.status(404).send({ message: 'User not found' });
+        }
+
+        const userData = userDoc.data();
+        
+        // Create full URLs for images using PASSCREATOR_PUBLIC_URL
+        const thumbnailUrl = userData.profileImage ? `${config.PASSCREATOR_PUBLIC_URL}${userData.profileImage}` : null;
+        const logoUrl = userData.companyLogo ? `${config.PASSCREATOR_PUBLIC_URL}${userData.companyLogo}` : null;
+
+        const passData = {
+            name: `${userData.name} ${userData.surname}`,
+            company: userData.company,
+            jobTitle: userData.occupation,
+            urlToThumbnail: thumbnailUrl,
+            urlToLogo: logoUrl,
+            barcodeValue: `${config.PASSCREATOR_PUBLIC_URL}/saveContact.html?userId=${id}`
+        };
+
+        // Call Passcreator API
+        const response = await axios.post(`${PASSCREATOR_BASE_URL}/api/pass?passtemplate=${TEMPLATE_ID}&zapierStyle=true`, passData, {
+            headers: {
+                'Authorization': PASSCREATOR_API_KEY,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        // Send back all relevant URLs
+        res.status(200).send({
+            message: 'Wallet pass created successfully',
+            passUri: response.data.uri,
+            passFileUrl: response.data.linkToPassFile,
+            passPageUrl: response.data.linkToPassPage,
+            identifier: response.data.identifier
+        });
+
+    } catch (error) {
+        console.error('Error creating wallet pass:', error);
+        res.status(500).send({
+            message: 'Failed to create wallet pass',
             error: error.message
         });
     }
