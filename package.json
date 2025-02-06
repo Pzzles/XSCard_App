@@ -16,16 +16,19 @@
     "@react-navigation/native": "^7.0.14",
     "@react-navigation/stack": "^7.1.1",
     "expo": "~52.0.30",
+    "expo-clipboard": "~7.0.1",
+    "expo-image-picker": "~16.0.5",
     "expo-linear-gradient": "~14.0.2",
     "expo-status-bar": "*",
+    "express": "^4.21.2",
+    "module": "^1.2.5",
     "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.10.0",
     "react": "*",
     "react-native": "*",
     "react-native-gesture-handler": "~2.20.2",
     "react-native-safe-area-context": "*",
-    "react-native-screens": "*",
-    "expo-image-picker": "~16.0.5",
-    "expo-clipboard": "~7.0.1"
+    "react-native-screens": "*"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
