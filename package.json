@@ -24,7 +24,8 @@
     "react-native-gesture-handler": "~2.20.2",
     "react-native-safe-area-context": "*",
     "react-native-screens": "*",
-    "expo-image-picker": "~16.0.4"
+    "expo-image-picker": "~16.0.4",
+    "expo-clipboard": "~7.0.1"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
