@@ -6,6 +6,7 @@ import Header from '../../components/Header';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
+import * as Clipboard from 'expo-clipboard';
 
 interface UserData {
   id: string;
@@ -203,6 +204,62 @@ export default function CardsScreen() {
     }
   };
 
+  const handleEmailPress = async (email: string) => {
+    Alert.alert(
+      'Email Options',
+      'What would you like to do?',
+      [
+        {
+          text: 'Copy Email',
+          onPress: async () => {
+            await Clipboard.setStringAsync(email);
+            Alert.alert('Success', 'Email copied to clipboard');
+          },
+        },
+        {
+          text: 'Send Email',
+          onPress: () => {
+            Linking.openURL(`mailto:${email}`).catch(() => {
+              Alert.alert('Error', 'Could not open email app');
+            });
+          },
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  const handlePhonePress = async (phone: string) => {
+    Alert.alert(
+      'Phone Options',
+      'What would you like to do?',
+      [
+        {
+          text: 'Copy Number',
+          onPress: async () => {
+            await Clipboard.setStringAsync(phone);
+            Alert.alert('Success', 'Phone number copied to clipboard');
+          },
+        },
+        {
+          text: 'Call',
+          onPress: () => {
+            Linking.openURL(`tel:${phone}`).catch(() => {
+              Alert.alert('Error', 'Could not open phone app');
+            });
+          },
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
   // Move styles outside of StyleSheet for dynamic values
   const dynamicStyles: Record<string, ViewStyle> = {
     sendButton: {
@@ -330,20 +387,36 @@ export default function CardsScreen() {
           </Text>
           
           {/* Update the email contact section */}
-          <View style={[styles.contactSection, styles.leftAligned]}>
+          <TouchableOpacity 
+            style={[styles.contactSection, styles.leftAligned]}
+            onPress={() => {
+              const email = cardData?.Email || userData?.email;
+              if (email && email !== 'Loading...') {
+                handleEmailPress(email);
+              }
+            }}
+          >
             <MaterialCommunityIcons name="email-outline" size={30} color={cardColor} />
             <Text style={styles.contactText}>
               {cardData?.Email || userData?.email || 'Loading...'}
             </Text>
-          </View>
+          </TouchableOpacity>
 
           {/* Update the phone contact section */}
-          <View style={[styles.contactSection, styles.leftAligned]}>
+          <TouchableOpacity 
+            style={[styles.contactSection, styles.leftAligned]}
+            onPress={() => {
+              const phone = userData?.phone;
+              if (phone && phone !== 'No phone number') {
+                handlePhonePress(phone);
+              }
+            }}
+          >
             <MaterialCommunityIcons name="phone-outline" size={30} color={cardColor} />
             <Text style={styles.contactText}>
               {userData?.phone || 'No phone number'}
             </Text>
-          </View>
+          </TouchableOpacity>
 
           {cardData?.socialLinks && cardData.socialLinks.length > 0 && (
             <View style={styles.socialLinksContainer}>
@@ -541,12 +614,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 15,
-    marginLeft:25,
+    padding: 10,
+    borderRadius: 8,
   },
   contactText: {
     marginLeft: 10,
     fontSize: 16,
-    fontFamily: 'Montserrat-Regular',
+    color: '#333',
   },
   socialLinksContainer: {
     marginVertical: 15,
@@ -563,7 +637,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   leftAligned: {
-    alignSelf: 'flex-start',
+    alignSelf: 'stretch',
   },
   shareButton: {}, // Keep empty or remove if using only dynamic style
   sendButton: {}, // Keep empty or remove if using only dynamic style

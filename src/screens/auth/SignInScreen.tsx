@@ -7,6 +7,7 @@ import { AuthStackParamList } from '../../types';
 import { MaterialIcons } from '@expo/vector-icons';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import ErrorPopup from '../../components/popups/ErrorPopup';
 
 type SignInScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'SignIn'>;
 
@@ -16,10 +17,51 @@ export default function SignInScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [errors, setErrors] = useState({
+    email: '',
+    password: '',
+  });
+  const [errorMessage, setErrorMessage] = useState('');
+  const [showError, setShowError] = useState(false);
+
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  const validateForm = () => {
+    const newErrors = {
+      email: '',
+      password: '',
+    };
+
+    let isValid = true;
+
+    if (!email.trim()) {
+      setErrorMessage('Email is required');
+      setShowError(true);
+      newErrors.email = 'Email is required';
+      isValid = false;
+    } else if (!validateEmail(email)) {
+      setErrorMessage('Please enter a valid email address');
+      setShowError(true);
+      newErrors.email = 'Please enter a valid email address';
+      isValid = false;
+    }
+
+    if (!password) {
+      setErrorMessage('Password is required');
+      setShowError(true);
+      newErrors.password = 'Password is required';
+      isValid = false;
+    }
+
+    setErrors(newErrors);
+    return isValid;
+  };
 
   const handleSignIn = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+    if (!validateForm()) {
       return;
     }
 
@@ -47,10 +89,12 @@ export default function SignInScreen() {
         }));
         navigation.navigate('MainApp');
       } else {
-        Alert.alert('Error', data.message || 'Sign in failed');
+        setErrorMessage(data.message || 'Sign in failed');
+        setShowError(true);
       }
     } catch (error) {
-      Alert.alert('Error', 'Network error. Please check your connection.');
+      setErrorMessage('Network error. Please check your connection.');
+      setShowError(true);
     } finally {
       setIsLoading(false);
     }
@@ -58,24 +102,37 @@ export default function SignInScreen() {
 
   return (
     <View style={styles.container}>
+      <ErrorPopup
+        visible={showError}
+        message={errorMessage}
+        onClose={() => setShowError(false)}
+      />
+      
       <Text style={styles.title}>Sign In</Text>
 
       <TextInput
-        style={styles.input}
+        style={[styles.input, errors.email ? styles.inputError : null]}
         placeholder="Mail"
         value={email}
-        onChangeText={setEmail}
+        onChangeText={(text) => {
+          setEmail(text);
+          setErrors(prev => ({ ...prev, email: '' }));
+        }}
         keyboardType="email-address"
         autoCapitalize="none"
         placeholderTextColor="#999"
       />
+      {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
 
       <View style={styles.passwordContainer}>
         <TextInput
-          style={[styles.input, styles.passwordInput]}
+          style={[styles.input, styles.passwordInput, errors.password ? styles.inputError : null]}
           placeholder="Password"
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(text) => {
+            setPassword(text);
+            setErrors(prev => ({ ...prev, password: '' }));
+          }}
           secureTextEntry={!showPassword}
           placeholderTextColor="#999"
         />
@@ -90,6 +147,7 @@ export default function SignInScreen() {
           />
         </TouchableOpacity>
       </View>
+      {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
 
       <TouchableOpacity 
         style={[styles.signInButton, isLoading && styles.disabledButton]}
@@ -173,5 +231,16 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.7,
+  },
+  inputError: {
+    borderColor: 'red',
+    borderWidth: 1,
+  },
+  errorText: {
+    color: 'red',
+    fontSize: 12,
+    marginTop: -10,
+    marginBottom: 10,
+    marginLeft: 15,
   },
 });
