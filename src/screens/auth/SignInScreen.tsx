@@ -24,10 +24,10 @@ export default function SignInScreen() {
   const [errorMessage, setErrorMessage] = useState('');
   const [showError, setShowError] = useState(false);
 
-  const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
+  // const validateEmail = (email: string) => {
+  //   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  //   return emailRegex.test(email);
+  // };
 
   const validateForm = () => {
     const newErrors = {
@@ -42,12 +42,13 @@ export default function SignInScreen() {
       setShowError(true);
       newErrors.email = 'Email is required';
       isValid = false;
-    } else if (!validateEmail(email)) {
-      setErrorMessage('Please enter a valid email address');
-      setShowError(true);
-      newErrors.email = 'Please enter a valid email address';
-      isValid = false;
     }
+    // } else if (!validateEmail(email)) {
+    //   setErrorMessage('Please enter a valid email address');
+    //   setShowError(true);
+    //   newErrors.email = 'Please enter a valid email address';
+    //   isValid = false;
+    // }
 
     if (!password) {
       setErrorMessage('Password is required');

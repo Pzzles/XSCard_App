@@ -1,10 +1,7 @@
 const { db } = require('../firebase.js');
 const axios = require('axios');
 const config = require('../config/config');
-
-const PASSCREATOR_API_KEY = 'bsZ6=JCt!b-Y-k%S%eY2NUAcLo4eZSwkEs9xTsA2!-4N1GNltyH.!aXjCe/_WBAbu.s_Qws&hDek8dyL';
-const PASSCREATOR_BASE_URL = 'https://app.passcreator.com';
-const TEMPLATE_ID = '2e06f305-b6b6-46c1-a300-4ebbe49862c3';
+require('dotenv').config();
 
 exports.getAllUsers = async (req, res) => {
     try {
@@ -354,7 +351,6 @@ exports.addToWallet = async (req, res) => {
 
         const userData = userDoc.data();
         
-        // Create full URLs for images using PASSCREATOR_PUBLIC_URL
         const thumbnailUrl = userData.profileImage ? `${config.PASSCREATOR_PUBLIC_URL}${userData.profileImage}` : null;
         const logoUrl = userData.companyLogo ? `${config.PASSCREATOR_PUBLIC_URL}${userData.companyLogo}` : null;
 
@@ -367,15 +363,17 @@ exports.addToWallet = async (req, res) => {
             barcodeValue: `${config.PASSCREATOR_PUBLIC_URL}/saveContact.html?userId=${id}`
         };
 
-        // Call Passcreator API
-        const response = await axios.post(`${PASSCREATOR_BASE_URL}/api/pass?passtemplate=${TEMPLATE_ID}&zapierStyle=true`, passData, {
-            headers: {
-                'Authorization': PASSCREATOR_API_KEY,
-                'Content-Type': 'application/json'
+        const response = await axios.post(
+            `${process.env.PASSCREATOR_BASE_URL}/api/pass?passtemplate=${process.env.PASSCREATOR_TEMPLATE_ID}&zapierStyle=true`, 
+            passData, 
+            {
+                headers: {
+                    'Authorization': process.env.PASSCREATOR_API_KEY,
+                    'Content-Type': 'application/json'
+                }
             }
-        });
+        );
 
-        // Send back all relevant URLs
         res.status(200).send({
             message: 'Wallet pass created successfully',
             passUri: response.data.uri,
