@@ -7,6 +7,7 @@ import { AuthStackParamList } from '../../types';
 import { MaterialIcons } from '@expo/vector-icons';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import ErrorPopup from '../../components/popups/ErrorPopup';
 
 type SignInScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'SignIn'>;
 
@@ -20,6 +21,8 @@ export default function SignInScreen() {
     email: '',
     password: '',
   });
+  const [errorMessage, setErrorMessage] = useState('');
+  const [showError, setShowError] = useState(false);
 
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -35,14 +38,20 @@ export default function SignInScreen() {
     let isValid = true;
 
     if (!email.trim()) {
+      setErrorMessage('Email is required');
+      setShowError(true);
       newErrors.email = 'Email is required';
       isValid = false;
     } else if (!validateEmail(email)) {
+      setErrorMessage('Please enter a valid email address');
+      setShowError(true);
       newErrors.email = 'Please enter a valid email address';
       isValid = false;
     }
 
     if (!password) {
+      setErrorMessage('Password is required');
+      setShowError(true);
       newErrors.password = 'Password is required';
       isValid = false;
     }
@@ -80,10 +89,12 @@ export default function SignInScreen() {
         }));
         navigation.navigate('MainApp');
       } else {
-        Alert.alert('Error', data.message || 'Sign in failed');
+        setErrorMessage(data.message || 'Sign in failed');
+        setShowError(true);
       }
     } catch (error) {
-      Alert.alert('Error', 'Network error. Please check your connection.');
+      setErrorMessage('Network error. Please check your connection.');
+      setShowError(true);
     } finally {
       setIsLoading(false);
     }
@@ -91,6 +102,12 @@ export default function SignInScreen() {
 
   return (
     <View style={styles.container}>
+      <ErrorPopup
+        visible={showError}
+        message={errorMessage}
+        onClose={() => setShowError(false)}
+      />
+      
       <Text style={styles.title}>Sign In</Text>
 
       <TextInput
