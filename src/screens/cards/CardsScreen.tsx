@@ -54,6 +54,11 @@ export default function CardsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isWalletLoading, setIsWalletLoading] = useState(false);
 
+  // Add these new state variables at the beginning of the CardsScreen component
+  const [isOptionsModalVisible, setIsOptionsModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<'email' | 'phone' | null>(null);
+  const [modalData, setModalData] = useState<string>('');
+
   useFocusEffect(
     React.useCallback(() => {
       setIsLoading(true);
@@ -204,60 +209,16 @@ export default function CardsScreen() {
     }
   };
 
-  const handleEmailPress = async (email: string) => {
-    Alert.alert(
-      'Email Options',
-      'What would you like to do?',
-      [
-        {
-          text: 'Copy Email',
-          onPress: async () => {
-            await Clipboard.setStringAsync(email);
-            Alert.alert('Success', 'Email copied to clipboard');
-          },
-        },
-        {
-          text: 'Send Email',
-          onPress: () => {
-            Linking.openURL(`mailto:${email}`).catch(() => {
-              Alert.alert('Error', 'Could not open email app');
-            });
-          },
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-      ]
-    );
+  const handleEmailPress = (email: string) => {
+    setModalType('email');
+    setModalData(email);
+    setIsOptionsModalVisible(true);
   };
 
-  const handlePhonePress = async (phone: string) => {
-    Alert.alert(
-      'Phone Options',
-      'What would you like to do?',
-      [
-        {
-          text: 'Copy Number',
-          onPress: async () => {
-            await Clipboard.setStringAsync(phone);
-            Alert.alert('Success', 'Phone number copied to clipboard');
-          },
-        },
-        {
-          text: 'Call',
-          onPress: () => {
-            Linking.openURL(`tel:${phone}`).catch(() => {
-              Alert.alert('Error', 'Could not open phone app');
-            });
-          },
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-      ]
-    );
+  const handlePhonePress = (phone: string) => {
+    setModalType('phone');
+    setModalData(phone);
+    setIsOptionsModalVisible(true);
   };
 
   // Move styles outside of StyleSheet for dynamic values
@@ -523,6 +484,64 @@ export default function CardsScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={isOptionsModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsOptionsModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setIsOptionsModalVisible(false)}
+            >
+              <MaterialIcons name="close" size={24} color={COLORS.black} />
+            </TouchableOpacity>
+
+            <Text style={styles.modalTitle}>
+              {modalType === 'email' ? 'Email Options' : 'Phone Options'}
+            </Text>
+
+            <View style={styles.optionsContainer}>
+              <TouchableOpacity
+                style={[styles.optionButton, { backgroundColor: cardColor }]}
+                onPress={async () => {
+                  await Clipboard.setStringAsync(modalData);
+                  setIsOptionsModalVisible(false);
+                  Alert.alert('Success', `${modalType === 'email' ? 'Email' : 'Phone number'} copied to clipboard`);
+                }}
+              >
+                <MaterialIcons name="content-copy" size={24} color={COLORS.white} />
+                <Text style={styles.optionButtonText}>
+                  Copy {modalType === 'email' ? 'Email' : 'Number'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.optionButton, { backgroundColor: cardColor }]}
+                onPress={() => {
+                  const url = modalType === 'email' ? `mailto:${modalData}` : `tel:${modalData}`;
+                  Linking.openURL(url).catch(() => {
+                    Alert.alert('Error', `Could not open ${modalType === 'email' ? 'email' : 'phone'} app`);
+                  });
+                  setIsOptionsModalVisible(false);
+                }}
+              >
+                <MaterialIcons 
+                  name={modalType === 'email' ? 'email' : 'phone'} 
+                  size={24} 
+                  color={COLORS.white} 
+                />
+                <Text style={styles.optionButtonText}>
+                  {modalType === 'email' ? 'Send Email' : 'Call'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -559,7 +578,7 @@ const styles = StyleSheet.create({
     marginLeft: -20,
     marginRight: -20,
     alignSelf: 'center',
-    marginBottom: 50,
+    marginBottom: 75,
   },
   logo: {
     width: '100%',
@@ -710,6 +729,23 @@ const styles = StyleSheet.create({
   },
   walletButtonText: {
     marginLeft: 8,
+    fontSize: 16,
+    fontWeight: 'bold',
+    fontFamily: 'Montserrat-Bold',
+  },
+  optionsContainer: {
+    width: '100%',
+    gap: 10,
+  },
+  optionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 15,
+    borderRadius: 10,
+    gap: 10,
+  },
+  optionButtonText: {
+    color: COLORS.white,
     fontSize: 16,
     fontWeight: 'bold',
     fontFamily: 'Montserrat-Bold',
