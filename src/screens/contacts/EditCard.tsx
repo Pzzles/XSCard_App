@@ -2,12 +2,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Image } from 'react-native';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Animated } from 'react-native';
-import { COLORS, CARD_COLORS } from '../../constants/colors';
+import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
-import { useNavigation, CommonActions } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as ImagePicker from 'expo-image-picker';
 
 // Add this interface for the form data type
 interface FormData {
@@ -24,8 +23,6 @@ interface FormData {
   website?: string;
   tiktok?: string;
   instagram?: string;
-  profileImage?: string;
-  companyLogo?: string;  // Add this line
   [key: string]: string | undefined;  // Index signature to allow dynamic social media fields
 }
 
@@ -47,8 +44,6 @@ export default function EditCard() {
     website: '',
     tiktok: '',
     instagram: '',
-    profileImage: '',
-    companyLogo: '',  // Add this line
   });
   const [selectedColor, setSelectedColor] = useState('#1B2B5B'); // Default color
   const [selectedSocials, setSelectedSocials] = useState<string[]>([]);
@@ -81,8 +76,6 @@ export default function EditCard() {
           website: userData.website || '',
           tiktok: userData.tiktok || '',
           instagram: userData.instagram || '',
-          profileImage: userData.profileImage || '',
-          companyLogo: userData.companyLogo || '',  // Add this line
         });
 
         setLoading(false);
@@ -93,6 +86,20 @@ export default function EditCard() {
       setLoading(false);
     }
   };
+
+  // Add this array of colors
+  const cardColors = [
+    '#1B2B5B', // Navy Blue
+    '#E63946', // Red
+    '#2A9D8F', // Teal
+    '#E9C46A', // Yellow
+    '#F4A261', // Orange
+    '#6D597A', // Purple
+    '#355070', // Dark Blue
+    '#B56576', // Pink
+    '#4DAA57', // Green
+    '#264653', // Dark Teal
+  ];
 
   // Add this type for the socials array
   interface Social {
@@ -140,53 +147,38 @@ export default function EditCard() {
 
       const { id } = JSON.parse(storedUserData);
 
-      // Only include fields that have values
-      const updateData = {
-        ...(formData.firstName && { name: formData.firstName }),
-        ...(formData.lastName && { surname: formData.lastName }),
-        ...(formData.occupation && { occupation: formData.occupation }),
-        ...(formData.company && { company: formData.company }),
-        ...(formData.email && { email: formData.email }),
-        ...(formData.phoneNumber && { phone: formData.phoneNumber }),
-        ...(formData.whatsapp && { whatsapp: formData.whatsapp }),
-        ...(formData.x && { x: formData.x }),
-        ...(formData.facebook && { facebook: formData.facebook }),
-        ...(formData.linkedin && { linkedin: formData.linkedin }),
-        ...(formData.website && { website: formData.website }),
-        ...(formData.tiktok && { tiktok: formData.tiktok }),
-        ...(formData.instagram && { instagram: formData.instagram }),
-        colorScheme: selectedColor // Add color to user update
-      };
-
       const response = await fetch(buildUrl(ENDPOINTS.UPDATE_USER) + `/${id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(updateData),
+        body: JSON.stringify({
+          name: formData.firstName,
+          surname: formData.lastName,
+          occupation: formData.occupation,
+          company: formData.company,
+          email: formData.email,
+          phone: formData.phoneNumber,
+          whatsapp: formData.whatsapp,
+          x: formData.x,
+          facebook: formData.facebook,
+          linkedin: formData.linkedin,
+          website: formData.website,
+          tiktok: formData.tiktok,
+          instagram: formData.instagram,
+        }),
       });
 
       if (!response.ok) {
         throw new Error('Failed to update user');
       }
 
-      // Get fresh user data
-      const updatedUserResponse = await fetch(buildUrl(ENDPOINTS.GET_USER) + `/${id}`);
-      const updatedUserData = await updatedUserResponse.json();
-
-      // Update AsyncStorage with fresh data
-      await AsyncStorage.setItem('userData', JSON.stringify(updatedUserData));
-
-      Alert.alert('Success', 'Card updated successfully', [
-        {
-          text: 'OK',
-          onPress: () => navigation.goBack()
-        }
-      ]);
+      Alert.alert('Success', 'Profile updated successfully');
+      navigation.goBack();
 
     } catch (error) {
-      console.error('Error updating card:', error);
-      setError('Failed to update card');
+      console.error('Error updating user:', error);
+      setError('Failed to update profile');
     }
   };
 
@@ -465,7 +457,7 @@ export default function EditCard() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.colorContainer}
           >
-            {CARD_COLORS.map((color, index) => (
+            {cardColors.map((color, index) => (
               <TouchableOpacity
                 key={index}
                 onPress={() => setSelectedColor(color)}
@@ -486,10 +478,7 @@ export default function EditCard() {
         <View style={styles.logoContainer}>
           <Image
             style={styles.logo}
-            source={formData.companyLogo ? 
-              { uri: `${API_BASE_URL}${formData.companyLogo}` } : 
-              require('../../../assets/images/logoplaceholder.jpg')
-            }
+            source={require('../../../assets/images/logoplaceholder.jpg')}
           />
           <TouchableOpacity 
             style={styles.editLogoButton}
@@ -503,16 +492,9 @@ export default function EditCard() {
             <View style={styles.profileImageContainer}>
               <Image
                 style={styles.profileImage}
-                source={
-                  formData.profileImage
-                    ? { uri: `${API_BASE_URL}${formData.profileImage}` }
-                    : require('../../../assets/images/profile.png')
-                }
+                source={require('../../../assets/images/profile.png')}
               />
-              <TouchableOpacity 
-                style={styles.editProfileButton}
-                onPress={handleProfileImageEdit}
-              >
+              <TouchableOpacity style={styles.editProfileButton}>
                 <MaterialIcons name="edit" size={24} color={COLORS.white} />
               </TouchableOpacity>
             </View>
@@ -547,35 +529,35 @@ export default function EditCard() {
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
           <TextInput 
             style={styles.input}
-            placeholder="First name"
+            placeholder="First name..."
             placeholderTextColor="#999"
             value={formData.firstName}
             onChangeText={(text) => setFormData({...formData, firstName: text})}
           />
           <TextInput 
             style={styles.input}
-            placeholder="Occupation"
+            placeholder="Occupation..."
             placeholderTextColor="#999"
             value={formData.occupation}
             onChangeText={(text) => setFormData({...formData, occupation: text})}
           />
           <TextInput 
             style={styles.input}
-            placeholder="Last name"
+            placeholder="Last name..."
             placeholderTextColor="#999"
             value={formData.lastName}
             onChangeText={(text) => setFormData({...formData, lastName: text})}
           />
           <TextInput 
             style={styles.input}
-            placeholder="Company name"
+            placeholder="Company name..."
             placeholderTextColor="#999"
             value={formData.company}
             onChangeText={(text) => setFormData({...formData, company: text})}
           />
           <TextInput 
             style={styles.input}
-            placeholder="Email"
+            placeholder="Email..."
             placeholderTextColor="#999"
             value={formData.email}
             onChangeText={(text) => setFormData({...formData, email: text})}
@@ -583,7 +565,7 @@ export default function EditCard() {
           />
           <TextInput 
             style={styles.input}
-            placeholder="Phone number"
+            placeholder="Phone number..."
             placeholderTextColor="#999"
             value={formData.phoneNumber}
             onChangeText={(text) => setFormData({...formData, phoneNumber: text})}
@@ -614,7 +596,7 @@ export default function EditCard() {
               </View>
               <TextInput
                 style={styles.input}
-                placeholder={`${socials.find(s => s.id === socialId)?.label} URL`}
+                placeholder={`Enter your ${socials.find(s => s.id === socialId)?.label} URL...`}
                 placeholderTextColor="#999"
                 value={formData[socialId]}
                 onChangeText={(text) => setFormData({...formData, [socialId]: text})}
@@ -843,4 +825,3 @@ const styles = StyleSheet.create({
     padding: 4,
   },
 });
-

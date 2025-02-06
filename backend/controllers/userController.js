@@ -84,8 +84,7 @@ exports.addUser = async (req, res) => {
             company, 
             status, 
             phone,
-            profileImage: req.files?.profileImage ? `/profiles/${req.files.profileImage[0].filename}` : null,
-            companyLogo: req.files?.companyLogo ? `/profiles/${req.files.companyLogo[0].filename}` : null,
+            profileImage: req.file ? `/profiles/${req.file.filename}` : null,
             createdAt: new Date().toISOString()
         };
 
@@ -185,25 +184,9 @@ exports.signIn = async (req, res) => {
 
 exports.updateUser = async (req, res) => {
     const { id } = req.params;
+    const updateData = req.body;
+
     try {
-        let updateData = {};
-
-        // Handle file upload if present
-        if (req.file) {
-            updateData.profileImage = `/profiles/${req.file.filename}`;
-        } 
-        // Handle JSON data if present
-        else if (Object.keys(req.body).length > 0) {
-            updateData = req.body;
-        }
-
-        // Check if there's any data to update
-        if (Object.keys(updateData).length === 0) {
-            return res.status(400).send({ 
-                message: 'No update data provided'
-            });
-        }
-
         const userRef = db.collection('users').doc(id);
         const doc = await userRef.get();
 
@@ -232,6 +215,7 @@ exports.updateUser = async (req, res) => {
         });
     }
 };
+
 
 exports.updateProfileImage = async (req, res) => {
     const { id } = req.params;

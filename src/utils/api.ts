@@ -36,6 +36,7 @@ export const ENDPOINTS = {
     UPDATE_COMPANY_LOGO: '/Users/:id/company-logo', // Add this line
     UPDATE_USER_COLOR: '/Users/:id/color', // Changed from Cards to Users
     ADD_TO_WALLET: '/Users/:id/wallet',
+
 };
 
 export const buildUrl = (endpoint: string) => `${API_BASE_URL}${endpoint}`;
