@@ -9,6 +9,7 @@ import { AuthStackParamList } from '../../types';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
 import * as ImagePicker from 'expo-image-picker';
 import { pickImage, requestPermissions } from '../../utils/imageUtils';
+import ErrorPopup from '../../components/popups/ErrorPopup';
 
 type SignUpScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'SignUp'>;
 
@@ -33,6 +34,8 @@ export default function SignUpScreen() {
     occupation: '',
     password: '',
   });
+  const [errorMessage, setErrorMessage] = useState('');
+  const [showError, setShowError] = useState(false);
 
   const handleImagePick = async () => {
     const { cameraGranted, galleryGranted } = await requestPermissions();
@@ -132,45 +135,65 @@ export default function SignUpScreen() {
     let isValid = true;
 
     if (!firstName.trim()) {
+      setErrorMessage('First name is required');
+      setShowError(true);
       newErrors.firstName = 'First name is required';
       isValid = false;
     }
 
     if (!lastName.trim()) {
+      setErrorMessage('Last name is required');
+      setShowError(true);
       newErrors.lastName = 'Last name is required';
       isValid = false;
     }
 
     if (!email.trim()) {
+      setErrorMessage('Email is required');
+      setShowError(true);
       newErrors.email = 'Email is required';
       isValid = false;
     } else if (!validateEmail(email)) {
+      setErrorMessage('Please enter a valid email address');
+      setShowError(true);
       newErrors.email = 'Please enter a valid email address';
       isValid = false;
     }
 
     if (!phoneNumber.trim()) {
+      setErrorMessage('Phone number is required');
+      setShowError(true);
       newErrors.phoneNumber = 'Phone number is required';
       isValid = false;
     } else if (!validatePhone(phoneNumber)) {
+      setErrorMessage('Please enter a valid phone number');
+      setShowError(true);
       newErrors.phoneNumber = 'Please enter a valid phone number';
       isValid = false;
     }
 
     if (!companyName.trim()) {
+      setErrorMessage('Company name is required');
+      setShowError(true);
       newErrors.companyName = 'Company name is required';
       isValid = false;
     }
 
     if (!occupation.trim()) {
+      setErrorMessage('Occupation is required');
+      setShowError(true);
       newErrors.occupation = 'Occupation is required';
       isValid = false;
     }
 
     if (!password) {
+      setErrorMessage('Password is required');
+      setShowError(true);
       newErrors.password = 'Password is required';
       isValid = false;
     } else if (!validatePassword(password)) {
+      setErrorMessage('Password must be at least 8 characters and contain uppercase, lowercase, and numbers');
+      setShowError(true);
       newErrors.password = 'Password must be at least 8 characters and contain uppercase, lowercase, and numbers';
       isValid = false;
     }
@@ -181,7 +204,6 @@ export default function SignUpScreen() {
 
   const handleSignUp = async () => {
     if (!validateForm()) {
-      Alert.alert('Validation Error', 'Please check all fields and try again.');
       return;
     }
 
@@ -233,12 +255,19 @@ export default function SignUpScreen() {
         Alert.alert('Error', 'Failed to create account. Please try again.');
       }
     } catch (error) {
-      Alert.alert('Error', 'Network error. Please check your connection.');
+      setErrorMessage('Network error. Please check your connection.');
+      setShowError(true);
     }
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <ErrorPopup
+        visible={showError}
+        message={errorMessage}
+        onClose={() => setShowError(false)}
+      />
+      
       <KeyboardAvoidingView 
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
