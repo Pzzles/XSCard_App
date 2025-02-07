@@ -86,6 +86,7 @@ export default function EditCard() {
         const response = await fetch(buildUrl(ENDPOINTS.GET_USER) + `/${parsedUserData.id}`);
         const userData = await response.json();
 
+        // Set form data
         setFormData({
           firstName: userData.name || '',
           lastName: userData.surname || '',
@@ -93,17 +94,27 @@ export default function EditCard() {
           company: userData.company || '',
           email: userData.email || '',
           phoneNumber: userData.phone || '',
-          whatsapp: userData.whatsapp || '',
-          x: userData.x || '',
-          facebook: userData.facebook || '',
-          linkedin: userData.linkedin || '',
-          website: userData.website || '',
-          tiktok: userData.tiktok || '',
-          instagram: userData.instagram || '',
+          // Only set social media values if they exist and aren't null
+          ...(userData.whatsapp && { whatsapp: userData.whatsapp }),
+          ...(userData.x && { x: userData.x }),
+          ...(userData.facebook && { facebook: userData.facebook }),
+          ...(userData.linkedin && { linkedin: userData.linkedin }),
+          ...(userData.website && { website: userData.website }),
+          ...(userData.tiktok && { tiktok: userData.tiktok }),
+          ...(userData.instagram && { instagram: userData.instagram }),
           profileImage: userData.profileImage || '',
-          companyLogo: userData.companyLogo || '',  // Add this line
+          companyLogo: userData.companyLogo || '',
         });
 
+        // Only select socials that have non-null values
+        const existingSocials = Object.entries(userData)
+          .filter(([key, value]) => {
+            return ['whatsapp', 'x', 'facebook', 'linkedin', 'website', 'tiktok', 'instagram']
+              .includes(key) && typeof value === 'string' && value.trim() !== '';
+          })
+          .map(([key]) => key);
+
+        setSelectedSocials(existingSocials);
         setLoading(false);
       }
     } catch (error) {
@@ -159,7 +170,25 @@ export default function EditCard() {
 
       const { id } = JSON.parse(storedUserData);
 
-      // Only include fields that have values
+      // Create an object with all social fields explicitly set to null
+      const socialFields: Record<string, string | null> = {
+        whatsapp: null,
+        x: null,
+        facebook: null,
+        linkedin: null,
+        website: null,
+        tiktok: null,
+        instagram: null
+      };
+
+      // Update only the selected socials with their values
+      selectedSocials.forEach(socialId => {
+        if (formData[socialId]) {
+          socialFields[socialId] = formData[socialId];
+        }
+      });
+
+      // Combine the social fields with other user data
       const updateData = {
         ...(formData.firstName && { name: formData.firstName }),
         ...(formData.lastName && { surname: formData.lastName }),
@@ -167,14 +196,8 @@ export default function EditCard() {
         ...(formData.company && { company: formData.company }),
         ...(formData.email && { email: formData.email }),
         ...(formData.phoneNumber && { phone: formData.phoneNumber }),
-        ...(formData.whatsapp && { whatsapp: formData.whatsapp }),
-        ...(formData.x && { x: formData.x }),
-        ...(formData.facebook && { facebook: formData.facebook }),
-        ...(formData.linkedin && { linkedin: formData.linkedin }),
-        ...(formData.website && { website: formData.website }),
-        ...(formData.tiktok && { tiktok: formData.tiktok }),
-        ...(formData.instagram && { instagram: formData.instagram }),
-        colorScheme: selectedColor // Add color to user update
+        ...socialFields,  // Include all social fields, including nulls
+        colorScheme: selectedColor
       };
 
       const response = await fetch(buildUrl(ENDPOINTS.UPDATE_USER) + `/${id}`, {
