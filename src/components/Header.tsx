@@ -1,15 +1,17 @@
-import React from 'react';
-import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, Modal } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../constants/colors';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Update this type to match your actual navigation type
 type RootStackParamList = {
   Home: undefined;
   AddCards: undefined;
   EditCard: undefined;
+  Login: undefined;
   // ... other screens ...
 };
 
@@ -19,6 +21,8 @@ type HeaderProps = {
 
 export default function Header({ title }: HeaderProps) {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+  const [isMenuVisible, setIsMenuVisible] = useState(false);
+  const [showPremiumTooltip, setShowPremiumTooltip] = useState(false);
 
   const handleAddPress = () => {
     navigation.navigate('AddCards');
@@ -28,25 +32,85 @@ export default function Header({ title }: HeaderProps) {
     navigation.navigate('EditCard');
   };
 
+  const handleLogout = async () => {
+    try {
+      await AsyncStorage.removeItem('userData');
+      // Navigate to Login or Auth screen
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Login' }],
+      });
+    } catch (error) {
+      console.error('Error logging out:', error);
+    }
+  };
+
   return (
-    <View style={styles.header}>
-      <TouchableOpacity style={styles.icon}>
-        <MaterialIcons name="menu" size={24} color={COLORS.black} />
-      </TouchableOpacity>
-
-      <View style={styles.titleContainer}>
-        <Text style={styles.title}>{title}</Text>
-      </View>
-
-      <View style={styles.iconContainer}>
-        {/*<TouchableOpacity style={styles.icon} onPress={handleAddPress}>
-          <MaterialIcons name="add" size={24} color={COLORS.black} />
-        </TouchableOpacity>*/}
-        <TouchableOpacity style={styles.icon} onPress={handleEditPress}>
-          <MaterialIcons name="edit" size={24} color={COLORS.black} />
+    <>
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.icon}
+          onPress={() => setIsMenuVisible(true)}
+        >
+          <MaterialIcons name="menu" size={24} color={COLORS.black} />
         </TouchableOpacity>
+
+        <View style={styles.titleContainer}>
+          <Text style={styles.title}>{title}</Text>
+        </View>
+
+        <View style={styles.iconContainer}>
+          {/*<TouchableOpacity style={styles.icon} onPress={handleAddPress}>
+            <MaterialIcons name="add" size={24} color={COLORS.black} />
+          </TouchableOpacity>*/}
+          <TouchableOpacity style={styles.icon} onPress={handleEditPress}>
+            <MaterialIcons name="edit" size={24} color={COLORS.black} />
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
+
+      <Modal
+        visible={isMenuVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsMenuVisible(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setIsMenuVisible(false)}
+        >
+          <View style={styles.menuContainer}>
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => {
+                setShowPremiumTooltip(true);
+                setTimeout(() => setShowPremiumTooltip(false), 2000);
+              }}
+            >
+              <MaterialIcons name="star" size={24} color={COLORS.primary} />
+              <Text style={styles.menuText}>Unlock Premium</Text>
+              {showPremiumTooltip && (
+                <View style={styles.tooltip}>
+                  <Text style={styles.tooltipText}>Coming soon</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => {
+                setIsMenuVisible(false);
+                handleLogout();
+              }}
+            >
+              <MaterialIcons name="logout" size={24} color={COLORS.error} />
+              <Text style={[styles.menuText, { color: COLORS.error }]}>Logout</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </>
   );
 }
 
@@ -84,5 +148,48 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     flexDirection: 'row',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  menuContainer: {
+    position: 'absolute',
+    top: 100,
+    left: 20,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 8,
+    minWidth: 200,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    gap: 12,
+  },
+  menuText: {
+    fontSize: 16,
+    color: COLORS.black,
+    fontWeight: '500',
+  },
+  tooltip: {
+    position: 'absolute',
+    right: -100,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    padding: 8,
+    borderRadius: 4,
+  },
+  tooltipText: {
+    color: COLORS.white,
+    fontSize: 14,
   },
 });
