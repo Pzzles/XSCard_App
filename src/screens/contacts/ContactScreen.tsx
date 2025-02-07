@@ -44,6 +44,9 @@ export default function ContactsScreen() {
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [cardColor, setCardColor] = useState(COLORS.secondary);
+  const [isOptionsModalVisible, setIsOptionsModalVisible] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState('');
 
   useFocusEffect(
     React.useCallback(() => {
@@ -76,7 +79,7 @@ export default function ContactsScreen() {
       }
     } catch (error) {
       console.error('Error loading contacts:', error);
-      Alert.alert('Error', 'Failed to load contacts');
+      showModal('Error', 'Failed to load contacts');
     }
   };
 
@@ -96,10 +99,10 @@ export default function ContactsScreen() {
 
       // Refresh contacts list after successful deletion
       loadContacts();
-      Alert.alert('Success', 'Contact deleted successfully');
+      showModal('Success', 'Contact deleted successfully');
     } catch (error) {
       console.error('Error deleting contact:', error);
-      Alert.alert('Error', 'Failed to delete contact');
+      showModal('Error', 'Failed to delete contact');
     }
   };
 
@@ -158,7 +161,7 @@ export default function ContactsScreen() {
         const message = 'Check out my digital business card!';
         const whatsappUrl = `whatsapp://send?phone=${number}&text=${encodeURIComponent(message)}`;
         Linking.openURL(whatsappUrl).catch(() => {
-          Alert.alert('Error', 'WhatsApp is not installed on your device');
+          showModal('Error', 'WhatsApp is not installed on your device');
         });
       }
     },
@@ -170,7 +173,7 @@ export default function ContactsScreen() {
       action: (username: string) => {
         const telegramUrl = `tg://msg?text=Check out my digital business card!&to=${username}`;
         Linking.openURL(telegramUrl).catch(() => {
-          Alert.alert('Error', 'Telegram is not installed on your device');
+          showModal('Error', 'Telegram is not installed on your device');
         });
       }
     },
@@ -182,7 +185,7 @@ export default function ContactsScreen() {
       action: (email: string) => {
         const emailUrl = `mailto:${email}?subject=Digital Business Card&body=Check out my digital business card!`;
         Linking.openURL(emailUrl).catch(() => {
-          Alert.alert('Error', 'Could not open email client');
+          showModal('Error', 'Could not open email client');
         });
       }
     }
@@ -256,6 +259,12 @@ export default function ContactsScreen() {
         <MaterialIcons name="share" size={24} color={COLORS.white} />
       </TouchableOpacity>
     );
+  };
+
+  const showModal = (title: string, message: string) => {
+    setModalTitle(title);
+    setModalMessage(message);
+    setIsOptionsModalVisible(true);
   };
 
   return (
@@ -388,6 +397,26 @@ export default function ContactsScreen() {
                   </TouchableOpacity>
                 </View>
               )}
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={isOptionsModalVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setIsOptionsModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setIsOptionsModalVisible(false)}
+              >
+                <MaterialIcons name="close" size={24} color={COLORS.black} />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>{modalTitle}</Text>
+              <Text style={styles.modalMessage}>{modalMessage}</Text>
             </View>
           </View>
         </Modal>
@@ -528,23 +557,25 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: COLORS.white,
-    borderRadius: 20,
     padding: 20,
+    borderRadius: 20,
     width: '80%',
-    maxWidth: 400,
+    alignItems: 'center',
   },
   closeButton: {
     position: 'absolute',
-    right: 15,
-    top: 15,
-    zIndex: 1,
+    top: 10,
+    right: 10,
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
+    marginBottom: 20,
+  },
+  modalMessage: {
+    fontSize: 16,
     textAlign: 'center',
     marginBottom: 20,
-    color: COLORS.black,
   },
   shareOptions: {
     flexDirection: 'row',
