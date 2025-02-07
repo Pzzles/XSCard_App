@@ -279,6 +279,19 @@ export default function CardsScreen() {
       shadowOpacity: 0.5,
       shadowRadius: 8,
     },
+    qrContainer: {
+      width: 170,
+      height: 170,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      marginBottom: 20,
+      backgroundColor: '#fff',
+      marginTop: 20,
+      borderWidth: 4,
+      borderColor: cardColor,
+      borderRadius: 10,
+      padding: 10,
+    },
     walletButton: {
       flexDirection: 'row',
       backgroundColor: COLORS.white,
@@ -305,7 +318,7 @@ export default function CardsScreen() {
       <Header title="XS Card" />
       <ScrollView style={[styles.contentContainer, { marginTop: 100 }]}>
         <View style={styles.scrollContent}>
-          <View style={styles.qrContainer}>
+          <View style={dynamicStyles.qrContainer}>
             {qrCode ? (
               <Image
                 style={styles.qrCode}
@@ -559,17 +572,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   qrContainer: {
-    width: 150,
-    height: 150,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 170,
+    height: 170,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     marginBottom: 20,
     backgroundColor: '#fff',
-    marginTop:20,
+    marginTop: 20,
+    borderWidth: 4,
+    borderColor: COLORS.secondary,
+    borderRadius: 10,
+    padding: 10,
   },
   qrCode: {
-    width: '100%',
-    height: '100%',
+    width: 150,
+    height: 150,
   },
   logoContainer: {
     width: '100%',
