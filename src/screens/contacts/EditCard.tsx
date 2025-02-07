@@ -86,6 +86,9 @@ export default function EditCard() {
         const response = await fetch(buildUrl(ENDPOINTS.GET_USER) + `/${parsedUserData.id}`);
         const userData = await response.json();
 
+        // Set the selected color from userData
+        setSelectedColor(userData.colorScheme || '#1B2B5B');
+
         // Set form data
         setFormData({
           firstName: userData.name || '',
