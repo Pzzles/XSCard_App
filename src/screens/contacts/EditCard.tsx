@@ -605,10 +605,19 @@ export default function EditCard() {
                 </View>
                 <TextInput
                   style={styles.input}
-                  placeholder={`${socials.find(s => s.id === socialId)?.label} URL`}
+                  placeholder={`${socials.find(s => s.id === socialId)?.label} ${
+                    socialId === 'website' ? 'URL' : 
+                    socialId === 'whatsapp' ? 'number' : 
+                    'username (without @)'
+                  }`}
                   placeholderTextColor="#999"
                   value={formData[socialId]}
-                  onChangeText={(text) => setFormData({...formData, [socialId]: text})}
+                  onChangeText={(text) => {
+                    // Remove @ symbol if user includes it
+                    const cleanText = text.startsWith('@') ? text.substring(1) : text;
+                    setFormData({...formData, [socialId]: cleanText});
+                  }}
+                  keyboardType={socialId === 'whatsapp' ? 'phone-pad' : 'default'}
                 />
               </Animated.View>
             ))}

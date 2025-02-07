@@ -54,6 +54,17 @@ const socialIcons: { [key: string]: keyof typeof MaterialCommunityIcons.glyphMap
   instagram: 'instagram'
 };
 
+// Add this mapping for social media base URLs
+const socialBaseUrls: { [key: string]: string } = {
+  whatsapp: 'https://wa.me/',  // WhatsApp expects phone number
+  x: 'https://x.com/',  // X (Twitter)
+  facebook: 'https://facebook.com/',
+  linkedin: 'https://linkedin.com/in/',
+  website: '',  // Website should already include http(s)://
+  tiktok: 'https://tiktok.com/@',
+  instagram: 'https://instagram.com/'
+};
+
 export default function CardsScreen() {
   const [qrCode, setQrCode] = useState<string>('');
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -436,7 +447,6 @@ export default function CardsScreen() {
           {userData && (
             <View style={styles.socialLinksContainer}>
               {Object.entries(userData).map(([key, value]) => {
-                console.log('Checking social:', key, value); // Debug log
                 if (socialIcons[key] && value && value.trim() !== '') {
                   return (
                     <TouchableOpacity 
@@ -445,9 +455,21 @@ export default function CardsScreen() {
                       onPress={() => {
                         if (value) {
                           let url = value;
-                          if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                          // If it's not a website (which should include http(s)://) and not already a full URL
+                          if (key !== 'website' && !url.startsWith('http://') && !url.startsWith('https://')) {
+                            // Remove any @ symbol from the username if present
+                            const username = url.startsWith('@') ? url.substring(1) : url;
+                            // For WhatsApp, remove any non-numeric characters
+                            if (key === 'whatsapp') {
+                              const phoneNumber = username.replace(/\D/g, '');
+                              url = `${socialBaseUrls[key]}${phoneNumber}`;
+                            } else {
+                              url = `${socialBaseUrls[key]}${username}`;
+                            }
+                          } else if (key === 'website' && !url.startsWith('http://') && !url.startsWith('https://')) {
                             url = 'https://' + url;
                           }
+                          
                           Linking.openURL(url).catch(() => {
                             Alert.alert('Error', 'Could not open link');
                           });
