@@ -47,6 +47,9 @@ export default function ContactsScreen() {
   const [isOptionsModalVisible, setIsOptionsModalVisible] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
   const [modalTitle, setModalTitle] = useState('');
+  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
+  const [contactToDelete, setContactToDelete] = useState<number | null>(null);
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -191,7 +194,10 @@ export default function ContactsScreen() {
     }
   ];
 
-  const handleShare = () => {
+  const handleShare = (contact?: Contact) => {
+    if (contact) {
+      setSelectedContact(contact);
+    }
     setIsShareModalVisible(true);
   };
 
@@ -202,11 +208,46 @@ export default function ContactsScreen() {
 
   const handleSend = () => {
     const platform = shareOptions.find(opt => opt.id === selectedPlatform);
-    if (platform && phoneNumber) {
-      platform.action(phoneNumber);
+    if (platform && phoneNumber && selectedContact) {
+      const message = `Contact Information:\nName: ${selectedContact.name} ${selectedContact.surname}\nPhone: ${selectedContact.number}\nMet at: ${selectedContact.howWeMet}`;
+      
+      if (selectedPlatform === 'whatsapp') {
+        const whatsappUrl = `whatsapp://send?phone=${phoneNumber}&text=${encodeURIComponent(message)}`;
+        Linking.openURL(whatsappUrl).catch(() => {
+          showModal('Error', 'WhatsApp is not installed on your device');
+        });
+      } else if (selectedPlatform === 'telegram') {
+        const telegramUrl = `tg://msg?text=${encodeURIComponent(message)}&to=${phoneNumber}`;
+        Linking.openURL(telegramUrl).catch(() => {
+          showModal('Error', 'Telegram is not installed on your device');
+        });
+      } else if (selectedPlatform === 'email') {
+        const emailUrl = `mailto:${phoneNumber}?subject=Contact Information&body=${encodeURIComponent(message)}`;
+        Linking.openURL(emailUrl).catch(() => {
+          showModal('Error', 'Could not open email client');
+        });
+      }
+      
       setIsShareModalVisible(false);
       setSelectedPlatform(null);
       setPhoneNumber('');
+      setSelectedContact(null);
+    }
+  };
+
+  const handleDeleteContact = (index: number) => {
+    setContactToDelete(index);
+    setConfirmModalVisible(true);
+  };
+
+  const confirmDelete = async () => {
+    if (contactToDelete !== null) {
+      try {
+        await deleteContact(contactToDelete);
+      } finally {
+        setConfirmModalVisible(false);
+        setContactToDelete(null);
+      }
     }
   };
 
@@ -239,22 +280,22 @@ export default function ContactsScreen() {
   };
 
   // Add this component for the swipe actions
-  const RenderRightActions = (progress: any, dragX: any, onDelete: () => void) => {
+  const RenderRightActions = (progress: any, dragX: any, index: number) => {
     return (
       <TouchableOpacity 
         style={styles.deleteAction}
-        onPress={onDelete}
+        onPress={() => handleDeleteContact(index)}
       >
         <MaterialIcons name="delete" size={24} color={COLORS.white} />
       </TouchableOpacity>
     );
   };
 
-  const RenderLeftActions = (progress: any, dragX: any, onShare: () => void) => {
+  const RenderLeftActions = (progress: any, dragX: any, contact: Contact) => {
     return (
       <TouchableOpacity 
         style={dynamicStyles.shareAction}
-        onPress={onShare}
+        onPress={() => handleShare(contact)}
       >
         <MaterialIcons name="share" size={24} color={COLORS.white} />
       </TouchableOpacity>
@@ -290,7 +331,7 @@ export default function ContactsScreen() {
               <Text style={styles.emptyStateDescription}>
                 When you share your card and they share their details back, it will appear here
               </Text>
-              <TouchableOpacity style={dynamicStyles.shareCardButton} onPress={handleShare}>
+              <TouchableOpacity style={dynamicStyles.shareCardButton} onPress={() => handleShare()}>
                 <MaterialIcons name="share" size={24} color={COLORS.white} />
                 <Text style={styles.shareCardButtonText}>Share my card</Text>
               </TouchableOpacity>
@@ -301,10 +342,10 @@ export default function ContactsScreen() {
                 <Swipeable
                   key={index}
                   renderRightActions={(progress, dragX) => 
-                    RenderRightActions(progress, dragX, () => deleteContact(index))
+                    RenderRightActions(progress, dragX, index)
                   }
                   renderLeftActions={(progress, dragX) => 
-                    RenderLeftActions(progress, dragX, handleShare)
+                    RenderLeftActions(progress, dragX, contact)
                   }
                 >
                   <View style={styles.contactCard}>
@@ -417,6 +458,40 @@ export default function ContactsScreen() {
               </TouchableOpacity>
               <Text style={styles.modalTitle}>{modalTitle}</Text>
               <Text style={styles.modalMessage}>{modalMessage}</Text>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={confirmModalVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setConfirmModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setConfirmModalVisible(false)}
+              >
+                <MaterialIcons name="close" size={24} color={COLORS.black} />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Confirm Delete</Text>
+              <Text style={styles.modalMessage}>Are you sure you want to delete this contact?</Text>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => setConfirmModalVisible(false)}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalDeleteButton]}
+                  onPress={confirmDelete}
+                >
+                  <Text style={styles.deleteButtonText}>Delete</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </Modal>
@@ -644,5 +719,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: 80,
     height: '100%',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 20,
+    marginTop: 20,
+  },
+  modalButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    minWidth: 100,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: COLORS.gray,
+  },
+  modalDeleteButton: {
+    backgroundColor: COLORS.error,
+  },
+  cancelButtonText: {
+    color: COLORS.white,
+    fontWeight: 'bold',
+  },
+  deleteButtonText: {
+    color: COLORS.white,
+    fontWeight: 'bold',
   },
 });
