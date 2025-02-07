@@ -37,7 +37,7 @@ interface ShareOption {
   name: string;
   icon: 'whatsapp' | 'send' | 'email';
   color: string;
-  action: (contact: string) => void;
+  action: () => void;
 }
 
 export default function CardsScreen() {
@@ -47,7 +47,6 @@ export default function CardsScreen() {
   const borderRotation = useRef(new Animated.Value(0)).current;
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
-  const [phoneNumber, setPhoneNumber] = useState('');
   const [cardColor, setCardColor] = useState(COLORS.secondary);
 
   // Add loading state
@@ -138,38 +137,61 @@ export default function CardsScreen() {
       name: 'WhatsApp',
       icon: 'whatsapp',
       color: '#25D366',
-      action: (number: string) => {
+      action: async () => {
         if (!userData?.id) {
           Alert.alert('Error', 'User data not available');
           return;
         }
         const saveContactUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
         const message = `Check out my digital business card! ${saveContactUrl}`;
-        const whatsappUrl = `whatsapp://send?phone=${number}&text=${encodeURIComponent(message)}`;
-        Linking.openURL(whatsappUrl).catch(() => {
+        Linking.openURL(`whatsapp://send?text=${encodeURIComponent(message)}`).catch(() => {
           Alert.alert('Error', 'WhatsApp is not installed on your device');
         });
       }
     },
-    // ... add other share options ...
+    {
+      id: 'telegram',
+      name: 'Telegram',
+      icon: 'send',
+      color: '#0088cc',
+      action: async () => {
+        if (!userData?.id) {
+          Alert.alert('Error', 'User data not available');
+          return;
+        }
+        const saveContactUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
+        const message = `Check out my digital business card! ${saveContactUrl}`;
+        Linking.openURL(`tg://msg?text=${encodeURIComponent(message)}`).catch(() => {
+          Alert.alert('Error', 'Telegram is not installed on your device');
+        });
+      }
+    },
+    {
+      id: 'email',
+      name: 'Email',
+      icon: 'email',
+      color: '#EA4335',
+      action: async () => {
+        if (!userData?.id) {
+          Alert.alert('Error', 'User data not available');
+          return;
+        }
+        const saveContactUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
+        const message = `Check out my digital business card! ${saveContactUrl}`;
+        const emailUrl = `mailto:?subject=Digital Business Card&body=${encodeURIComponent(message)}`;
+        Linking.openURL(emailUrl).catch(() => {
+          Alert.alert('Error', 'Could not open email client');
+        });
+      }
+    }
   ];
 
-  const handleShare = () => {
-    setIsShareModalVisible(true);
-  };
-
   const handlePlatformSelect = (platform: string) => {
-    setSelectedPlatform(platform);
-    setPhoneNumber('');
-  };
-
-  const handleSend = () => {
-    const platform = shareOptions.find(opt => opt.id === selectedPlatform);
-    if (platform && phoneNumber) {
-      platform.action(phoneNumber);
+    const selectedOption = shareOptions.find(opt => opt.id === platform);
+    if (selectedOption) {
+      selectedOption.action();
       setIsShareModalVisible(false);
       setSelectedPlatform(null);
-      setPhoneNumber('');
     }
   };
 
@@ -406,7 +428,7 @@ export default function CardsScreen() {
             </View>
           )}
 
-          <TouchableOpacity onPress={handleShare} style={[styles.shareButton, dynamicStyles.shareButton]}>
+          <TouchableOpacity onPress={() => setIsShareModalVisible(true)} style={[styles.shareButton, dynamicStyles.shareButton]}>
             <MaterialIcons name="share" size={24} color={COLORS.white} />
             <Text style={styles.shareButtonText}>Share</Text>
           </TouchableOpacity>
@@ -451,49 +473,24 @@ export default function CardsScreen() {
               <MaterialIcons name="close" size={24} color={COLORS.black} />
             </TouchableOpacity>
 
-            {!selectedPlatform ? (
-              <>
-                <Text style={styles.modalTitle}>Share via</Text>
-                <View style={styles.shareOptions}>
-                  {shareOptions.map((option) => (
-                    <TouchableOpacity
-                      key={option.id}
-                      style={styles.shareOption}
-                      onPress={() => handlePlatformSelect(option.id)}
-                    >
-                      <View style={[styles.iconCircle, { backgroundColor: option.color }]}>
-                        {option.id === 'whatsapp' ? (
-                          <MaterialCommunityIcons name="whatsapp" size={24} color={COLORS.white} />
-                        ) : (
-                          <MaterialIcons name={option.icon as 'send' | 'email'} size={24} color={COLORS.white} />
-                        )}
-                      </View>
-                      <Text style={styles.optionText}>{option.name}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </>
-            ) : (
-              <View style={styles.inputContainer}>
-                <Text style={styles.modalTitle}>
-                  Enter {selectedPlatform === 'email' ? 'email address' : 'phone number'}
-                </Text>
-                <TextInput
-                  style={[styles.input, dynamicStyles.input]}
-                  placeholder={selectedPlatform === 'email' ? 'Enter email' : 'Enter phone number'}
-                  value={phoneNumber}
-                  onChangeText={setPhoneNumber}
-                  keyboardType={selectedPlatform === 'email' ? 'email-address' : 'phone-pad'}
-                />
+            <Text style={styles.modalTitle}>Share via</Text>
+            <View style={styles.shareOptions}>
+              {shareOptions.map((option) => (
                 <TouchableOpacity
-                  style={[styles.sendButton, dynamicStyles.sendButton, !phoneNumber && styles.disabledButton]}
-                  onPress={handleSend}
-                  disabled={!phoneNumber}
+                  key={option.id}
+                  style={styles.shareOption}
+                  onPress={() => handlePlatformSelect(option.id)}
                 >
-                  <Text style={styles.buttonText}>Send</Text>
+                  <View style={[styles.iconCircle, { backgroundColor: option.color }]}>
+                    {option.id === 'whatsapp' ? (
+                      <MaterialCommunityIcons name="whatsapp" size={24} color={COLORS.white} />
+                    ) : (
+                      <MaterialIcons name={option.icon as 'send' | 'email'} size={24} color={COLORS.white} />
+                    )}
+                  </View>
                 </TouchableOpacity>
-              </View>
-            )}
+              ))}
+            </View>
           </View>
         </View>
       </Modal>
@@ -695,6 +692,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 20,
     width: '80%',
+    maxWidth: 300,
     alignItems: 'center',
   },
   closeButton: {
@@ -709,21 +707,19 @@ const styles = StyleSheet.create({
   },
   shareOptions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
+    justifyContent: 'space-around',
+    width: '100%',
+    paddingHorizontal: 20,
   },
   shareOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    padding: 10,
   },
   iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
   },
   optionText: {
     fontSize: 16,

@@ -440,7 +440,6 @@ export default function ContactsScreen() {
                             <MaterialIcons name={option.icon as 'send' | 'email'} size={24} color={COLORS.white} />
                           )}
                         </View>
-                        <Text style={styles.optionText}>{option.name}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -683,12 +682,11 @@ const styles = StyleSheet.create({
   shareOptions: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    flexWrap: 'wrap',
-    gap: 20,
+    width: '100%',
+    paddingHorizontal: 20,
   },
   shareOption: {
-    alignItems: 'center',
-    width: 80,
+    padding: 10,
   },
   iconCircle: {
     width: 50,
@@ -696,12 +694,6 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
-  },
-  optionText: {
-    fontSize: 14,
-    color: COLORS.black,
-    textAlign: 'center',
   },
   inputContainer: {
     width: '100%',
