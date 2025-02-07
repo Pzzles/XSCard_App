@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View, Image, TouchableOpacity, Animated, ScrollView, ImageStyle, Modal, Linking, Alert, TextInput, ViewStyle, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, Image, TouchableOpacity, Animated, ScrollView, ImageStyle, Modal, Linking, Alert, TextInput, ViewStyle, ActivityIndicator, Platform } from 'react-native';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
@@ -409,7 +409,7 @@ export default function CardsScreen() {
               <>
                 <MaterialCommunityIcons name="wallet" size={24} color={cardColor} />
                 <Text style={[styles.walletButtonText, { color: cardColor }]}>
-                  Add to Google Wallet
+                  Add to {Platform.OS === 'ios' ? 'Apple' : 'Google'} Wallet
                 </Text>
               </>
             )}
