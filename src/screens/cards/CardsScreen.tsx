@@ -662,7 +662,8 @@ const styles = StyleSheet.create({
     width: '100%',
     height: undefined,
     aspectRatio: 16/9,
-    resizeMode: 'cover',
+    resizeMode: 'contain',
+    backgroundColor: '#F8F8F8',
     marginHorizontal: 0,
   },
   profileOverlayContainer: {

@@ -340,33 +340,72 @@ export default function EditCard() {
     try {
       let result;
       
+      // Define size constraints (in pixels)
+      const MIN_WIDTH = 800;
+      const MAX_WIDTH = 3000;
+      const MIN_HEIGHT = 450;  // For 16:9 ratio with MIN_WIDTH
+      const MAX_HEIGHT = 1688; // For 16:9 ratio with MAX_WIDTH
+      
+      const options: ImagePicker.ImagePickerOptions = {
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 1,
+        // Add size constraints
+        exif: true // To get image dimensions
+      };
+
       if (source === 'camera') {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== 'granted') {
           Alert.alert('Sorry, we need camera permissions to make this work!');
           return;
         }
-        result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true,
-          aspect: [16, 9],
-          quality: 1,
-        });
+        result = await ImagePicker.launchCameraAsync(options);
       } else {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
           Alert.alert('Sorry, we need gallery permissions to make this work!');
           return;
         }
-        result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true,
-          aspect: [16, 9],
-          quality: 1,
-        });
+        result = await ImagePicker.launchImageLibraryAsync(options);
       }
 
-      if (!result.canceled) {
+      if (!result.canceled && result.assets[0]) {
+        const selectedImage = result.assets[0];
+        
+        // Get image dimensions
+        const { width, height } = await new Promise<{ width: number; height: number }>((resolve) => {
+          Image.getSize(selectedImage.uri, (width, height) => {
+            resolve({ width, height });
+          });
+        });
+
+        // Validate image dimensions
+        if (width < MIN_WIDTH || height < MIN_HEIGHT) {
+          setModalMessage(`Image is too small. Minimum dimensions are ${MIN_WIDTH}x${MIN_HEIGHT} pixels.`);
+          setIsSuccessModalVisible(true);
+          return;
+        }
+
+        if (width > MAX_WIDTH || height > MAX_HEIGHT) {
+          setModalMessage(`Image is too large. Maximum dimensions are ${MAX_WIDTH}x${MAX_HEIGHT} pixels.`);
+          setIsSuccessModalVisible(true);
+          return;
+        }
+
+        // Check aspect ratio
+        const aspectRatio = width / height;
+        const targetRatio = 16 / 9;
+        const RATIO_TOLERANCE = 0.1; // 10% tolerance
+
+        if (Math.abs(aspectRatio - targetRatio) > RATIO_TOLERANCE) {
+          setModalMessage('Please select an image closer to 16:9 aspect ratio for optimal display.');
+          setIsSuccessModalVisible(true);
+          return;
+        }
+
+        // Continue with upload if image meets requirements
         const storedUserData = await AsyncStorage.getItem('userData');
         if (!storedUserData) {
           setError('User data not found');
@@ -377,7 +416,7 @@ export default function EditCard() {
 
         const formData = new FormData();
         formData.append('companyLogo', {
-          uri: result.assets[0].uri,
+          uri: selectedImage.uri,
           type: 'image/jpeg',
           name: 'company-logo.jpg',
         } as any);
@@ -403,7 +442,7 @@ export default function EditCard() {
 
         await AsyncStorage.setItem('userData', JSON.stringify(updatedUserData));
 
-        setModalMessage(`${modalType === 'profile' ? 'Profile picture' : 'Logo'} updated successfully`);
+        setModalMessage('Logo updated successfully');
         setIsSuccessModalVisible(true);
       }
     } catch (error) {
@@ -862,7 +901,8 @@ const styles = StyleSheet.create({
     width: '100%',
     height: undefined,
     aspectRatio: 16/9,
-    resizeMode: 'cover',
+    resizeMode: 'contain',
+    backgroundColor: '#F8F8F8', // Light background to show logo bounds
     marginHorizontal: 0,
   },
   profileOverlayContainer: {
