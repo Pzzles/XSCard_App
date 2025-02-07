@@ -13,8 +13,10 @@ export interface PasscreatorResponse {
 const getBaseUrl = () => {
     if (__DEV__) {  // Development mode
        // return 'http://192.168.124.148:8383'; // home
+
        // return 'https://5e1e-197-184-170-54.ngrok-free.app'; // internet
        return 'http://192.168.0.193:8383'; // work
+
     }
     // Production URL (you can change this later)
     return 'https://your-production-url.com';
