@@ -12,6 +12,7 @@ type RootStackParamList = {
   AddCards: undefined;
   EditCard: undefined;
   Login: undefined;
+  SignIn: undefined;
   // ... other screens ...
 };
 
@@ -34,14 +35,13 @@ export default function Header({ title }: HeaderProps) {
 
   const handleLogout = async () => {
     try {
-      await AsyncStorage.removeItem('userData');
-      // Navigate to Login or Auth screen
+      await AsyncStorage.clear();
       navigation.reset({
         index: 0,
-        routes: [{ name: 'Login' }],
+        routes: [{ name: 'SignIn' }],
       });
     } catch (error) {
-      console.error('Error logging out:', error);
+      console.error('Error during logout:', error);
     }
   };
 
@@ -99,13 +99,10 @@ export default function Header({ title }: HeaderProps) {
 
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={() => {
-                setIsMenuVisible(false);
-                handleLogout();
-              }}
+              onPress={handleLogout}
             >
-              <MaterialIcons name="logout" size={24} color={COLORS.error} />
-              <Text style={[styles.menuText, { color: COLORS.error }]}>Logout</Text>
+              <MaterialIcons name="logout" size={24} color={COLORS.primary} />
+              <Text style={styles.menuText}>Logout</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
