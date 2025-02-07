@@ -28,7 +28,10 @@ interface CardData {
   Email: string;
   PhoneNumber: string;
   title: string;
-  socialLinks: string[];
+  socialLinks: {
+    platform: string;
+    url: string;
+  }[];
   colorScheme?: string;
 }
 
@@ -39,6 +42,17 @@ interface ShareOption {
   color: string;
   action: () => void;
 }
+
+// Add this mapping for social icons
+const socialIcons: { [key: string]: keyof typeof MaterialCommunityIcons.glyphMap } = {
+  whatsapp: 'whatsapp',
+  x: 'twitter',
+  facebook: 'facebook',
+  linkedin: 'linkedin',
+  website: 'web',
+  tiktok: 'music-note',
+  instagram: 'instagram'
+};
 
 export default function CardsScreen() {
   const [qrCode, setQrCode] = useState<string>('');
@@ -76,6 +90,10 @@ export default function CardsScreen() {
         // Fetch user details first to get the color scheme
         const userResponse = await fetch(buildUrl(ENDPOINTS.GET_USER) + `/${parsedUserData.id}`);
         const userData = await userResponse.json();
+
+        // Log the userData to see what we're getting
+        console.log('Loaded user data:', userData);
+
         setUserData(userData);
 
         // Set color from user data
@@ -414,17 +432,41 @@ export default function CardsScreen() {
             </Text>
           </TouchableOpacity>
 
-          {cardData?.socialLinks && cardData.socialLinks.length > 0 && (
+          {/* Replace the existing social links section with this: */}
+          {userData && (
             <View style={styles.socialLinksContainer}>
-              {cardData.socialLinks.map((link, index) => (
-                <TouchableOpacity 
-                  key={index}
-                  style={styles.socialLink}
-                  onPress={() => {/* Handle link press */}}
-                >
-                  <Text style={styles.socialLinkText}>{link}</Text>
-                </TouchableOpacity>
-              ))}
+              {Object.entries(userData).map(([key, value]) => {
+                console.log('Checking social:', key, value); // Debug log
+                if (socialIcons[key] && value && value.trim() !== '') {
+                  return (
+                    <TouchableOpacity 
+                      key={key}
+                      style={[styles.contactSection, styles.leftAligned]}
+                      onPress={() => {
+                        if (value) {
+                          let url = value;
+                          if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                            url = 'https://' + url;
+                          }
+                          Linking.openURL(url).catch(() => {
+                            Alert.alert('Error', 'Could not open link');
+                          });
+                        }
+                      }}
+                    >
+                      <MaterialCommunityIcons 
+                        name={socialIcons[key]} 
+                        size={30} 
+                        color={cardColor} 
+                      />
+                      <Text style={[styles.contactText, { color: '#333' }]}>
+                        {value}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                }
+                return null;
+              })}
             </View>
           )}
 
@@ -647,8 +689,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 15,
-    padding: 10,
+    padding: 5,
     borderRadius: 8,
+    marginLeft:17,
   },
   contactText: {
     marginLeft: 10,
@@ -656,18 +699,10 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   socialLinksContainer: {
-    marginVertical: 15,
-    width: '100%',
-  },
-  socialLink: {
-    padding: 10,
     marginVertical: 5,
-    backgroundColor: COLORS.background,
-    borderRadius: 8,
-  },
-  socialLinkText: {
-    color: COLORS.primary,
-    fontSize: 14,
+    width: '100%',
+    paddingHorizontal: 10,
+    marginRight:20,
   },
   leftAligned: {
     alignSelf: 'stretch',
