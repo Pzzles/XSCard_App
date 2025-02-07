@@ -6,6 +6,8 @@ import Header from '../../components/Header';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
+import { Swipeable } from 'react-native-gesture-handler';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 interface Contact {
   name: string;
@@ -223,156 +225,174 @@ export default function ContactsScreen() {
       shadowOpacity: 0.25,
       shadowRadius: 3.84,
       elevation: 5,
+    },
+    shareAction: {
+      backgroundColor: cardColor,
+      justifyContent: 'center' as const,
+      alignItems: 'center' as const,
+      width: 80,
+      height: '100%' as const,
     }
   };
 
-  return (
-    <View style={styles.container}>
-      <Header title="Contacts" />
-      <View style={[styles.contactsContainer, { marginTop: 120 }]}>
-        <View style={styles.searchContainer}>
-          <MaterialIcons name="search" size={24} color={COLORS.gray} style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search"
-            placeholderTextColor={COLORS.gray}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
+  // Add this component for the swipe actions
+  const RenderRightActions = (progress: any, dragX: any, onDelete: () => void) => {
+    return (
+      <TouchableOpacity 
+        style={styles.deleteAction}
+        onPress={onDelete}
+      >
+        <MaterialIcons name="delete" size={24} color={COLORS.white} />
+      </TouchableOpacity>
+    );
+  };
 
-        {filteredContacts.length === 0 ? (
-          <View style={styles.emptyStateContainer}>
-            <MaterialIcons name="people" size={64} color={COLORS.gray} />
-            <Text style={styles.emptyStateTitle}>No contact yet</Text>
-            <Text style={styles.emptyStateDescription}>
-              When you share your card and they share their details back, it will appear here
-            </Text>
-            <TouchableOpacity style={dynamicStyles.shareCardButton} onPress={handleShare}>
-              <MaterialIcons name="share" size={24} color={COLORS.white} />
-              <Text style={styles.shareCardButtonText}>Share my card</Text>
-            </TouchableOpacity>
+  const RenderLeftActions = (progress: any, dragX: any, onShare: () => void) => {
+    return (
+      <TouchableOpacity 
+        style={dynamicStyles.shareAction}
+        onPress={onShare}
+      >
+        <MaterialIcons name="share" size={24} color={COLORS.white} />
+      </TouchableOpacity>
+    );
+  };
+
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <View style={styles.container}>
+        <Header title="Contacts" />
+        <View style={[styles.contactsContainer, { marginTop: 120 }]}>
+          <View style={styles.searchContainer}>
+            <MaterialIcons name="search" size={24} color={COLORS.gray} style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search"
+              placeholderTextColor={COLORS.gray}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
           </View>
-        ) : (
-          <ScrollView style={styles.contactsList}>
-            {filteredContacts.map((contact, index) => (
-              <View key={index} style={styles.contactCard}>
-                <View style={styles.contactLeft}>
-                  <Image 
-                    source={require('../../../assets/images/profile.png')} 
-                    style={styles.contactImage} 
-                  />
-                  <View style={styles.contactInfo}>
-                    <Text style={styles.contactName}>
-                      {contact.name} {contact.surname}
-                    </Text>
-                    <View style={styles.contactSubInfo}>
-                      <Text style={styles.contactPosition}>{contact.number}</Text>
-                      <View style={styles.metContainer}>
-                        <Text style={styles.contactHowWeMet}>Met at: {contact.howWeMet}</Text>
-                        <Text style={styles.contactDate}>Date: {formatDate(contact.createdAt)}</Text>
+
+          {filteredContacts.length === 0 ? (
+            <View style={styles.emptyStateContainer}>
+              <MaterialIcons name="people" size={64} color={COLORS.gray} />
+              <Text style={styles.emptyStateTitle}>No contact yet</Text>
+              <Text style={styles.emptyStateDescription}>
+                When you share your card and they share their details back, it will appear here
+              </Text>
+              <TouchableOpacity style={dynamicStyles.shareCardButton} onPress={handleShare}>
+                <MaterialIcons name="share" size={24} color={COLORS.white} />
+                <Text style={styles.shareCardButtonText}>Share my card</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <ScrollView style={styles.contactsList}>
+              {filteredContacts.map((contact, index) => (
+                <Swipeable
+                  key={index}
+                  renderRightActions={(progress, dragX) => 
+                    RenderRightActions(progress, dragX, () => deleteContact(index))
+                  }
+                  renderLeftActions={(progress, dragX) => 
+                    RenderLeftActions(progress, dragX, handleShare)
+                  }
+                >
+                  <View style={styles.contactCard}>
+                    <View style={styles.contactLeft}>
+                      <Image 
+                        source={require('../../../assets/images/profile.png')} 
+                        style={styles.contactImage} 
+                      />
+                      <View style={styles.contactInfo}>
+                        <Text style={styles.contactName}>
+                          {contact.name} {contact.surname}
+                        </Text>
+                        <View style={styles.contactSubInfo}>
+                          <Text style={styles.contactPosition}>{contact.number}</Text>
+                          <View style={styles.metContainer}>
+                            <Text style={styles.contactHowWeMet}>Met at: {contact.howWeMet}</Text>
+                            <Text style={styles.contactDate}>Date: {formatDate(contact.createdAt)}</Text>
+                          </View>
+                        </View>
                       </View>
                     </View>
                   </View>
-                </View>
-                <View style={styles.contactRight}>
-
-                  <View style={styles.actionButtons}>
-                    <TouchableOpacity 
-                      style={styles.deleteButton}
-                      onPress={() => {
-                        Alert.alert(
-                          'Delete Contact',
-                          'Are you sure you want to delete this contact?',
-                          [
-                            { text: 'Cancel', style: 'cancel' },
-                            { 
-                              text: 'Delete', 
-                              onPress: () => deleteContact(index),
-                              style: 'destructive'
-                            }
-                          ]
-                        );
-                      }}
-                    >
-                      <MaterialIcons name="delete" size={24} color={COLORS.error} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-            ))}
-          </ScrollView>
-        )}
-      </View>
-
-      <Modal
-        visible={isShareModalVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => {
-          setIsShareModalVisible(false);
-          setSelectedPlatform(null);
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={() => {
-                setIsShareModalVisible(false);
-                setSelectedPlatform(null);
-              }}
-            >
-              <MaterialIcons name="close" size={24} color={COLORS.black} />
-            </TouchableOpacity>
-
-            {!selectedPlatform ? (
-              <>
-                <Text style={styles.modalTitle}>Share via</Text>
-                <View style={styles.shareOptions}>
-                  {shareOptions.map((option) => (
-                    <TouchableOpacity
-                      key={option.id}
-                      style={styles.shareOption}
-                      onPress={() => handlePlatformSelect(option.id)}
-                    >
-                      <View style={[styles.iconCircle, { backgroundColor: option.color }]}>
-                        {option.id === 'whatsapp' ? (
-                          <MaterialCommunityIcons name="whatsapp" size={24} color={COLORS.white} />
-                        ) : (
-                          <MaterialIcons name={option.icon as 'send' | 'email'} size={24} color={COLORS.white} />
-                        )}
-                      </View>
-                      <Text style={styles.optionText}>{option.name}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </>
-            ) : (
-              <View style={styles.inputContainer}>
-                <Text style={styles.modalTitle}>
-                  Enter {selectedPlatform === 'email' ? 'email address' : 'phone number'}
-                </Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder={selectedPlatform === 'email' ? 'Enter email' : 'Enter phone number'}
-                  value={phoneNumber}
-                  onChangeText={setPhoneNumber}
-                  keyboardType={selectedPlatform === 'email' ? 'email-address' : 'phone-pad'}
-                />
-                <TouchableOpacity
-                  style={[styles.sendButton, !phoneNumber && styles.disabledButton]}
-                  onPress={handleSend}
-                  disabled={!phoneNumber}
-                >
-                  <Text style={styles.sendButtonText}>Send</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
+                </Swipeable>
+              ))}
+            </ScrollView>
+          )}
         </View>
-      </Modal>
-    </View>
+
+        <Modal
+          visible={isShareModalVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => {
+            setIsShareModalVisible(false);
+            setSelectedPlatform(null);
+          }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => {
+                  setIsShareModalVisible(false);
+                  setSelectedPlatform(null);
+                }}
+              >
+                <MaterialIcons name="close" size={24} color={COLORS.black} />
+              </TouchableOpacity>
+
+              {!selectedPlatform ? (
+                <>
+                  <Text style={styles.modalTitle}>Share via</Text>
+                  <View style={styles.shareOptions}>
+                    {shareOptions.map((option) => (
+                      <TouchableOpacity
+                        key={option.id}
+                        style={styles.shareOption}
+                        onPress={() => handlePlatformSelect(option.id)}
+                      >
+                        <View style={[styles.iconCircle, { backgroundColor: option.color }]}>
+                          {option.id === 'whatsapp' ? (
+                            <MaterialCommunityIcons name="whatsapp" size={24} color={COLORS.white} />
+                          ) : (
+                            <MaterialIcons name={option.icon as 'send' | 'email'} size={24} color={COLORS.white} />
+                          )}
+                        </View>
+                        <Text style={styles.optionText}>{option.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              ) : (
+                <View style={styles.inputContainer}>
+                  <Text style={styles.modalTitle}>
+                    Enter {selectedPlatform === 'email' ? 'email address' : 'phone number'}
+                  </Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder={selectedPlatform === 'email' ? 'Enter email' : 'Enter phone number'}
+                    value={phoneNumber}
+                    onChangeText={setPhoneNumber}
+                    keyboardType={selectedPlatform === 'email' ? 'email-address' : 'phone-pad'}
+                  />
+                  <TouchableOpacity
+                    style={[styles.sendButton, !phoneNumber && styles.disabledButton]}
+                    onPress={handleSend}
+                    disabled={!phoneNumber}
+                  >
+                    <Text style={styles.sendButtonText}>Send</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </View>
+        </Modal>
+      </View>
+    </GestureHandlerRootView>
   );
 }
 
@@ -586,5 +606,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.gray,
     marginTop: 2,
+  },
+  deleteAction: {
+    backgroundColor: COLORS.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    height: '100%',
   },
 });
