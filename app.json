@@ -20,15 +20,17 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.p.zzles.xscard"
+      "package": "com.p.zzles.xscard",
+      "permissions": ["INTERNET"]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "extra": {
       "eas": {
-        "projectId": "81a04df9-b7d1-40be-b5f4-0a00ca972432"
+        "projectId": "75e89bdc-a27b-4ca7-bce8-f76c910d1d47"
       }
-    }
+    },
+    "owner": "p.zzles"
   }
 }
