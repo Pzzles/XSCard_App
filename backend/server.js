@@ -11,16 +11,18 @@ const app = express();
 const port = 8383;
 
 // Email transporter configuration
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
+const emailTransporter = nodemailer.createTransport({
+  host: process.env.EMAIL_HOST_XSPARK,
+  port: process.env.EMAIL_SMTP_PORT_XSPARK,
+  secure: true,
   auth: {
-    user: 'tshehlap@gmail.com',
-    pass: 'gyjx fwfn ybha miud'//process.env.EMAIL_PASSWORD // Make sure to set this in your environment variables
+    user: process.env.EMAIL_USER_XSPARK,
+    pass: process.env.EMAIL_PASSWORD_XSPARK
   }
 });
 
 // Export transporter for use in other files
-exports.transporter = transporter;
+exports.transporter = emailTransporter;
 
 // Import routes
 const userRoutes = require('./routes/userRoutes');

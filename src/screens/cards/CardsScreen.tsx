@@ -242,7 +242,7 @@ export default function CardsScreen() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to create wallet pass');
+        throw new Error(data.message || 'Failed to create wallet pass' + data.message);
       }
 
       // Open the pass page URL in browser

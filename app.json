@@ -13,7 +13,8 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.p.zzles.xscard"
     },
     "android": {
       "adaptiveIcon": {
@@ -21,7 +22,9 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.p.zzles.xscard",
-      "permissions": ["INTERNET"]
+      "permissions": [
+        "INTERNET"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
