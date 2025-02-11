@@ -31,6 +31,9 @@ const transporter = nodemailer.createTransport({
   }
 });
 
+// Export transporter for use in other files
+exports.transporter = transporter;
+
 // Import routes
 const userRoutes = require('./routes/userRoutes');
 const cardRoutes = require('./routes/cardRoutes');
