@@ -50,6 +50,7 @@ export default function ContactsScreen() {
   const [confirmModalVisible, setConfirmModalVisible] = useState(false);
   const [contactToDelete, setContactToDelete] = useState<number | null>(null);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [swipeableRefs, setSwipeableRefs] = useState<{ [key: number]: Swipeable | null }>({});
 
   useFocusEffect(
     React.useCallback(() => {
@@ -100,6 +101,10 @@ export default function ContactsScreen() {
         throw new Error('Failed to delete contact');
       }
 
+      // Close all swipeables and reset refs after deletion
+      Object.values(swipeableRefs).forEach(ref => ref?.close());
+      setSwipeableRefs({});
+      
       // Refresh contacts list after successful deletion
       loadContacts();
       showModal('Success', 'Contact deleted successfully');
@@ -224,12 +229,9 @@ export default function ContactsScreen() {
 
   const confirmDelete = async () => {
     if (contactToDelete !== null) {
-      try {
-        await deleteContact(contactToDelete);
-      } finally {
-        setConfirmModalVisible(false);
-        setContactToDelete(null);
-      }
+      await deleteContact(contactToDelete);
+      setConfirmModalVisible(false);
+      setContactToDelete(null);
     }
   };
 
@@ -323,6 +325,11 @@ export default function ContactsScreen() {
               {filteredContacts.map((contact, index) => (
                 <Swipeable
                   key={index}
+                  ref={(ref) => {
+                    if (ref) {
+                      setSwipeableRefs(prev => ({ ...prev, [index]: ref }));
+                    }
+                  }}
                   renderRightActions={(progress, dragX) => 
                     RenderRightActions(progress, dragX, index)
                   }
