@@ -10,7 +10,19 @@ const nodemailer = require('nodemailer');
 const app = express();
 const port = 8383;
 
-// Email transporter configuration
+// // Email transporter configuration
+// const emailTransporter = nodemailer.createTransport({
+//   host: process.env.EMAIL_HOST_XSPARK,
+//   port: process.env.EMAIL_SMTP_PORT_XSPARK,
+//   secure: true,
+//   auth: {
+//     user: process.env.EMAIL_USER_XSPARK,
+//     pass: process.env.EMAIL_PASSWORD_XSPARK
+//   }
+// });
+
+// // Export transporter for use in other files
+// exports.transporter = emailTransporter;
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {

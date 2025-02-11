@@ -360,7 +360,7 @@ exports.addToWallet = async (req, res) => {
             jobTitle: userData.occupation,
             urlToThumbnail: thumbnailUrl,
             urlToLogo: logoUrl,
-            barcodeValue: `${config.PASSCREATOR_PUBLIC_URL}/saveContact.html?userId=${id}`
+            barcodeValue: `${config.PASSCREATOR_PUBLIC_URL}/queries.html?userId=${id}`
         };
 
         const response = await axios.post(
@@ -385,7 +385,7 @@ exports.addToWallet = async (req, res) => {
     } catch (error) {
         console.error('Error creating wallet pass:', error);
         res.status(500).send({
-            message: 'Failed to create wallet pass',
+            message: 'Failed to create wallet pass' + error.message,
             error: error.message
         });
     }
