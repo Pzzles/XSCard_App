@@ -154,6 +154,16 @@ export default function ContactsScreen() {
     `${contact.name} ${contact.surname}`.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const handlePlatformSelect = (platform: string) => {
+    const selectedOption = shareOptions.find(opt => opt.id === platform);
+    if (selectedOption) {
+      selectedOption.action(selectedContact || undefined);
+      setIsShareModalVisible(false);
+      setSelectedPlatform(null);
+      setSelectedContact(null); // Reset selected contact after sharing
+    }
+  };
+
   const shareOptions: ShareOption[] = [
     {
       id: 'whatsapp',
@@ -161,18 +171,12 @@ export default function ContactsScreen() {
       icon: 'whatsapp',
       color: '#25D366',
       action: async (contact?: Contact) => {
-        const storedUserData = await AsyncStorage.getItem('userData');
-        if (!storedUserData) return;
-        
-        const userData = JSON.parse(storedUserData);
-        const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
-        const message = contact 
-          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.number}\nMet at: ${contact.howWeMet}`
-          : `Check out my business card: ${shareUrl}`;
-          
-        Linking.openURL(`whatsapp://send?text=${encodeURIComponent(message)}`).catch(() => {
-          showModal('Error', 'WhatsApp is not installed on your device');
-        });
+        if (contact) {
+          const message = `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.number}\nMet at: ${contact.howWeMet}\nDate: ${formatDate(contact.createdAt)}`;
+          Linking.openURL(`whatsapp://send?text=${encodeURIComponent(message)}`).catch(() => {
+            showModal('Error', 'WhatsApp is not installed on your device');
+          });
+        }
       }
     },
     {
@@ -181,18 +185,12 @@ export default function ContactsScreen() {
       icon: 'send',
       color: '#0088cc',
       action: async (contact?: Contact) => {
-        const storedUserData = await AsyncStorage.getItem('userData');
-        if (!storedUserData) return;
-        
-        const userData = JSON.parse(storedUserData);
-        const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
-        const message = contact 
-          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.number}\nMet at: ${contact.howWeMet}`
-          : `Check out my business card: ${shareUrl}`;
-
-        Linking.openURL(`tg://msg?text=${encodeURIComponent(message)}`).catch(() => {
-          showModal('Error', 'Telegram is not installed on your device');
-        });
+        if (contact) {
+          const message = `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.number}\nMet at: ${contact.howWeMet}\nDate: ${formatDate(contact.createdAt)}`;
+          Linking.openURL(`tg://msg?text=${encodeURIComponent(message)}`).catch(() => {
+            showModal('Error', 'Telegram is not installed on your device');
+          });
+        }
       }
     },
     {
@@ -201,19 +199,13 @@ export default function ContactsScreen() {
       icon: 'email',
       color: '#EA4335',
       action: async (contact?: Contact) => {
-        const storedUserData = await AsyncStorage.getItem('userData');
-        if (!storedUserData) return;
-        
-        const userData = JSON.parse(storedUserData);
-        const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
-        const message = contact 
-          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.number}\nMet at: ${contact.howWeMet}`
-          : `Check out my business card: ${shareUrl}`;
-
-        const emailUrl = `mailto:?subject=Business Card&body=${encodeURIComponent(message)}`;
-        Linking.openURL(emailUrl).catch(() => {
-          showModal('Error', 'Could not open email client');
-        });
+        if (contact) {
+          const message = `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.number}\nMet at: ${contact.howWeMet}\nDate: ${formatDate(contact.createdAt)}`;
+          const emailUrl = `mailto:?subject=Contact Information&body=${encodeURIComponent(message)}`;
+          Linking.openURL(emailUrl).catch(() => {
+            showModal('Error', 'Could not open email client');
+          });
+        }
       }
     }
   ];
@@ -223,44 +215,6 @@ export default function ContactsScreen() {
       setSelectedContact(contact);
     }
     setIsShareModalVisible(true);
-  };
-
-  const handlePlatformSelect = async (platform: string) => {
-    try {
-      const storedUserData = await AsyncStorage.getItem('userData');
-      if (!storedUserData) {
-        showModal('Error', 'User data not found');
-        return;
-      }
-
-      const userData = JSON.parse(storedUserData);
-      const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
-      const message = `Check out my business card: ${shareUrl}`;
-
-      switch (platform) {
-        case 'whatsapp':
-          Linking.openURL(`whatsapp://send?text=${encodeURIComponent(message)}`).catch(() => {
-            showModal('Error', 'WhatsApp is not installed on your device');
-          });
-          break;
-        case 'telegram':
-          Linking.openURL(`tg://msg?text=${encodeURIComponent(message)}`).catch(() => {
-            showModal('Error', 'Telegram is not installed on your device');
-          });
-          break;
-        case 'email':
-          Linking.openURL(`mailto:?subject=Business Card&body=${encodeURIComponent(message)}`).catch(() => {
-            showModal('Error', 'Could not open email client');
-          });
-          break;
-      }
-
-      setIsShareModalVisible(false);
-      setSelectedPlatform(null);
-    } catch (error) {
-      console.error('Error sharing:', error);
-      showModal('Error', 'Failed to share');
-    }
   };
 
   const handleDeleteContact = (index: number) => {
