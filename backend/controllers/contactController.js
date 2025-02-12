@@ -123,7 +123,7 @@ exports.saveContactInfo = async (req, res) => {
 
         if (userData && userData.email) {
             const mailOptions = {
-                from: 'tshehlap@gmail.com',
+                from: process.env.EMAIL_USER_XSPARK,
                 to: userData.email,
                 subject: 'Someone Saved Your Contact Information',
                 html: `
