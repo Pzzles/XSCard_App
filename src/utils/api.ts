@@ -12,7 +12,8 @@ export interface PasscreatorResponse {
 // Helper function to get the appropriate base URL
 const getBaseUrl = () => {
     // Always use the production URL in release builds
-    return 'https://xscard-app.onrender.com';
+   // return 'https://xscard-app.onrender.com';
+    return 'http://192.168.0.101:8383';
 };
 
 export const API_BASE_URL = getBaseUrl();
