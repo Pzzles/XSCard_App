@@ -8,13 +8,26 @@ const transporter = nodemailer.createTransport({
   auth: {
     user: process.env.EMAIL_USER_XSPARK,
     pass: process.env.EMAIL_PASSWORD_XSPARK
-  }
+  },
+  tls: {
+    rejectUnauthorized: false, // Accept self-signed certificates
+    ciphers: 'SSLv3'
+  },
+  debug: true // Enable debug logging
 });
 
-// Simple connection test
+// Enhanced connection test with detailed logging
 transporter.verify((error, success) => {
   if (error) {
-    console.error('Email server error:', error.message);
+    console.error('Email server verification error:', {
+      message: error.message,
+      code: error.code,
+      command: error.command,
+      host: process.env.EMAIL_HOST_XSPARK,
+      port: process.env.EMAIL_SMTP_PORT_XSPARK
+    });
+  } else {
+    console.log('Email server connection verified successfully');
   }
 });
 
