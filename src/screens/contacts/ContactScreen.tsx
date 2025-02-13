@@ -6,6 +6,8 @@ import Header from '../../components/Header';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
+import { Swipeable } from 'react-native-gesture-handler';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 interface Contact {
   name: string;
@@ -26,7 +28,7 @@ interface ShareOption {
   name: string;
   icon: 'whatsapp' | 'send' | 'email';
   color: string;
-  action: (contact: string) => void;
+  action: (contact?: Contact) => void;
 }
 
 interface UserData {
@@ -42,6 +44,12 @@ export default function ContactsScreen() {
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [cardColor, setCardColor] = useState(COLORS.secondary);
+  const [isOptionsModalVisible, setIsOptionsModalVisible] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState('');
+  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
+  const [contactToDelete, setContactToDelete] = useState<number | null>(null);
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -74,7 +82,7 @@ export default function ContactsScreen() {
       }
     } catch (error) {
       console.error('Error loading contacts:', error);
-      Alert.alert('Error', 'Failed to load contacts');
+      showModal('Error', 'Failed to load contacts');
     }
   };
 
@@ -94,10 +102,10 @@ export default function ContactsScreen() {
 
       // Refresh contacts list after successful deletion
       loadContacts();
-      Alert.alert('Success', 'Contact deleted successfully');
+      showModal('Success', 'Contact deleted successfully');
     } catch (error) {
       console.error('Error deleting contact:', error);
-      Alert.alert('Error', 'Failed to delete contact');
+      showModal('Error', 'Failed to delete contact');
     }
   };
 
@@ -152,11 +160,18 @@ export default function ContactsScreen() {
       name: 'WhatsApp',
       icon: 'whatsapp',
       color: '#25D366',
-      action: (number: string) => {
-        const message = 'Check out my digital business card!';
-        const whatsappUrl = `whatsapp://send?phone=${number}&text=${encodeURIComponent(message)}`;
-        Linking.openURL(whatsappUrl).catch(() => {
-          Alert.alert('Error', 'WhatsApp is not installed on your device');
+      action: async (contact?: Contact) => {
+        const storedUserData = await AsyncStorage.getItem('userData');
+        if (!storedUserData) return;
+        
+        const userData = JSON.parse(storedUserData);
+        const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
+        const message = contact 
+          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.number}\nMet at: ${contact.howWeMet}`
+          : `Check out my business card: ${shareUrl}`;
+          
+        Linking.openURL(`whatsapp://send?text=${encodeURIComponent(message)}`).catch(() => {
+          showModal('Error', 'WhatsApp is not installed on your device');
         });
       }
     },
@@ -165,10 +180,18 @@ export default function ContactsScreen() {
       name: 'Telegram',
       icon: 'send',
       color: '#0088cc',
-      action: (username: string) => {
-        const telegramUrl = `tg://msg?text=Check out my digital business card!&to=${username}`;
-        Linking.openURL(telegramUrl).catch(() => {
-          Alert.alert('Error', 'Telegram is not installed on your device');
+      action: async (contact?: Contact) => {
+        const storedUserData = await AsyncStorage.getItem('userData');
+        if (!storedUserData) return;
+        
+        const userData = JSON.parse(storedUserData);
+        const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
+        const message = contact 
+          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.number}\nMet at: ${contact.howWeMet}`
+          : `Check out my business card: ${shareUrl}`;
+
+        Linking.openURL(`tg://msg?text=${encodeURIComponent(message)}`).catch(() => {
+          showModal('Error', 'Telegram is not installed on your device');
         });
       }
     },
@@ -177,31 +200,82 @@ export default function ContactsScreen() {
       name: 'Email',
       icon: 'email',
       color: '#EA4335',
-      action: (email: string) => {
-        const emailUrl = `mailto:${email}?subject=Digital Business Card&body=Check out my digital business card!`;
+      action: async (contact?: Contact) => {
+        const storedUserData = await AsyncStorage.getItem('userData');
+        if (!storedUserData) return;
+        
+        const userData = JSON.parse(storedUserData);
+        const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
+        const message = contact 
+          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.number}\nMet at: ${contact.howWeMet}`
+          : `Check out my business card: ${shareUrl}`;
+
+        const emailUrl = `mailto:?subject=Business Card&body=${encodeURIComponent(message)}`;
         Linking.openURL(emailUrl).catch(() => {
-          Alert.alert('Error', 'Could not open email client');
+          showModal('Error', 'Could not open email client');
         });
       }
     }
   ];
 
-  const handleShare = () => {
+  const handleShare = (contact?: Contact) => {
+    if (contact) {
+      setSelectedContact(contact);
+    }
     setIsShareModalVisible(true);
   };
 
-  const handlePlatformSelect = (platform: string) => {
-    setSelectedPlatform(platform);
-    setPhoneNumber('');
-  };
+  const handlePlatformSelect = async (platform: string) => {
+    try {
+      const storedUserData = await AsyncStorage.getItem('userData');
+      if (!storedUserData) {
+        showModal('Error', 'User data not found');
+        return;
+      }
 
-  const handleSend = () => {
-    const platform = shareOptions.find(opt => opt.id === selectedPlatform);
-    if (platform && phoneNumber) {
-      platform.action(phoneNumber);
+      const userData = JSON.parse(storedUserData);
+      const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
+      const message = `Check out my business card: ${shareUrl}`;
+
+      switch (platform) {
+        case 'whatsapp':
+          Linking.openURL(`whatsapp://send?text=${encodeURIComponent(message)}`).catch(() => {
+            showModal('Error', 'WhatsApp is not installed on your device');
+          });
+          break;
+        case 'telegram':
+          Linking.openURL(`tg://msg?text=${encodeURIComponent(message)}`).catch(() => {
+            showModal('Error', 'Telegram is not installed on your device');
+          });
+          break;
+        case 'email':
+          Linking.openURL(`mailto:?subject=Business Card&body=${encodeURIComponent(message)}`).catch(() => {
+            showModal('Error', 'Could not open email client');
+          });
+          break;
+      }
+
       setIsShareModalVisible(false);
       setSelectedPlatform(null);
-      setPhoneNumber('');
+    } catch (error) {
+      console.error('Error sharing:', error);
+      showModal('Error', 'Failed to share');
+    }
+  };
+
+  const handleDeleteContact = (index: number) => {
+    setContactToDelete(index);
+    setConfirmModalVisible(true);
+  };
+
+  const confirmDelete = async () => {
+    if (contactToDelete !== null) {
+      try {
+        await deleteContact(contactToDelete);
+      } finally {
+        setConfirmModalVisible(false);
+        setContactToDelete(null);
+      }
     }
   };
 
@@ -223,156 +297,233 @@ export default function ContactsScreen() {
       shadowOpacity: 0.25,
       shadowRadius: 3.84,
       elevation: 5,
+    },
+    shareAction: {
+      backgroundColor: cardColor,
+      justifyContent: 'center' as const,
+      alignItems: 'center' as const,
+      width: 80,
+      height: '100%' as const,
     }
   };
 
-  return (
-    <View style={styles.container}>
-      <Header title="Contacts" />
-      <View style={[styles.contactsContainer, { marginTop: 120 }]}>
-        <View style={styles.searchContainer}>
-          <MaterialIcons name="search" size={24} color={COLORS.gray} style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search"
-            placeholderTextColor={COLORS.gray}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
+  // Add this component for the swipe actions
+  const RenderRightActions = (progress: any, dragX: any, index: number) => {
+    return (
+      <TouchableOpacity 
+        style={styles.deleteAction}
+        onPress={() => handleDeleteContact(index)}
+      >
+        <MaterialIcons name="delete" size={24} color={COLORS.white} />
+      </TouchableOpacity>
+    );
+  };
 
-        {filteredContacts.length === 0 ? (
-          <View style={styles.emptyStateContainer}>
-            <MaterialIcons name="people" size={64} color={COLORS.gray} />
-            <Text style={styles.emptyStateTitle}>No contact yet</Text>
-            <Text style={styles.emptyStateDescription}>
-              When you share your card and they share their details back, it will appear here
-            </Text>
-            <TouchableOpacity style={dynamicStyles.shareCardButton} onPress={handleShare}>
-              <MaterialIcons name="share" size={24} color={COLORS.white} />
-              <Text style={styles.shareCardButtonText}>Share my card</Text>
-            </TouchableOpacity>
+  const RenderLeftActions = (progress: any, dragX: any, contact: Contact) => {
+    return (
+      <TouchableOpacity 
+        style={dynamicStyles.shareAction}
+        onPress={() => handleShare(contact)}
+      >
+        <MaterialIcons name="share" size={24} color={COLORS.white} />
+      </TouchableOpacity>
+    );
+  };
+
+  const showModal = (title: string, message: string) => {
+    setModalTitle(title);
+    setModalMessage(message);
+    setIsOptionsModalVisible(true);
+  };
+
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <View style={styles.container}>
+        <Header title="Contacts" />
+        <View style={[styles.contactsContainer, { marginTop: 120 }]}>
+          <View style={styles.searchContainer}>
+            <MaterialIcons name="search" size={24} color={COLORS.gray} style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search"
+              placeholderTextColor={COLORS.gray}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
           </View>
-        ) : (
-          <ScrollView style={styles.contactsList}>
-            {filteredContacts.map((contact, index) => (
-              <View key={index} style={styles.contactCard}>
-                <View style={styles.contactLeft}>
-                  <Image 
-                    source={require('../../../assets/images/profile.png')} 
-                    style={styles.contactImage} 
-                  />
-                  <View style={styles.contactInfo}>
-                    <Text style={styles.contactName}>
-                      {contact.name} {contact.surname}
-                    </Text>
-                    <View style={styles.contactSubInfo}>
-                      <Text style={styles.contactPosition}>{contact.number}</Text>
-                      <View style={styles.metContainer}>
-                        <Text style={styles.contactHowWeMet}>Met at: {contact.howWeMet}</Text>
-                        <Text style={styles.contactDate}>Date: {formatDate(contact.createdAt)}</Text>
+
+          {filteredContacts.length === 0 ? (
+            <View style={styles.emptyStateContainer}>
+              <MaterialIcons name="people" size={64} color={COLORS.gray} />
+              <Text style={styles.emptyStateTitle}>No contact yet</Text>
+              <Text style={styles.emptyStateDescription}>
+                When you share your card and they share their details back, it will appear here
+              </Text>
+              <TouchableOpacity style={dynamicStyles.shareCardButton} onPress={() => handleShare()}>
+                <MaterialIcons name="share" size={24} color={COLORS.white} />
+                <Text style={styles.shareCardButtonText}>Share my card</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <ScrollView style={styles.contactsList}>
+              {filteredContacts.map((contact, index) => (
+                <Swipeable
+                  key={index}
+                  renderRightActions={(progress, dragX) => 
+                    RenderRightActions(progress, dragX, index)
+                  }
+                  renderLeftActions={(progress, dragX) => 
+                    RenderLeftActions(progress, dragX, contact)
+                  }
+                >
+                  <View style={styles.contactCard}>
+                    <View style={styles.contactLeft}>
+                      <Image 
+                        source={require('../../../assets/images/profile.png')} 
+                        style={styles.contactImage} 
+                      />
+                      <View style={styles.contactInfo}>
+                        <Text style={styles.contactName}>
+                          {contact.name} {contact.surname}
+                        </Text>
+                        <View style={styles.contactSubInfo}>
+                          <Text style={styles.contactPosition}>{contact.number}</Text>
+                          <View style={styles.metContainer}>
+                            <Text style={styles.contactHowWeMet}>Met at: {contact.howWeMet}</Text>
+                            <Text style={styles.contactDate}>Date: {formatDate(contact.createdAt)}</Text>
+                          </View>
+                        </View>
                       </View>
                     </View>
                   </View>
-                </View>
-                <View style={styles.contactRight}>
+                </Swipeable>
+              ))}
+            </ScrollView>
+          )}
+        </View>
 
-                  <View style={styles.actionButtons}>
-                    <TouchableOpacity 
-                      style={styles.deleteButton}
-                      onPress={() => {
-                        Alert.alert(
-                          'Delete Contact',
-                          'Are you sure you want to delete this contact?',
-                          [
-                            { text: 'Cancel', style: 'cancel' },
-                            { 
-                              text: 'Delete', 
-                              onPress: () => deleteContact(index),
-                              style: 'destructive'
-                            }
-                          ]
-                        );
-                      }}
-                    >
-                      <MaterialIcons name="delete" size={24} color={COLORS.error} />
-                    </TouchableOpacity>
+        <Modal
+          visible={isShareModalVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => {
+            setIsShareModalVisible(false);
+            setSelectedPlatform(null);
+          }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => {
+                  setIsShareModalVisible(false);
+                  setSelectedPlatform(null);
+                }}
+              >
+                <MaterialIcons name="close" size={24} color={COLORS.black} />
+              </TouchableOpacity>
+
+              {!selectedPlatform ? (
+                <>
+                  <Text style={styles.modalTitle}>Share via</Text>
+                  <View style={styles.shareOptions}>
+                    {shareOptions.map((option) => (
+                      <TouchableOpacity
+                        key={option.id}
+                        style={styles.shareOption}
+                        onPress={() => handlePlatformSelect(option.id)}
+                      >
+                        <View style={[styles.iconCircle, { backgroundColor: option.color }]}>
+                          {option.id === 'whatsapp' ? (
+                            <MaterialCommunityIcons name="whatsapp" size={24} color={COLORS.white} />
+                          ) : (
+                            <MaterialIcons name={option.icon as 'send' | 'email'} size={24} color={COLORS.white} />
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    ))}
                   </View>
+                </>
+              ) : (
+                <View style={styles.inputContainer}>
+                  <Text style={styles.modalTitle}>
+                    Enter {selectedPlatform === 'email' ? 'email address' : 'phone number'}
+                  </Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder={selectedPlatform === 'email' ? 'Enter email' : 'Enter phone number'}
+                    value={phoneNumber}
+                    onChangeText={setPhoneNumber}
+                    keyboardType={selectedPlatform === 'email' ? 'email-address' : 'phone-pad'}
+                  />
+                  <TouchableOpacity
+                    style={[styles.sendButton, !phoneNumber && styles.disabledButton]}
+                    onPress={() => handlePlatformSelect(selectedPlatform)}
+                    disabled={!phoneNumber}
+                  >
+                    <Text style={styles.sendButtonText}>Send</Text>
+                  </TouchableOpacity>
                 </View>
-              </View>
-            ))}
-          </ScrollView>
-        )}
-      </View>
+              )}
+            </View>
+          </View>
+        </Modal>
 
-      <Modal
-        visible={isShareModalVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => {
-          setIsShareModalVisible(false);
-          setSelectedPlatform(null);
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={() => {
-                setIsShareModalVisible(false);
-                setSelectedPlatform(null);
-              }}
-            >
-              <MaterialIcons name="close" size={24} color={COLORS.black} />
-            </TouchableOpacity>
+        <Modal
+          visible={isOptionsModalVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setIsOptionsModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setIsOptionsModalVisible(false)}
+              >
+                <MaterialIcons name="close" size={24} color={COLORS.black} />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>{modalTitle}</Text>
+              <Text style={styles.modalMessage}>{modalMessage}</Text>
+            </View>
+          </View>
+        </Modal>
 
-            {!selectedPlatform ? (
-              <>
-                <Text style={styles.modalTitle}>Share via</Text>
-                <View style={styles.shareOptions}>
-                  {shareOptions.map((option) => (
-                    <TouchableOpacity
-                      key={option.id}
-                      style={styles.shareOption}
-                      onPress={() => handlePlatformSelect(option.id)}
-                    >
-                      <View style={[styles.iconCircle, { backgroundColor: option.color }]}>
-                        {option.id === 'whatsapp' ? (
-                          <MaterialCommunityIcons name="whatsapp" size={24} color={COLORS.white} />
-                        ) : (
-                          <MaterialIcons name={option.icon as 'send' | 'email'} size={24} color={COLORS.white} />
-                        )}
-                      </View>
-                      <Text style={styles.optionText}>{option.name}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </>
-            ) : (
-              <View style={styles.inputContainer}>
-                <Text style={styles.modalTitle}>
-                  Enter {selectedPlatform === 'email' ? 'email address' : 'phone number'}
-                </Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder={selectedPlatform === 'email' ? 'Enter email' : 'Enter phone number'}
-                  value={phoneNumber}
-                  onChangeText={setPhoneNumber}
-                  keyboardType={selectedPlatform === 'email' ? 'email-address' : 'phone-pad'}
-                />
+        <Modal
+          visible={confirmModalVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setConfirmModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setConfirmModalVisible(false)}
+              >
+                <MaterialIcons name="close" size={24} color={COLORS.black} />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Confirm Delete</Text>
+              <Text style={styles.modalMessage}>Are you sure you want to delete this contact?</Text>
+              <View style={styles.modalButtons}>
                 <TouchableOpacity
-                  style={[styles.sendButton, !phoneNumber && styles.disabledButton]}
-                  onPress={handleSend}
-                  disabled={!phoneNumber}
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => setConfirmModalVisible(false)}
                 >
-                  <Text style={styles.sendButtonText}>Send</Text>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalDeleteButton]}
+                  onPress={confirmDelete}
+                >
+                  <Text style={styles.deleteButtonText}>Delete</Text>
                 </TouchableOpacity>
               </View>
-            )}
+            </View>
           </View>
-        </View>
-      </Modal>
-    </View>
+        </Modal>
+      </View>
+    </GestureHandlerRootView>
   );
 }
 
@@ -508,33 +659,34 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: COLORS.white,
-    borderRadius: 20,
     padding: 20,
+    borderRadius: 20,
     width: '80%',
-    maxWidth: 400,
+    alignItems: 'center',
   },
   closeButton: {
     position: 'absolute',
-    right: 15,
-    top: 15,
-    zIndex: 1,
+    top: 10,
+    right: 10,
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
+    marginBottom: 20,
+  },
+  modalMessage: {
+    fontSize: 16,
     textAlign: 'center',
     marginBottom: 20,
-    color: COLORS.black,
   },
   shareOptions: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    flexWrap: 'wrap',
-    gap: 20,
+    width: '100%',
+    paddingHorizontal: 20,
   },
   shareOption: {
-    alignItems: 'center',
-    width: 80,
+    padding: 10,
   },
   iconCircle: {
     width: 50,
@@ -542,12 +694,6 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
-  },
-  optionText: {
-    fontSize: 14,
-    color: COLORS.black,
-    textAlign: 'center',
   },
   inputContainer: {
     width: '100%',
@@ -586,5 +732,40 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.gray,
     marginTop: 2,
+  },
+  deleteAction: {
+    backgroundColor: COLORS.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    height: '100%',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 20,
+    marginTop: 20,
+  },
+  modalButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    minWidth: 100,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: COLORS.gray,
+  },
+  modalDeleteButton: {
+    backgroundColor: COLORS.error,
+  },
+  cancelButtonText: {
+    color: COLORS.white,
+    fontWeight: 'bold',
+  },
+  deleteButtonText: {
+    color: COLORS.white,
+    fontWeight: 'bold',
   },
 });

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View, Image, TouchableOpacity, Animated, ScrollView, ImageStyle, Modal, Linking, Alert, TextInput, ViewStyle, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, Image, TouchableOpacity, Animated, ScrollView, ImageStyle, Modal, Linking, Alert, TextInput, ViewStyle, ActivityIndicator, Platform } from 'react-native';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
@@ -28,7 +28,10 @@ interface CardData {
   Email: string;
   PhoneNumber: string;
   title: string;
-  socialLinks: string[];
+  socialLinks: {
+    platform: string;
+    url: string;
+  }[];
   colorScheme?: string;
 }
 
@@ -37,8 +40,30 @@ interface ShareOption {
   name: string;
   icon: 'whatsapp' | 'send' | 'email';
   color: string;
-  action: (contact: string) => void;
+  action: () => void;
 }
+
+// Add this mapping for social icons
+const socialIcons: { [key: string]: keyof typeof MaterialCommunityIcons.glyphMap } = {
+  whatsapp: 'whatsapp',
+  x: 'twitter',
+  facebook: 'facebook',
+  linkedin: 'linkedin',
+  website: 'web',
+  tiktok: 'music-note',
+  instagram: 'instagram'
+};
+
+// Add this mapping for social media base URLs
+const socialBaseUrls: { [key: string]: string } = {
+  whatsapp: 'https://wa.me/',  // WhatsApp expects phone number
+  x: 'https://x.com/',  // X (Twitter)
+  facebook: 'https://facebook.com/',
+  linkedin: 'https://linkedin.com/in/',
+  website: '',  // Website should already include http(s)://
+  tiktok: 'https://tiktok.com/@',
+  instagram: 'https://instagram.com/'
+};
 
 export default function CardsScreen() {
   const [qrCode, setQrCode] = useState<string>('');
@@ -47,12 +72,16 @@ export default function CardsScreen() {
   const borderRotation = useRef(new Animated.Value(0)).current;
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
-  const [phoneNumber, setPhoneNumber] = useState('');
   const [cardColor, setCardColor] = useState(COLORS.secondary);
 
   // Add loading state
   const [isLoading, setIsLoading] = useState(true);
   const [isWalletLoading, setIsWalletLoading] = useState(false);
+
+  // Add these new state variables at the beginning of the CardsScreen component
+  const [isOptionsModalVisible, setIsOptionsModalVisible] = useState(false);
+  const [modalType, setModalType] = useState<'email' | 'phone' | null>(null);
+  const [modalData, setModalData] = useState<string>('');
 
   useFocusEffect(
     React.useCallback(() => {
@@ -72,6 +101,10 @@ export default function CardsScreen() {
         // Fetch user details first to get the color scheme
         const userResponse = await fetch(buildUrl(ENDPOINTS.GET_USER) + `/${parsedUserData.id}`);
         const userData = await userResponse.json();
+
+        // Log the userData to see what we're getting
+        console.log('Loaded user data:', userData);
+
         setUserData(userData);
 
         // Set color from user data
@@ -133,38 +166,61 @@ export default function CardsScreen() {
       name: 'WhatsApp',
       icon: 'whatsapp',
       color: '#25D366',
-      action: (number: string) => {
+      action: async () => {
         if (!userData?.id) {
           Alert.alert('Error', 'User data not available');
           return;
         }
         const saveContactUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
         const message = `Check out my digital business card! ${saveContactUrl}`;
-        const whatsappUrl = `whatsapp://send?phone=${number}&text=${encodeURIComponent(message)}`;
-        Linking.openURL(whatsappUrl).catch(() => {
+        Linking.openURL(`whatsapp://send?text=${encodeURIComponent(message)}`).catch(() => {
           Alert.alert('Error', 'WhatsApp is not installed on your device');
         });
       }
     },
-    // ... add other share options ...
+    {
+      id: 'telegram',
+      name: 'Telegram',
+      icon: 'send',
+      color: '#0088cc',
+      action: async () => {
+        if (!userData?.id) {
+          Alert.alert('Error', 'User data not available');
+          return;
+        }
+        const saveContactUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
+        const message = `Check out my digital business card! ${saveContactUrl}`;
+        Linking.openURL(`tg://msg?text=${encodeURIComponent(message)}`).catch(() => {
+          Alert.alert('Error', 'Telegram is not installed on your device');
+        });
+      }
+    },
+    {
+      id: 'email',
+      name: 'Email',
+      icon: 'email',
+      color: '#EA4335',
+      action: async () => {
+        if (!userData?.id) {
+          Alert.alert('Error', 'User data not available');
+          return;
+        }
+        const saveContactUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
+        const message = `Check out my digital business card! ${saveContactUrl}`;
+        const emailUrl = `mailto:?subject=Digital Business Card&body=${encodeURIComponent(message)}`;
+        Linking.openURL(emailUrl).catch(() => {
+          Alert.alert('Error', 'Could not open email client');
+        });
+      }
+    }
   ];
 
-  const handleShare = () => {
-    setIsShareModalVisible(true);
-  };
-
   const handlePlatformSelect = (platform: string) => {
-    setSelectedPlatform(platform);
-    setPhoneNumber('');
-  };
-
-  const handleSend = () => {
-    const platform = shareOptions.find(opt => opt.id === selectedPlatform);
-    if (platform && phoneNumber) {
-      platform.action(phoneNumber);
+    const selectedOption = shareOptions.find(opt => opt.id === platform);
+    if (selectedOption) {
+      selectedOption.action();
       setIsShareModalVisible(false);
       setSelectedPlatform(null);
-      setPhoneNumber('');
     }
   };
 
@@ -186,7 +242,7 @@ export default function CardsScreen() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to create wallet pass');
+        throw new Error(data.message || 'Failed to create wallet pass' + data.message);
       }
 
       // Open the pass page URL in browser
@@ -204,60 +260,16 @@ export default function CardsScreen() {
     }
   };
 
-  const handleEmailPress = async (email: string) => {
-    Alert.alert(
-      'Email Options',
-      'What would you like to do?',
-      [
-        {
-          text: 'Copy Email',
-          onPress: async () => {
-            await Clipboard.setStringAsync(email);
-            Alert.alert('Success', 'Email copied to clipboard');
-          },
-        },
-        {
-          text: 'Send Email',
-          onPress: () => {
-            Linking.openURL(`mailto:${email}`).catch(() => {
-              Alert.alert('Error', 'Could not open email app');
-            });
-          },
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-      ]
-    );
+  const handleEmailPress = (email: string) => {
+    setModalType('email');
+    setModalData(email);
+    setIsOptionsModalVisible(true);
   };
 
-  const handlePhonePress = async (phone: string) => {
-    Alert.alert(
-      'Phone Options',
-      'What would you like to do?',
-      [
-        {
-          text: 'Copy Number',
-          onPress: async () => {
-            await Clipboard.setStringAsync(phone);
-            Alert.alert('Success', 'Phone number copied to clipboard');
-          },
-        },
-        {
-          text: 'Call',
-          onPress: () => {
-            Linking.openURL(`tel:${phone}`).catch(() => {
-              Alert.alert('Error', 'Could not open phone app');
-            });
-          },
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-      ]
-    );
+  const handlePhonePress = (phone: string) => {
+    setModalType('phone');
+    setModalData(phone);
+    setIsOptionsModalVisible(true);
   };
 
   // Move styles outside of StyleSheet for dynamic values
@@ -318,6 +330,19 @@ export default function CardsScreen() {
       shadowOpacity: 0.5,
       shadowRadius: 8,
     },
+    qrContainer: {
+      width: 170,
+      height: 170,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      marginBottom: 20,
+      backgroundColor: '#fff',
+      marginTop: 20,
+      borderWidth: 4,
+      borderColor: cardColor,
+      borderRadius: 10,
+      padding: 10,
+    },
     walletButton: {
       flexDirection: 'row',
       backgroundColor: COLORS.white,
@@ -344,7 +369,7 @@ export default function CardsScreen() {
       <Header title="XS Card" />
       <ScrollView style={[styles.contentContainer, { marginTop: 100 }]}>
         <View style={styles.scrollContent}>
-          <View style={styles.qrContainer}>
+          <View style={dynamicStyles.qrContainer}>
             {qrCode ? (
               <Image
                 style={styles.qrCode}
@@ -418,21 +443,56 @@ export default function CardsScreen() {
             </Text>
           </TouchableOpacity>
 
-          {cardData?.socialLinks && cardData.socialLinks.length > 0 && (
+          {/* Replace the existing social links section with this: */}
+          {userData && (
             <View style={styles.socialLinksContainer}>
-              {cardData.socialLinks.map((link, index) => (
-                <TouchableOpacity 
-                  key={index}
-                  style={styles.socialLink}
-                  onPress={() => {/* Handle link press */}}
-                >
-                  <Text style={styles.socialLinkText}>{link}</Text>
-                </TouchableOpacity>
-              ))}
+              {Object.entries(userData).map(([key, value]) => {
+                if (socialIcons[key] && value && value.trim() !== '') {
+                  return (
+                    <TouchableOpacity 
+                      key={key}
+                      style={[styles.contactSection, styles.leftAligned]}
+                      onPress={() => {
+                        if (value) {
+                          let url = value;
+                          // If it's not a website (which should include http(s)://) and not already a full URL
+                          if (key !== 'website' && !url.startsWith('http://') && !url.startsWith('https://')) {
+                            // Remove any @ symbol from the username if present
+                            const username = url.startsWith('@') ? url.substring(1) : url;
+                            // For WhatsApp, remove any non-numeric characters
+                            if (key === 'whatsapp') {
+                              const phoneNumber = username.replace(/\D/g, '');
+                              url = `${socialBaseUrls[key]}${phoneNumber}`;
+                            } else {
+                              url = `${socialBaseUrls[key]}${username}`;
+                            }
+                          } else if (key === 'website' && !url.startsWith('http://') && !url.startsWith('https://')) {
+                            url = 'https://' + url;
+                          }
+                          
+                          Linking.openURL(url).catch(() => {
+                            Alert.alert('Error', 'Could not open link');
+                          });
+                        }
+                      }}
+                    >
+                      <MaterialCommunityIcons 
+                        name={socialIcons[key]} 
+                        size={30} 
+                        color={cardColor} 
+                      />
+                      <Text style={[styles.contactText, { color: '#333' }]}>
+                        {value}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                }
+                return null;
+              })}
             </View>
           )}
 
-          <TouchableOpacity onPress={handleShare} style={[styles.shareButton, dynamicStyles.shareButton]}>
+          <TouchableOpacity onPress={() => setIsShareModalVisible(true)} style={[styles.shareButton, dynamicStyles.shareButton]}>
             <MaterialIcons name="share" size={24} color={COLORS.white} />
             <Text style={styles.shareButtonText}>Share</Text>
           </TouchableOpacity>
@@ -448,7 +508,7 @@ export default function CardsScreen() {
               <>
                 <MaterialCommunityIcons name="wallet" size={24} color={cardColor} />
                 <Text style={[styles.walletButtonText, { color: cardColor }]}>
-                  Add to Google Wallet
+                  Add to {Platform.OS === 'ios' ? 'Apple' : 'Google'} Wallet
                 </Text>
               </>
             )}
@@ -477,49 +537,82 @@ export default function CardsScreen() {
               <MaterialIcons name="close" size={24} color={COLORS.black} />
             </TouchableOpacity>
 
-            {!selectedPlatform ? (
-              <>
-                <Text style={styles.modalTitle}>Share via</Text>
-                <View style={styles.shareOptions}>
-                  {shareOptions.map((option) => (
-                    <TouchableOpacity
-                      key={option.id}
-                      style={styles.shareOption}
-                      onPress={() => handlePlatformSelect(option.id)}
-                    >
-                      <View style={[styles.iconCircle, { backgroundColor: option.color }]}>
-                        {option.id === 'whatsapp' ? (
-                          <MaterialCommunityIcons name="whatsapp" size={24} color={COLORS.white} />
-                        ) : (
-                          <MaterialIcons name={option.icon as 'send' | 'email'} size={24} color={COLORS.white} />
-                        )}
-                      </View>
-                      <Text style={styles.optionText}>{option.name}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </>
-            ) : (
-              <View style={styles.inputContainer}>
-                <Text style={styles.modalTitle}>
-                  Enter {selectedPlatform === 'email' ? 'email address' : 'phone number'}
-                </Text>
-                <TextInput
-                  style={[styles.input, dynamicStyles.input]}
-                  placeholder={selectedPlatform === 'email' ? 'Enter email' : 'Enter phone number'}
-                  value={phoneNumber}
-                  onChangeText={setPhoneNumber}
-                  keyboardType={selectedPlatform === 'email' ? 'email-address' : 'phone-pad'}
-                />
+            <Text style={styles.modalTitle}>Share via</Text>
+            <View style={styles.shareOptions}>
+              {shareOptions.map((option) => (
                 <TouchableOpacity
-                  style={[styles.sendButton, dynamicStyles.sendButton, !phoneNumber && styles.disabledButton]}
-                  onPress={handleSend}
-                  disabled={!phoneNumber}
+                  key={option.id}
+                  style={styles.shareOption}
+                  onPress={() => handlePlatformSelect(option.id)}
                 >
-                  <Text style={styles.buttonText}>Send</Text>
+                  <View style={[styles.iconCircle, { backgroundColor: option.color }]}>
+                    {option.id === 'whatsapp' ? (
+                      <MaterialCommunityIcons name="whatsapp" size={24} color={COLORS.white} />
+                    ) : (
+                      <MaterialIcons name={option.icon as 'send' | 'email'} size={24} color={COLORS.white} />
+                    )}
+                  </View>
                 </TouchableOpacity>
-              </View>
-            )}
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={isOptionsModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsOptionsModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setIsOptionsModalVisible(false)}
+            >
+              <MaterialIcons name="close" size={24} color={COLORS.black} />
+            </TouchableOpacity>
+
+            <Text style={styles.modalTitle}>
+              {modalType === 'email' ? 'Email Options' : 'Phone Options'}
+            </Text>
+
+            <View style={styles.optionsContainer}>
+              <TouchableOpacity
+                style={[styles.optionButton, { backgroundColor: cardColor }]}
+                onPress={async () => {
+                  await Clipboard.setStringAsync(modalData);
+                  setIsOptionsModalVisible(false);
+                  Alert.alert('Success', `${modalType === 'email' ? 'Email' : 'Phone number'} copied to clipboard`);
+                }}
+              >
+                <MaterialIcons name="content-copy" size={24} color={COLORS.white} />
+                <Text style={styles.optionButtonText}>
+                  Copy {modalType === 'email' ? 'Email' : 'Number'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.optionButton, { backgroundColor: cardColor }]}
+                onPress={() => {
+                  const url = modalType === 'email' ? `mailto:${modalData}` : `tel:${modalData}`;
+                  Linking.openURL(url).catch(() => {
+                    Alert.alert('Error', `Could not open ${modalType === 'email' ? 'email' : 'phone'} app`);
+                  });
+                  setIsOptionsModalVisible(false);
+                }}
+              >
+                <MaterialIcons 
+                  name={modalType === 'email' ? 'email' : 'phone'} 
+                  size={24} 
+                  color={COLORS.white} 
+                />
+                <Text style={styles.optionButtonText}>
+                  {modalType === 'email' ? 'Send Email' : 'Call'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -540,17 +633,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   qrContainer: {
-    width: 150,
-    height: 150,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 170,
+    height: 170,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     marginBottom: 20,
     backgroundColor: '#fff',
-    marginTop:20,
+    marginTop: 20,
+    borderWidth: 4,
+    borderColor: COLORS.secondary,
+    borderRadius: 10,
+    padding: 10,
   },
   qrCode: {
-    width: '100%',
-    height: '100%',
+    width: 150,
+    height: 150,
   },
   logoContainer: {
     width: '100%',
@@ -559,13 +656,14 @@ const styles = StyleSheet.create({
     marginLeft: -20,
     marginRight: -20,
     alignSelf: 'center',
-    marginBottom: 50,
+    marginBottom: 75,
   },
   logo: {
     width: '100%',
     height: undefined,
     aspectRatio: 16/9,
-    resizeMode: 'cover',
+    resizeMode: 'contain',
+    backgroundColor: '#F8F8F8',
     marginHorizontal: 0,
   },
   profileOverlayContainer: {
@@ -614,8 +712,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 15,
-    padding: 10,
+    padding: 5,
     borderRadius: 8,
+    marginLeft:17,
   },
   contactText: {
     marginLeft: 10,
@@ -623,18 +722,10 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   socialLinksContainer: {
-    marginVertical: 15,
-    width: '100%',
-  },
-  socialLink: {
-    padding: 10,
     marginVertical: 5,
-    backgroundColor: COLORS.background,
-    borderRadius: 8,
-  },
-  socialLinkText: {
-    color: COLORS.primary,
-    fontSize: 14,
+    width: '100%',
+    paddingHorizontal: 10,
+    marginRight:20,
   },
   leftAligned: {
     alignSelf: 'stretch',
@@ -659,6 +750,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 20,
     width: '80%',
+    maxWidth: 300,
     alignItems: 'center',
   },
   closeButton: {
@@ -673,21 +765,19 @@ const styles = StyleSheet.create({
   },
   shareOptions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
+    justifyContent: 'space-around',
+    width: '100%',
+    paddingHorizontal: 20,
   },
   shareOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    padding: 10,
   },
   iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
   },
   optionText: {
     fontSize: 16,
@@ -710,6 +800,23 @@ const styles = StyleSheet.create({
   },
   walletButtonText: {
     marginLeft: 8,
+    fontSize: 16,
+    fontWeight: 'bold',
+    fontFamily: 'Montserrat-Bold',
+  },
+  optionsContainer: {
+    width: '100%',
+    gap: 10,
+  },
+  optionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 15,
+    borderRadius: 10,
+    gap: 10,
+  },
+  optionButtonText: {
+    color: COLORS.white,
     fontSize: 16,
     fontWeight: 'bold',
     fontFamily: 'Montserrat-Bold',

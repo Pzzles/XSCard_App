@@ -11,12 +11,14 @@
   "description": "",
   "dependencies": {
     "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "firebase-admin": "^13.0.2",
     "module": "^1.2.5",
     "mssql": "^11.0.1",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.10.0",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "react-native-modal": "^13.0.1"
   }
 }
