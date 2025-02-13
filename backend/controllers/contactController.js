@@ -1,5 +1,5 @@
 const { db } = require('../firebase.js');
-const { transporter } = require('../server.js');
+const { transporter, sendMailWithStatus } = require('../public/Utils/emailService');
 
 exports.getAllContacts = async (req, res) => {
     try {
@@ -142,15 +142,20 @@ exports.saveContactInfo = async (req, res) => {
                 `
             };
 
-            await transporter.sendMail(mailOptions);
+            const mailResult = await sendMailWithStatus(mailOptions);
+
+            if (!mailResult.success) {
+                throw new Error('Failed to send email: ' + mailResult.error);
+            }
         }
 
         res.status(200).send({ message: 'Contact saved successfully and email notification sent' });
     } catch (error) {
         console.error('Error saving contact:', error);
-        res.status(500).send({ 
-            message: 'Failed to save contact or send email',
-            error: error.message 
+        res.status(500).json({
+            success: false,
+            message: 'Error saving contact information',
+            error: error.message
         });
     }
 };
