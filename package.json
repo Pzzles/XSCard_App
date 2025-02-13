@@ -21,7 +21,7 @@
     "expo-linear-gradient": "~14.0.2",
     "expo-status-bar": "*",
     "express": "^4.21.2",
-    "module": "^1.2.5",
+    "module": "^1.1.0",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.10.0",
     "react": "*",

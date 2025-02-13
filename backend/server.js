@@ -6,33 +6,9 @@ const express = require('express');
 const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
-const nodemailer = require('nodemailer');
+const { sendMailWithStatus } = require('./public/Utils/emailService');
 const app = express();
 const port = 8383;
-
-// // Email transporter configuration
-// const emailTransporter = nodemailer.createTransport({
-//   host: process.env.EMAIL_HOST_XSPARK,
-//   port: process.env.EMAIL_SMTP_PORT_XSPARK,
-//   secure: true,
-//   auth: {
-//     user: process.env.EMAIL_USER_XSPARK,
-//     pass: process.env.EMAIL_PASSWORD_XSPARK
-//   }
-// });
-
-// // Export transporter for use in other files
-// exports.transporter = emailTransporter;
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: 'tshehlap@gmail.com',
-    pass: 'gyjx fwfn ybha miud'//process.env.EMAIL_PASSWORD // Make sure to set this in your environment variables
-  }
-});
-
-// Export transporter for use in other files
-exports.transporter = transporter;
 
 // Import routes
 const userRoutes = require('./routes/userRoutes');
@@ -85,6 +61,55 @@ app.post('/saveContact', (req, res) => {
     const { howWeMet } = req.body;
     // Process the howWeMet field as needed
     res.send({ message: 'Contact saved successfully', howWeMet });
+});
+
+// Example usage in a route:
+app.post('/send-email', async (req, res) => {
+  try {
+    console.log('Received email request:', req.body);
+    
+    if (!req.body.to || !req.body.subject) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields (to, subject)',
+      });
+    }
+
+    const mailOptions = {
+      to: req.body.to,
+      subject: req.body.subject,
+      text: req.body.text || '',
+      html: req.body.html || ''
+    };
+
+    const result = await sendMailWithStatus(mailOptions);
+    console.log('Email send attempt completed:', result);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Email sent successfully',
+        details: result
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: 'Failed to send email',
+        details: result
+      });
+    }
+  } catch (error) {
+    console.error('Route error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Email sending failed',
+      error: {
+        message: error.message,
+        code: error.code,
+        command: error.command
+      }
+    });
+  }
 });
 
 // Error handler
