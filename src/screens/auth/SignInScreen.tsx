@@ -11,6 +11,12 @@ import ErrorPopup from '../../components/popups/ErrorPopup';
 
 type SignInScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'SignIn'>;
 
+// Add these admin credentials
+const ADMIN_CREDENTIALS = {
+  email: 'admin@xscard.com',
+  password: 'admin123'
+};
+
 export default function SignInScreen() {
   const navigation = useNavigation<SignInScreenNavigationProp>();
   const [email, setEmail] = useState('');
@@ -68,6 +74,14 @@ export default function SignInScreen() {
 
     setIsLoading(true);
     try {
+      // Check for admin credentials first
+      if (email === ADMIN_CREDENTIALS.email && password === ADMIN_CREDENTIALS.password) {
+        await AsyncStorage.setItem('userRole', 'admin');
+        navigation.navigate('AdminDashboard');
+        return;
+      }
+
+      // Regular user authentication
       const response = await fetch(buildUrl(ENDPOINTS.SIGN_IN), {
         method: 'POST',
         headers: {
@@ -86,7 +100,8 @@ export default function SignInScreen() {
           id: data.user.id,
           name: data.user.name,
           email: data.user.email,
-          company: data.user.company
+          company: data.user.company,
+          role: 'user' // Add role for regular users
         }));
         navigation.navigate('MainApp');
       } else {

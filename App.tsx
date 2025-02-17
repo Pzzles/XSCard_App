@@ -4,7 +4,6 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { COLORS } from './src/constants/colors';
 import AuthNavigator from './src/navigation/AuthNavigator';
-// import TabNavigator from './src/navigation/TabNavigator';
 
 export default function App() {
   return (
