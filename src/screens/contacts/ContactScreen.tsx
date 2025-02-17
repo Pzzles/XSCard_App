@@ -227,15 +227,12 @@ export default function ContactsScreen() {
 
   const handlePlatformSelect = async (platform: string) => {
     try {
-      const storedUserData = await AsyncStorage.getItem('userData');
-      if (!storedUserData) {
-        showModal('Error', 'User data not found');
+      if (!selectedContact) {
+        showModal('Error', 'No contact selected');
         return;
       }
 
-      const userData = JSON.parse(storedUserData);
-      const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
-      const message = `Check out my business card: ${shareUrl}`;
+      const message = `Contact Information:\nName: ${selectedContact.name} ${selectedContact.surname}\nPhone: ${selectedContact.number}\nMet at: ${selectedContact.howWeMet}`;
 
       switch (platform) {
         case 'whatsapp':
@@ -249,7 +246,7 @@ export default function ContactsScreen() {
           });
           break;
         case 'email':
-          Linking.openURL(`mailto:?subject=Business Card&body=${encodeURIComponent(message)}`).catch(() => {
+          Linking.openURL(`mailto:?subject=Contact Information&body=${encodeURIComponent(message)}`).catch(() => {
             showModal('Error', 'Could not open email client');
           });
           break;
@@ -257,6 +254,7 @@ export default function ContactsScreen() {
 
       setIsShareModalVisible(false);
       setSelectedPlatform(null);
+      setSelectedContact(null);
     } catch (error) {
       console.error('Error sharing:', error);
       showModal('Error', 'Failed to share');
