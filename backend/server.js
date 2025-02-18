@@ -1,4 +1,3 @@
-// Silence the punycode deprecation warning
 process.removeAllListeners('warning');
 
 require('dotenv').config();
@@ -111,6 +110,25 @@ app.post('/send-email', async (req, res) => {
     });
   }
 });
+
+// Cleanup expired blacklisted tokens every 24 hours
+setInterval(async () => {
+    try {
+        const blacklistRef = db.collection('tokenBlacklist');
+        const now = new Date();
+        const snapshot = await blacklistRef
+            .where('expiresAt', '<=', now)
+            .get();
+
+        const batch = db.batch();
+        snapshot.docs.forEach((doc) => {
+            batch.delete(doc.ref);
+        });
+        await batch.commit();
+    } catch (error) {
+        console.error('Error cleaning up token blacklist:', error);
+    }
+}, 10 * 60 * 1000);
 
 // Error handler
 app.use((error, req, res, next) => {
