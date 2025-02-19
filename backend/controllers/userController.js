@@ -68,7 +68,7 @@ exports.getUserById = async (req, res) => {
         const userDoc = await userRef.get();
         
         if (!userDoc.exists) {
-            return res.status(404).send({ message: 'User is not found' });
+            return res.status(404).send({ message: 'User is not found'});
         }
 
         const userData = {

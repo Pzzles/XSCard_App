@@ -8,31 +8,27 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
 
+// Update interfaces to match new data structure
 interface UserData {
   id: string;
-  name: string;
-  surname: string;
-  email: string;
-  company: string;
-  phone: string;  // Changed from phoneNumber to phone
-  occupation: string;
-  status: string;
-  profileImage: string | null;
-  companyLogo: string | null;  // Add this line
-  colorScheme?: string;
+  cards: CardData[];
 }
 
 interface CardData {
-  CardId: string;
+  name: string;
+  surname: string;
+  email: string;
+  phone: string;
   Company: string;
-  Email: string;
-  PhoneNumber: string;
-  title: string;
-  socialLinks: {
-    platform: string;
-    url: string;
-  }[];
+  occupation: string;
+  profileImage: string | null;
+  companyLogo: string | null;
+  socials: {
+    [key: string]: string | null;
+  };
   colorScheme?: string;
+  createdAt: string;
+  UserId: any;
 }
 
 interface ShareOption {
@@ -68,11 +64,11 @@ const socialBaseUrls: { [key: string]: string } = {
 export default function CardsScreen() {
   const [qrCode, setQrCode] = useState<string>('');
   const [userData, setUserData] = useState<UserData | null>(null);
-  const [cardData, setCardData] = useState<CardData | null>(null);
+  const [cardColor, setCardColor] = useState(COLORS.secondary);
+  // Remove cardData state since it's now part of userData
   const borderRotation = useRef(new Animated.Value(0)).current;
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
-  const [cardColor, setCardColor] = useState(COLORS.secondary);
 
   // Add loading state
   const [isLoading, setIsLoading] = useState(true);
@@ -95,30 +91,56 @@ export default function CardsScreen() {
   const loadUserData = async () => {
     try {
       const storedUserData = await AsyncStorage.getItem('userData');
+      const token = await AsyncStorage.getItem('userToken');
+      
       if (storedUserData) {
         const parsedUserData = JSON.parse(storedUserData);
+        const userId = parsedUserData.id || parsedUserData.uid; // Try both id and uid
         
-        // Fetch user details first to get the color scheme
-        const userResponse = await fetch(buildUrl(ENDPOINTS.GET_USER) + `/${parsedUserData.id}`);
-        const userData = await userResponse.json();
-
-        // Log the userData to see what we're getting
-        console.log('Loaded user data:', userData);
-
-        setUserData(userData);
-
-        // Set color from user data
-        if (userData.colorScheme) {
-          setCardColor(userData.colorScheme);
+        if (!userId) {
+          console.error('No user ID found in stored data:', parsedUserData);
+          return;
         }
 
-        // Then fetch card data
-        const cardResponse = await fetch(buildUrl(ENDPOINTS.GET_CARD) + `/${parsedUserData.id}`);
-        const cardData = await cardResponse.json();
-        setCardData(cardData);
+        // Fetch card data - this will now be our primary data source
+        const cardResponse = await fetch(buildUrl(ENDPOINTS.GET_CARD) + `/${userId}`, {
+          headers: {
+            'Authorization': token || '',
+          }
+        });
+
+        if (!cardResponse.ok) {
+          throw new Error(`Failed to fetch card data: ${cardResponse.status}`);
+        }
+
+        const cardsData = await cardResponse.json();
+        if (cardsData && cardsData.length > 0) {
+          interface CardResponse {
+            id: string;
+            cards: CardData[];
+          }
+
+                      interface CardArrayItem {
+                      id: string;
+                      cards: CardData[];
+                      }
+
+                      const userCard: CardResponse | undefined = (cardsData as CardArrayItem[]).find(card => card.id === userId);
+          if (userCard && userCard.cards && userCard.cards[0]) {
+            setUserData({
+              id: userId,
+              cards: userCard.cards
+            });
+
+            // Set card color if available
+            if (userCard.cards[0].colorScheme) {
+              setCardColor(userCard.cards[0].colorScheme);
+            }
+          }
+        }
 
         // Generate QR code
-        fetchQRCode(parsedUserData.id);
+        fetchQRCode(userId);
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -127,9 +149,11 @@ export default function CardsScreen() {
 
   const fetchQRCode = async (userId: string) => {
     try {
+      const token = await AsyncStorage.getItem('userToken');
       const response = await fetch(buildUrl(ENDPOINTS.GENERATE_QR_CODE) + `/${userId}`, {
         method: 'GET',
         headers: {
+          'Authorization': token || '',
           'Accept': 'image/png'
         }
       });
@@ -381,8 +405,8 @@ export default function CardsScreen() {
           <View style={styles.logoContainer}>
             <Image
               style={styles.logo}
-              source={userData?.companyLogo ? 
-                { uri: `${API_BASE_URL}${userData.companyLogo}` } : 
+              source={userData?.cards[0]?.companyLogo ? 
+                { uri: `${API_BASE_URL}${userData.cards[0].companyLogo}` } : 
                 require('../../../assets/images/logoplaceholder.jpg')
               }
             />
@@ -390,8 +414,8 @@ export default function CardsScreen() {
               <Animated.View style={[styles.profileImageContainer, { transform: [{ rotate: rotateInterpolate }] }]}>
                 <Image
                   style={styles.profileImage}
-                  source={userData?.profileImage ? 
-                    { uri: `${API_BASE_URL}${userData.profileImage}` } : 
+                  source={userData?.cards[0]?.profileImage ? 
+                    { uri: `${API_BASE_URL}${userData.cards[0].profileImage}` } : 
                     require('../../../assets/images/profile.png')
                   }
                 />
@@ -399,20 +423,20 @@ export default function CardsScreen() {
             </View>
           </View>
           <Text style={[styles.name, styles.leftAligned]}>
-            {userData ? `${userData.name} ${userData.surname}` : 'Loading...'}
+            {userData?.cards[0] ? `${userData.cards[0].name} ${userData.cards[0].surname}` : 'Loading...'}
           </Text>
           <Text style={[styles.position, styles.leftAligned]}>
-            {cardData?.title || userData?.occupation || 'Loading...'}
+            {userData?.cards[0]?.occupation || 'Loading...'}
           </Text>
           <Text style={[styles.company, styles.leftAligned]}>
-            {cardData?.Company || userData?.company || 'Loading...'}
+            {userData?.cards[0]?.Company || 'Loading...'}
           </Text>
           
           {/* Update the email contact section */}
           <TouchableOpacity 
             style={[styles.contactSection, styles.leftAligned]}
             onPress={() => {
-              const email = cardData?.Email || userData?.email;
+              const email = userData?.cards[0]?.email;
               if (email && email !== 'Loading...') {
                 handleEmailPress(email);
               }
@@ -420,7 +444,7 @@ export default function CardsScreen() {
           >
             <MaterialCommunityIcons name="email-outline" size={30} color={cardColor} />
             <Text style={styles.contactText}>
-              {cardData?.Email || userData?.email || 'Loading...'}
+              {userData?.cards[0]?.email || 'Loading...'}
             </Text>
           </TouchableOpacity>
 
@@ -428,7 +452,7 @@ export default function CardsScreen() {
           <TouchableOpacity 
             style={[styles.contactSection, styles.leftAligned]}
             onPress={() => {
-              const phone = userData?.phone;
+              const phone = userData?.cards[0]?.phone;
               if (phone && phone !== 'No phone number') {
                 handlePhonePress(phone);
               }
@@ -436,14 +460,14 @@ export default function CardsScreen() {
           >
             <MaterialCommunityIcons name="phone-outline" size={30} color={cardColor} />
             <Text style={styles.contactText}>
-              {userData?.phone || 'No phone number'}
+              {userData?.cards[0]?.phone || 'No phone number'}
             </Text>
           </TouchableOpacity>
 
           {/* Replace the existing social links section with this: */}
-          {userData && (
+          {userData?.cards[0]?.socials && (
             <View style={styles.socialLinksContainer}>
-              {Object.entries(userData).map(([key, value]) => {
+              {Object.entries(userData.cards[0].socials).map(([key, value]) => {
                 if (socialIcons[key] && value && value.trim() !== '') {
                   return (
                     <TouchableOpacity 
