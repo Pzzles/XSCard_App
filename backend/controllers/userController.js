@@ -87,37 +87,54 @@ exports.getUserById = async (req, res) => {
 };
 
 exports.addUser = async (req, res) => {
-    const { name, surname, email, password, occupation, company, status, phone } = req.body;
+    const { 
+        name, surname, email, password, occupation, company, 
+        status, phone, plan = 'free', socials = {} 
+    } = req.body;
     
     try {
         // Create user in Firebase Auth
         const userRecord = await admin.auth().createUser({
             email: email,
             password: password,
-            displayName: `${name} ${surname}`,
             emailVerified: false
         });
 
         const verificationToken = Math.random().toString(36).substring(2) + Date.now().toString(36);
         
+        // Data for users collection
         const userData = {
             uid: userRecord.uid,
-            name, 
-            surname, 
             email,
-            occupation, 
-            company, 
-            status, 
-            phone,
-            profileImage: req.files?.profileImage ? `/profiles/${req.files.profileImage[0].filename}` : null,
-            companyLogo: req.files?.companyLogo ? `/profiles/${req.files.companyLogo[0].filename}` : null,
+            status,
+            plan,
             createdAt: new Date().toISOString(),
             isEmailVerified: false,
-            verificationToken: verificationToken
+            verificationToken
         };
 
-        // Store additional user data in Firestore
+        // Data for cards collection
+        const cardData = {
+            cards: [{
+                name,
+                surname,
+                email,
+                phone,
+                occupation,
+                company,
+                profileImage: req.files?.profileImage ? `/profiles/${req.files.profileImage[0].filename}` : null,
+                companyLogo: req.files?.companyLogo ? `/profiles/${req.files.companyLogo[0].filename}` : null,
+                socials,
+                colorScheme: '#E9C46A', // Default color
+                createdAt: new Date().toISOString()
+            }]
+        };
+
+        // Store user data in Firestore
         await db.collection('users').doc(userRecord.uid).set(userData);
+        
+        // Store card data in Firestore
+        await db.collection('cards').doc(userRecord.uid).set(cardData);
 
         // Send verification email
         const verificationLink = `${req.protocol}://${req.get('host')}/verify-email?token=${verificationToken}&uid=${userRecord.uid}`;

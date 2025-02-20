@@ -1,7 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const contactController = require('../controllers/contactController');
+const { authenticateUser } = require('../middleware/auth');
 
+// Apply authentication middleware to all contact routes
+router.use(authenticateUser);
+
+// Protected routes
 router.get('/Contacts', contactController.getAllContacts);
 router.get('/Contacts/:id', contactController.getContactById);
 router.post('/AddContact', contactController.addContact);

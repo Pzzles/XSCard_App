@@ -1,4 +1,4 @@
-const { db } = require('../firebase.js');
+const { db, admin } = require('../firebase.js');
 const QRCode = require('qrcode');
 
 exports.getAllCards = async (req, res) => {
@@ -56,9 +56,10 @@ exports.getCardById = async (req, res) => {
 };
 
 exports.addCard = async (req, res) => {
-    const { Company, Email, PhoneNumber, UserId, socialLinks, title } = req.body;
+    const { Company, Email, PhoneNumber, title, socialLinks } = req.body;
+    const userId = req.user.uid; // Get the current user's UID from the auth middleware
     
-    const requiredFields = ['Company', 'Email', 'PhoneNumber', 'UserId', 'title'];
+    const requiredFields = ['Company', 'Email', 'PhoneNumber', 'title'];
     const missingFields = requiredFields.filter(field => !req.body[field]);
     
     if (missingFields.length > 0) {
@@ -69,22 +70,41 @@ exports.addCard = async (req, res) => {
     }
 
     try {
-        const cardData = {
-            Company,
-            Email,
-            PhoneNumber,
-            UserId: db.doc(`users/${UserId}`),
-            socialLinks: socialLinks || [],
-            title,
-            createdAt: new Date().toISOString()
+        // Reference to the user's cards document
+        const cardRef = db.collection('cards').doc(userId);
+        
+        // Get the current cards document
+        const cardDoc = await cardRef.get();
+
+        const newCard = {
+            company: Company,
+            email: Email,
+            phone: PhoneNumber,
+            occupation: title,
+            socials: socialLinks || {},
+            colorScheme: '#E9C46A', // Default color
+            createdAt: new Date().toISOString(),
+            name: req.body.name || '',
+            surname: req.body.surname || '',
+            profileImage: null,
+            companyLogo: null
         };
 
-        const docRef = await db.collection('cards').add(cardData);
+        if (cardDoc.exists) {
+            // If document exists, update the cards array
+            await cardRef.update({
+                cards: admin.firestore.FieldValue.arrayUnion(newCard)
+            });
+        } else {
+            // If document doesn't exist, create it with the first card
+            await cardRef.set({
+                cards: [newCard]
+            });
+        }
         
         res.status(201).send({ 
             message: 'Card added successfully',
-            cardId: docRef.id,
-            cardData
+            cardData: newCard
         });
     } catch (error) {
         console.error('Error adding card:', error);
