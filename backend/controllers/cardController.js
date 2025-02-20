@@ -56,10 +56,20 @@ exports.getCardById = async (req, res) => {
 };
 
 exports.addCard = async (req, res) => {
-    const { Company, Email, PhoneNumber, title, socialLinks } = req.body;
+    const { 
+        company, 
+        email, 
+        phone, 
+        title, 
+        name,
+        surname,
+        colorScheme,
+        socials 
+    } = req.body;
+    
     const userId = req.user.uid; // Get the current user's UID from the auth middleware
     
-    const requiredFields = ['Company', 'Email', 'PhoneNumber', 'title'];
+    const requiredFields = ['company', 'email', 'phone', 'title'];
     const missingFields = requiredFields.filter(field => !req.body[field]);
     
     if (missingFields.length > 0) {
@@ -70,33 +80,28 @@ exports.addCard = async (req, res) => {
     }
 
     try {
-        // Reference to the user's cards document
         const cardRef = db.collection('cards').doc(userId);
-        
-        // Get the current cards document
         const cardDoc = await cardRef.get();
 
         const newCard = {
-            company: Company,
-            email: Email,
-            phone: PhoneNumber,
+            company,
+            email,
+            phone,
             occupation: title,
-            socials: socialLinks || {},
-            colorScheme: '#E9C46A', // Default color
+            name: name || '',
+            surname: surname || '',
+            socials: socials || {},
+            colorScheme: colorScheme || '#E9C46A', // Use provided color or default
             createdAt: new Date().toISOString(),
-            name: req.body.name || '',
-            surname: req.body.surname || '',
             profileImage: null,
             companyLogo: null
         };
 
         if (cardDoc.exists) {
-            // If document exists, update the cards array
             await cardRef.update({
                 cards: admin.firestore.FieldValue.arrayUnion(newCard)
             });
         } else {
-            // If document doesn't exist, create it with the first card
             await cardRef.set({
                 cards: [newCard]
             });
@@ -116,24 +121,47 @@ exports.addCard = async (req, res) => {
 };
 
 exports.updateCard = async (req, res) => {
-    const { id } = req.params;
+    const { id: userId } = req.params; // This is now the document ID (user's ID)
+    const { cardIndex } = req.query; // Get the array index from query params
     const updateData = req.body;
     
+    if (!cardIndex && cardIndex !== 0) {
+        return res.status(400).send({ message: 'Card index is required' });
+    }
+
     if (Object.keys(updateData).length === 0) {
         return res.status(400).send({ message: 'Update data is required' });
     }
 
     try {
-        const cardRef = db.collection('cards').doc(id);
+        const cardRef = db.collection('cards').doc(userId);
         const doc = await cardRef.get();
 
         if (!doc.exists) {
-            return res.status(404).send({ message: 'Card not found' });
+            return res.status(404).send({ message: 'User cards not found' });
         }
 
-        await cardRef.update(updateData);
+        const cardsData = doc.data();
+        if (!cardsData.cards || !cardsData.cards[cardIndex]) {
+            return res.status(404).send({ message: 'Card not found at specified index' });
+        }
+
+        // Update the specific card in the array
+        const updatedCards = [...cardsData.cards];
+        updatedCards[cardIndex] = {
+            ...updatedCards[cardIndex],
+            ...updateData
+        };
+
+        // Update the document with the modified array
+        await cardRef.update({
+            cards: updatedCards
+        });
+
         res.status(200).send({ 
             message: 'Card updated successfully',
+            updatedCard: updatedCards[cardIndex],
+            cardIndex: cardIndex,
             updatedFields: Object.keys(updateData)
         });
     } catch (error) {
@@ -146,20 +174,37 @@ exports.updateCard = async (req, res) => {
 };
 
 exports.deleteCard = async (req, res) => {
-    const { id } = req.params;
+    const { id: userId } = req.params;
+    const { cardIndex } = req.query;
     
+    if (!cardIndex && cardIndex !== 0) {
+        return res.status(400).send({ message: 'Card index is required' });
+    }
+
     try {
-        const cardRef = db.collection('cards').doc(id);
+        const cardRef = db.collection('cards').doc(userId);
         const doc = await cardRef.get();
         
         if (!doc.exists) {
-            return res.status(404).send({ message: 'Card not found' });
+            return res.status(404).send({ message: 'User cards not found' });
         }
 
-        await cardRef.delete();
+        const cardsData = doc.data();
+        if (!cardsData.cards || !cardsData.cards[cardIndex]) {
+            return res.status(404).send({ message: 'Card not found at specified index' });
+        }
+
+        // Remove the card at the specified index
+        const updatedCards = cardsData.cards.filter((_, index) => index !== parseInt(cardIndex));
+
+        // Update the document with the modified array
+        await cardRef.update({
+            cards: updatedCards
+        });
+
         res.status(200).send({ 
             message: 'Card deleted successfully',
-            deletedCardId: id
+            deletedCardIndex: cardIndex
         });
     } catch (error) {
         console.error('Delete card error:', error);
@@ -202,28 +247,47 @@ exports.generateQR = async (req, res) => {
 };
 
 exports.updateCardColor = async (req, res) => {
-    const { id } = req.params;
+    const { id: userId } = req.params;
+    const { cardIndex } = req.query;
     const { color } = req.body;
     
+    if (!cardIndex && cardIndex !== 0) {
+        return res.status(400).send({ message: 'Card index is required' });
+    }
+
     if (!color) {
         return res.status(400).send({ message: 'Color is required' });
     }
 
     try {
-        const cardRef = db.collection('cards').doc(id);
+        const cardRef = db.collection('cards').doc(userId);
         const doc = await cardRef.get();
 
         if (!doc.exists) {
-            return res.status(404).send({ message: 'Card not found' });
+            return res.status(404).send({ message: 'User cards not found' });
         }
 
-        await cardRef.update({
+        const cardsData = doc.data();
+        if (!cardsData.cards || !cardsData.cards[cardIndex]) {
+            return res.status(404).send({ message: 'Card not found at specified index' });
+        }
+
+        // Update the color of the specific card
+        const updatedCards = [...cardsData.cards];
+        updatedCards[cardIndex] = {
+            ...updatedCards[cardIndex],
             colorScheme: color
+        };
+
+        // Update the document with the modified array
+        await cardRef.update({
+            cards: updatedCards
         });
 
         res.status(200).send({ 
             message: 'Card color updated successfully',
-            color
+            color,
+            cardIndex: cardIndex
         });
     } catch (error) {
         console.error('Error updating card color:', error);

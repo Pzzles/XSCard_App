@@ -10,9 +10,9 @@ router.use(authenticateUser);
 router.get('/Cards', cardController.getAllCards);
 router.get('/Cards/:id', cardController.getCardById);
 router.post('/AddCard', cardController.addCard);
-router.patch('/Cards/:id', cardController.updateCard);
-router.patch('/Cards/:id/color', cardController.updateCardColor);
-router.delete('/Cards/:id', cardController.deleteCard);
+router.patch('/Cards/:id', cardController.updateCard); // Now expects ?cardIndex=0 in query
+router.patch('/Cards/:id/color', cardController.updateCardColor); // Now expects ?cardIndex=0 in query
+router.delete('/Cards/:id', cardController.deleteCard); // Now expects ?cardIndex=0 in query
 router.get('/generateQR/:userId', cardController.generateQR);
 
 module.exports = router;
