@@ -168,7 +168,7 @@ export default function ContactsScreen() {
         const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
         const message = contact 
           ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.number}\nMet at: ${contact.howWeMet}`
-          : `Check out my business card: ${shareUrl}`;
+          : `Check out my digital business card! ${shareUrl}`;
           
         Linking.openURL(`whatsapp://send?text=${encodeURIComponent(message)}`).catch(() => {
           showModal('Error', 'WhatsApp is not installed on your device');
@@ -218,24 +218,44 @@ export default function ContactsScreen() {
     }
   ];
 
-  const handleShare = (contact?: Contact) => {
-    if (contact) {
-      setSelectedContact(contact);
+  const handleShare = async (contact?: Contact) => {
+    try {
+      const storedUserData = await AsyncStorage.getItem('userData');
+      if (!storedUserData) {
+        showModal('Error', 'User data not available');
+        return;
+      }
+      
+      const userData = JSON.parse(storedUserData);
+      const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
+      
+      if (contact) {
+        setSelectedContact(contact);
+      }
+      setIsShareModalVisible(true);
+    } catch (error) {
+      console.error('Error preparing share:', error);
+      showModal('Error', 'Failed to prepare sharing');
     }
-    setIsShareModalVisible(true);
   };
 
   const handlePlatformSelect = async (platform: string) => {
     try {
       const storedUserData = await AsyncStorage.getItem('userData');
       if (!storedUserData) {
-        showModal('Error', 'User data not found');
+        showModal('Error', 'User data not available');
         return;
       }
-
+      
       const userData = JSON.parse(storedUserData);
       const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
-      const message = `Check out my business card: ${shareUrl}`;
+      
+      let message;
+      if (selectedContact) {
+        message = `Contact Information:\nName: ${selectedContact.name} ${selectedContact.surname}\nPhone: ${selectedContact.number}\nMet at: ${selectedContact.howWeMet}`;
+      } else {
+        message = `Check out my digital business card! ${shareUrl}`;
+      }
 
       switch (platform) {
         case 'whatsapp':
@@ -249,7 +269,8 @@ export default function ContactsScreen() {
           });
           break;
         case 'email':
-          Linking.openURL(`mailto:?subject=Business Card&body=${encodeURIComponent(message)}`).catch(() => {
+          const subject = selectedContact ? 'Contact Information' : 'Digital Business Card';
+          Linking.openURL(`mailto:?subject=${subject}&body=${encodeURIComponent(message)}`).catch(() => {
             showModal('Error', 'Could not open email client');
           });
           break;
@@ -257,6 +278,7 @@ export default function ContactsScreen() {
 
       setIsShareModalVisible(false);
       setSelectedPlatform(null);
+      setSelectedContact(null);
     } catch (error) {
       console.error('Error sharing:', error);
       showModal('Error', 'Failed to share');

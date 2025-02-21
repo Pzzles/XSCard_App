@@ -338,9 +338,6 @@ export default function CardsScreen() {
       marginBottom: 20,
       backgroundColor: '#fff',
       marginTop: 20,
-      borderWidth: 4,
-      borderColor: cardColor,
-      borderRadius: 10,
       padding: 10,
     },
     walletButton: {
@@ -640,9 +637,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     backgroundColor: '#fff',
     marginTop: 20,
-    borderWidth: 4,
-    borderColor: COLORS.secondary,
-    borderRadius: 10,
     padding: 10,
   },
   qrCode: {

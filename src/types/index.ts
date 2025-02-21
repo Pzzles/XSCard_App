@@ -19,10 +19,12 @@ export type Contact = {
 export type RootTabParamList = {
   Cards: undefined;
   Contacts: undefined;
+  AdminDashboard: undefined;
 };
 
 export type AuthStackParamList = {
-  SignUp: undefined;
   SignIn: undefined;
+  SignUp: undefined;
+  AdminDashboard: undefined;
   MainApp: undefined;
 };
