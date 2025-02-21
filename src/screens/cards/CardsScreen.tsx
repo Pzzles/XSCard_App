@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, Image, TouchableOpacity, Animated, ScrollView, 
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
-import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
+import { API_BASE_URL, ENDPOINTS, buildUrl, authenticatedFetch, getUserId } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
@@ -19,7 +19,7 @@ interface CardData {
   surname: string;
   email: string;
   phone: string;
-  Company: string;
+  company: string;
   occupation: string;
   profileImage: string | null;
   companyLogo: string | null;
@@ -90,58 +90,30 @@ export default function CardsScreen() {
 
   const loadUserData = async () => {
     try {
-      const storedUserData = await AsyncStorage.getItem('userData');
-      const token = await AsyncStorage.getItem('userToken');
-      
-      if (storedUserData) {
-        const parsedUserData = JSON.parse(storedUserData);
-        const userId = parsedUserData.id || parsedUserData.uid; // Try both id and uid
-        
-        if (!userId) {
-          console.error('No user ID found in stored data:', parsedUserData);
-          return;
-        }
+      const userId = await getUserId(); // Gets userId stored during login
+      if (!userId) {
+        console.error('No user ID found');
+        return;
+      }
 
-        // Fetch card data - this will now be our primary data source
-        const cardResponse = await fetch(buildUrl(ENDPOINTS.GET_CARD) + `/${userId}`, {
-          headers: {
-            'Authorization': token || '',
-          }
+      // Uses authenticated request to fetch cards
+      const cardResponse = await authenticatedFetch(ENDPOINTS.GET_CARD + `/${userId}`);
+      const cardsArray = await cardResponse.json();
+
+      if (cardsArray && cardsArray.length > 0) {
+        setUserData({
+          id: userId,
+          cards: cardsArray // The response is now directly the cards array
         });
 
-        if (!cardResponse.ok) {
-          throw new Error(`Failed to fetch card data: ${cardResponse.status}`);
+        // Set card color from the first card (index 0)
+        if (cardsArray[0].colorScheme) {
+          setCardColor(cardsArray[0].colorScheme);
         }
-
-        const cardsData = await cardResponse.json();
-        if (cardsData && cardsData.length > 0) {
-          interface CardResponse {
-            id: string;
-            cards: CardData[];
-          }
-
-                      interface CardArrayItem {
-                      id: string;
-                      cards: CardData[];
-                      }
-
-                      const userCard: CardResponse | undefined = (cardsData as CardArrayItem[]).find(card => card.id === userId);
-          if (userCard && userCard.cards && userCard.cards[0]) {
-            setUserData({
-              id: userId,
-              cards: userCard.cards
-            });
-
-            // Set card color if available
-            if (userCard.cards[0].colorScheme) {
-              setCardColor(userCard.cards[0].colorScheme);
-            }
-          }
-        }
-
-        // Generate QR code
-        fetchQRCode(userId);
       }
+
+      // Generate QR code
+      fetchQRCode(userId);
     } catch (error) {
       console.error('Error loading data:', error);
     }
@@ -429,7 +401,7 @@ export default function CardsScreen() {
             {userData?.cards[0]?.occupation || 'Loading...'}
           </Text>
           <Text style={[styles.company, styles.leftAligned]}>
-            {userData?.cards[0]?.Company || 'Loading...'}
+            {userData?.cards[0]?.company || 'Loading...'}
           </Text>
           
           {/* Update the email contact section */}

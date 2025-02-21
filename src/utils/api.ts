@@ -14,7 +14,7 @@ export interface PasscreatorResponse {
 const getBaseUrl = () => {
 
    //return 'https://xscard-app.onrender.com';
-    return 'http://192.168.8.30:8383';
+    return 'http://192.168.8.61:8383';
    // return 'http://192.168.8.7:8383';
 };
 
@@ -29,11 +29,13 @@ export const ENDPOINTS = {
     GET_CARD: '/Cards',
     ADD_CARD: '/AddCard',
     GET_CONTACTS: '/Contacts',
+    ADD_CONTACT: '/AddContact',
     UPDATE_USER: '/UpdateUser',
     UPDATE_PROFILE_IMAGE: '/Users/:id/profile-image',
-    UPDATE_COMPANY_LOGO: '/Users/:id/company-logo', // Add this line
-    UPDATE_USER_COLOR: '/Users/:id/color', // Changed from Cards to Users
+    UPDATE_COMPANY_LOGO: '/Users/:id/company-logo', 
+    UPDATE_USER_COLOR: '/Users/:id/color', 
     ADD_TO_WALLET: '/Users/:id/wallet',
+    DELETE_CONTACT: '/Contacts'
 };
 
 export const buildUrl = (endpoint: string) => `${API_BASE_URL}${endpoint}`;
@@ -48,34 +50,37 @@ export const getAuthHeaders = async (additionalHeaders = {}) => {
   };
 };
 
-// Add this utility function to get the user ID
-export const getUserId = async () => {
-  const userData = await AsyncStorage.getItem('userData');
-  if (!userData) return null;
-  
-  const parsed = JSON.parse(userData);
-  return parsed.id || parsed.uid || null;
+export const getUserId = async (): Promise<string | null> => {
+  try {
+    const userData = await AsyncStorage.getItem('userData');
+    if (userData) {
+      return JSON.parse(userData).id;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error getting user ID:', error);
+    return null;
+  }
 };
 
 // Helper function to make authenticated requests
 export const authenticatedFetch = async (endpoint: string, options: RequestInit = {}) => {
-  const headers = await getAuthHeaders(options.headers);
-  const response = await fetch(buildUrl(endpoint), {
-    ...options,
-    headers,
-  });
-  
-  if (!response.ok) {
-    if (response.status === 401) {
-      // Handle token expiration
-      await AsyncStorage.removeItem('userToken');
-      await AsyncStorage.removeItem('userData');
-      throw new Error('Authentication token expired');
-    }
-    
-    const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
-    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+  try {
+    const token = await AsyncStorage.getItem('userToken');
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `${token}`, // Token from login is used here
+      ...options.headers,
+    };
+
+    const response = await fetch(buildUrl(endpoint), {
+      ...options, 
+      headers,
+    });
+
+    return response;
+  } catch (error) {
+    console.error('Authenticated fetch error:', error);
+    throw error;
   }
-  
-  return response;
 };

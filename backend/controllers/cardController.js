@@ -1,6 +1,22 @@
 const { db, admin } = require('../firebase.js');
 const QRCode = require('qrcode');
 
+// Shared error response helper
+const sendError = (res, status, message, error = null) => {
+    console.error(`${message}:`, error);
+    res.status(status).send({ 
+        message,
+        ...(error && { error: error.message })
+    });
+};
+
+// Shared validation helper
+const validateUserAccess = async (userId, userUid) => {
+    if (userUid !== userId) {
+        throw new Error('Unauthorized access');
+    }
+};
+
 exports.getAllCards = async (req, res) => {
     try {
         console.log('Fetching all cards...');
@@ -23,35 +39,28 @@ exports.getAllCards = async (req, res) => {
         console.log(`Found ${cards.length} cards`);
         res.status(200).send(cards);
     } catch (error) {
-        console.error('Error fetching cards:', error);
-        res.status(500).send({ 
-            message: 'Internal Server Error', 
-            error: error.message 
-        });
+        sendError(res, 500, 'Error fetching cards', error);
     }
 };
 
 exports.getCardById = async (req, res) => {
     const { id } = req.params;
-    console.log('Fetching card with ID:', id);
+    
     try {
+        // Validates that requesting user matches the requested userId
+        await validateUserAccess(id, req.user.uid);
+
         const cardRef = db.collection('cards').doc(id);
         const doc = await cardRef.get();
         
-        if (!doc.exists) {
-            return res.status(404).send({ message: 'Card not found' });
+        if (!doc.exists || !doc.data().cards) {
+            return sendError(res, 404, 'No cards found for this user');
         }
         
-        res.status(200).send({
-            id: doc.id,
-            ...doc.data()
-        });
+        res.status(200).send(doc.data().cards);
     } catch (error) {
-        console.error('Error fetching card:', error);
-        res.status(500).send({ 
-            message: 'Internal Server Error', 
-            error: error.message 
-        });
+        sendError(res, error.message === 'Unauthorized access' ? 403 : 500, 
+            'Failed to fetch card data', error);
     }
 };
 
@@ -112,11 +121,7 @@ exports.addCard = async (req, res) => {
             cardData: newCard
         });
     } catch (error) {
-        console.error('Error adding card:', error);
-        res.status(500).send({ 
-            message: 'Internal Server Error', 
-            error: error.message 
-        });
+        sendError(res, 500, 'Error adding card', error);
     }
 };
 
@@ -165,11 +170,7 @@ exports.updateCard = async (req, res) => {
             updatedFields: Object.keys(updateData)
         });
     } catch (error) {
-        console.error('Error updating card:', error);
-        res.status(500).send({ 
-            message: 'Internal Server Error', 
-            error: error.message 
-        });
+        sendError(res, 500, 'Error updating card', error);
     }
 };
 
@@ -207,25 +208,21 @@ exports.deleteCard = async (req, res) => {
             deletedCardIndex: cardIndex
         });
     } catch (error) {
-        console.error('Delete card error:', error);
-        res.status(500).send({ 
-            message: 'Failed to delete card',
-            error: error.message 
-        });
+        sendError(res, 500, 'Failed to delete card', error);
     }
 };
 
 exports.generateQR = async (req, res) => {
     const { userId } = req.params;
-    console.log('Generating QR code for user ID:', userId);
     
     try {
+        await validateUserAccess(userId, req.user.uid);
+
         const userRef = db.collection('users').doc(userId);
         const userDoc = await userRef.get();
         
         if (!userDoc.exists) {
-            console.log('User not found:', userId);
-            return res.status(404).send({ message: 'User not found' });
+            return sendError(res, 404, 'User not found');
         }
 
         const redirectUrl = `${req.protocol}://${req.get('host')}/saveContact?userId=${userId}`;
@@ -238,11 +235,8 @@ exports.generateQR = async (req, res) => {
         res.setHeader('Content-Type', 'image/png');
         res.status(200).send(qrCodeBuffer);
     } catch (error) {
-        console.error('Error generating QR code:', error);
-        res.status(500).send({ 
-            message: 'Failed to generate QR code',
-            error: error.message 
-        });
+        sendError(res, error.message === 'Unauthorized access' ? 403 : 500, 
+            'Failed to generate QR code', error);
     }
 };
 
@@ -290,10 +284,6 @@ exports.updateCardColor = async (req, res) => {
             cardIndex: cardIndex
         });
     } catch (error) {
-        console.error('Error updating card color:', error);
-        res.status(500).send({ 
-            message: 'Failed to update card color',
-            error: error.message 
-        });
+        sendError(res, 500, 'Failed to update card color', error);
     }
 };
