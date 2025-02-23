@@ -1,5 +1,20 @@
 const { db, admin } = require('../firebase.js');
 const QRCode = require('qrcode');
+const multer = require('multer');
+const path = require('path');
+
+// Configure storage
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/');
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage: storage });
 
 // Shared error response helper
 const sendError = (res, status, message, error = null) => {
@@ -125,18 +140,10 @@ exports.addCard = async (req, res) => {
     }
 };
 
+// Update the updateCard function to handle both JSON and multipart/form-data
 exports.updateCard = async (req, res) => {
-    const { id: userId } = req.params; // This is now the document ID (user's ID)
-    const { cardIndex } = req.query; // Get the array index from query params
-    const updateData = req.body;
-    
-    if (!cardIndex && cardIndex !== 0) {
-        return res.status(400).send({ message: 'Card index is required' });
-    }
-
-    if (Object.keys(updateData).length === 0) {
-        return res.status(400).send({ message: 'Update data is required' });
-    }
+    const { id: userId } = req.params;
+    const { cardIndex = 0 } = req.query;
 
     try {
         const cardRef = db.collection('cards').doc(userId);
@@ -151,6 +158,21 @@ exports.updateCard = async (req, res) => {
             return res.status(404).send({ message: 'Card not found at specified index' });
         }
 
+        let updateData = {};
+
+        // Handle file upload
+        if (req.file) {
+            const filePath = `/profiles/${req.file.filename}`; // Changed from /uploads/ to /profiles/
+            if (req.body.imageType === 'profileImage') {
+                updateData.profileImage = filePath;
+            } else if (req.body.imageType === 'companyLogo') {
+                updateData.companyLogo = filePath;
+            }
+        } else if (req.body) {
+            // If no file but has body data, it's a regular update
+            updateData = JSON.parse(JSON.stringify(req.body));
+        }
+
         // Update the specific card in the array
         const updatedCards = [...cardsData.cards];
         updatedCards[cardIndex] = {
@@ -158,19 +180,21 @@ exports.updateCard = async (req, res) => {
             ...updateData
         };
 
-        // Update the document with the modified array
+        // Update the document
         await cardRef.update({
             cards: updatedCards
         });
 
         res.status(200).send({ 
             message: 'Card updated successfully',
-            updatedCard: updatedCards[cardIndex],
-            cardIndex: cardIndex,
-            updatedFields: Object.keys(updateData)
+            updatedCard: updatedCards[cardIndex]
         });
     } catch (error) {
-        sendError(res, 500, 'Error updating card', error);
+        console.error('Update card error:', error);
+        res.status(500).send({
+            message: 'Failed to update card',
+            error: error.message
+        });
     }
 };
 

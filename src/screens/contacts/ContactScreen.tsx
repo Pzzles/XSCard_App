@@ -78,14 +78,16 @@ export default function ContactsScreen() {
 
       // Fetch contacts
       const contactResponse = await authenticatedFetch(ENDPOINTS.GET_CONTACTS + `/${userId}`);
-      const contactData: ContactData = await contactResponse.json();
+      const data = await contactResponse.json();
       
-      if (contactData && contactData.contactList) {
-        setContacts(contactData.contactList);
+      console.log('Loaded contacts data:', data); // Debug log
+
+      if (data && Array.isArray(data.contactList)) {
+        setContacts(data.contactList);
         setContactDocId(userId);
-        console.log('Loaded contacts:', contactData.contactList); // Debug log
       } else {
-        console.log('No contacts found in response:', contactData); // Debug log
+        console.log('No contacts found or invalid format:', data);
+        setContacts([]);
       }
     } catch (error) {
       console.error('Error loading contacts:', error);
@@ -95,24 +97,39 @@ export default function ContactsScreen() {
 
   const deleteContact = async (index: number) => {
     try {
-      if (!contactDocId) {
-        throw new Error('Contact document ID not found');
+      const userId = await getUserId();
+      if (!userId) {
+        throw new Error('User ID not found');
       }
+
+      console.log('Attempting to delete contact:', { userId, index });
 
       const response = await authenticatedFetch(
-        `${ENDPOINTS.DELETE_CONTACT}/${contactDocId}/contact/${index}`,
-        { method: 'DELETE' }
+        `${ENDPOINTS.DELETE_CONTACT}/${userId}/contact/${index}`,
+        { 
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
       );
 
+      const responseData = await response.json();
+      console.log('Delete response:', responseData);
+
       if (!response.ok) {
-        throw new Error('Failed to delete contact');
+        throw new Error(responseData.message || 'Failed to delete contact');
       }
 
-      loadContacts(); // Refresh the list after deletion
-      showModal('Success', 'Contact deleted successfully');
+      // Update local state
+      const updatedContacts = [...contacts];
+      updatedContacts.splice(index, 1);
+      setContacts(updatedContacts);
+      
+      showModal('Success', responseData.message || 'Contact deleted successfully');
     } catch (error) {
       console.error('Error deleting contact:', error);
-      showModal('Error', 'Failed to delete contact');
+      showModal('Error', error instanceof Error ? error.message : 'Failed to delete contact');
     }
   };
 

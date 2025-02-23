@@ -14,7 +14,7 @@ export interface PasscreatorResponse {
 const getBaseUrl = () => {
 
    //return 'https://xscard-app.onrender.com';
-    return 'http://192.168.8.61:8383';
+    return 'http://192.168.119.148:8383';
    // return 'http://192.168.8.7:8383';
 };
 
@@ -35,7 +35,9 @@ export const ENDPOINTS = {
     UPDATE_COMPANY_LOGO: '/Users/:id/company-logo', 
     UPDATE_USER_COLOR: '/Users/:id/color', 
     ADD_TO_WALLET: '/Users/:id/wallet',
-    DELETE_CONTACT: '/Contacts'
+    DELETE_CONTACT: '/Contacts',
+    UPDATE_CARD: '/Cards/:id',  // Update this line
+    UPDATE_CARD_COLOR: '/Cards/:id/color',  // Add this line
 };
 
 export const buildUrl = (endpoint: string) => `${API_BASE_URL}${endpoint}`;
