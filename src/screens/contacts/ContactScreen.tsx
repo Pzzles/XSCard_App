@@ -3,24 +3,27 @@ import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, TextInput,
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
-import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
+import { API_BASE_URL, ENDPOINTS, buildUrl, authenticatedFetch, getUserId } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+// Update interfaces to match Firestore structure
 interface Contact {
   name: string;
   surname: string;
   number: string;
-  howWeMet: string; // Add howWeMet field
-  createdAt: string;
+  howWeMet: string;
+  createdAt: {
+    _seconds: number;
+    _nanoseconds: number;
+  };
 }
 
 interface ContactData {
   id: string;
-  userId: string;
-  contactsList: Contact[];
+  contactList: Contact[];  // Changed from contactsList to contactList to match DB
 }
 
 interface ShareOption {
@@ -59,26 +62,32 @@ export default function ContactsScreen() {
 
   const loadContacts = async () => {
     try {
-      const storedUserData = await AsyncStorage.getItem('userData');
-      if (storedUserData) {
-        const parsedUserData = JSON.parse(storedUserData);
-        
-        // Fetch user details to get the color scheme
-        const response = await fetch(buildUrl(ENDPOINTS.GET_USER) + `/${parsedUserData.id}`);
-        const userData: UserData = await response.json();
-        
-        // Set color from user data
-        if (userData.colorScheme) {
-          setCardColor(userData.colorScheme);
-        }
+      const userId = await getUserId();
+      if (!userId) {
+        console.error('No user ID found');
+        return;
+      }
 
-        // Continue with existing contacts loading logic
-        const contactResponse = await fetch(buildUrl(ENDPOINTS.GET_CONTACTS) + `/${parsedUserData.id}`);
-        const contactData: ContactData = await contactResponse.json();
-        if (contactData) {
-          setContacts(contactData.contactsList || []);
-          setContactDocId(contactData.id); // Store the contact document ID
-        }
+      // Get user color scheme
+      const userResponse = await authenticatedFetch(ENDPOINTS.GET_USER + `/${userId}`);
+      const userData = await userResponse.json();
+      
+      if (userData?.colorScheme) {
+        setCardColor(userData.colorScheme);
+      }
+
+      // Fetch contacts
+      const contactResponse = await authenticatedFetch(ENDPOINTS.GET_CONTACTS + `/${userId}`);
+      const data = await contactResponse.json();
+      
+      console.log('Loaded contacts data:', data); // Debug log
+
+      if (data && Array.isArray(data.contactList)) {
+        setContacts(data.contactList);
+        setContactDocId(userId);
+      } else {
+        console.log('No contacts found or invalid format:', data);
+        setContacts([]);
       }
     } catch (error) {
       console.error('Error loading contacts:', error);
@@ -88,37 +97,51 @@ export default function ContactsScreen() {
 
   const deleteContact = async (index: number) => {
     try {
-      if (!contactDocId) {
-        throw new Error('Contact document ID not found');
+      const userId = await getUserId();
+      if (!userId) {
+        throw new Error('User ID not found');
       }
 
-      const response = await fetch(`${API_BASE_URL}/Contacts/${contactDocId}/contact/${index}`, {
-        method: 'DELETE',
-      });
+      console.log('Attempting to delete contact:', { userId, index });
+
+      const response = await authenticatedFetch(
+        `${ENDPOINTS.DELETE_CONTACT}/${userId}/contact/${index}`,
+        { 
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      const responseData = await response.json();
+      console.log('Delete response:', responseData);
 
       if (!response.ok) {
-        throw new Error('Failed to delete contact');
+        throw new Error(responseData.message || 'Failed to delete contact');
       }
 
-      // Refresh contacts list after successful deletion
-      loadContacts();
-      showModal('Success', 'Contact deleted successfully');
+      // Update local state
+      const updatedContacts = [...contacts];
+      updatedContacts.splice(index, 1);
+      setContacts(updatedContacts);
+      
+      showModal('Success', responseData.message || 'Contact deleted successfully');
     } catch (error) {
       console.error('Error deleting contact:', error);
-      showModal('Error', 'Failed to delete contact');
+      showModal('Error', error instanceof Error ? error.message : 'Failed to delete contact');
     }
   };
 
+  // Update formatDate to handle Firestore timestamp
   const formatDate = (dateString: any) => {
     try {
       let date;
       
       // Handle Firestore timestamp
       if (dateString && dateString._seconds) {
-        // Convert Firestore timestamp to Date
         date = new Date(dateString._seconds * 1000);
       } else if (typeof dateString === 'string') {
-        // Handle ISO string
         date = new Date(dateString);
       } else if (dateString instanceof Date) {
         date = dateString;
@@ -412,7 +435,9 @@ export default function ContactsScreen() {
                           <Text style={styles.contactPosition}>{contact.number}</Text>
                           <View style={styles.metContainer}>
                             <Text style={styles.contactHowWeMet}>Met at: {contact.howWeMet}</Text>
-                            <Text style={styles.contactDate}>Date: {formatDate(contact.createdAt)}</Text>
+                            <Text style={styles.contactDate}>
+                              Date: {formatDate(contact.createdAt)}
+                            </Text>
                           </View>
                         </View>
                       </View>

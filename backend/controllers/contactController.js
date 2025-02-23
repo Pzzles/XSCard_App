@@ -227,31 +227,40 @@ exports.deleteContact = async (req, res) => {
 exports.deleteContactFromList = async (req, res) => {
     const { id, index } = req.params;
     const contactIndex = parseInt(index);
-
-    if (isNaN(contactIndex)) {
-        return res.status(400).send({ message: 'Invalid contact index' });
-    }
+    
+    console.log('Delete request received:', { id, index, contactIndex }); // Debug log
 
     try {
         const contactRef = db.collection('contacts').doc(id);
         const doc = await contactRef.get();
         
         if (!doc.exists) {
+            console.log('Document not found:', id);
             return res.status(404).send({ message: 'Contact list not found' });
         }
 
-        const currentContacts = doc.data().contactsList || [];
+        const data = doc.data();
+        // Check if contactList exists (not contactsList)
+        const currentContacts = data.contactList || [];
         
+        console.log('Current contacts:', { 
+            total: currentContacts.length, 
+            requestedIndex: contactIndex,
+            contacts: currentContacts
+        });
+
         if (contactIndex < 0 || contactIndex >= currentContacts.length) {
+            console.log('Index out of range:', { contactIndex, length: currentContacts.length });
             return res.status(400).send({ message: 'Contact index out of range' });
         }
 
         currentContacts.splice(contactIndex, 1);
 
         await contactRef.update({
-            contactsList: currentContacts
+            contactList: currentContacts // Note: using contactList, not contactsList
         });
 
+        console.log('Contact deleted successfully');
         res.status(200).send({ 
             message: 'Contact deleted successfully',
             remainingContacts: currentContacts.length

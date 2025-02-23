@@ -96,14 +96,14 @@ export default function SignInScreen() {
       const data = await response.json();
 
       if (response.ok) {
-        await AsyncStorage.setItem('userData', JSON.stringify({
-          id: data.user.id,
-          name: data.user.name,
-          email: data.user.email,
-          company: data.user.company,
-          role: 'user' // Add role for regular users
-        }));
-        navigation.navigate('MainApp');
+        // Store the token and user data, making sure to include the uid as id
+        await AsyncStorage.setItem('userToken', `Bearer ${data.token}`);
+        const userData = {
+          ...data.user,
+          id: data.user.uid // Ensure the uid is stored as id
+        };
+        await AsyncStorage.setItem('userData', JSON.stringify(userData));
+        navigation.replace('MainApp');
       } else {
         setErrorMessage(data.message || 'Sign in failed');
         setShowError(true);
