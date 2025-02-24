@@ -1,14 +1,18 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
 import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../../types';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+type AddCardsNavigationProp = StackNavigationProp<RootStackParamList>;
+
 export default function AddCards() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<AddCardsNavigationProp>();
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     firstName: '',
@@ -38,6 +42,7 @@ export default function AddCards() {
         return;
       }
 
+      // Get stored user data
       const storedUserData = await AsyncStorage.getItem('userData');
       if (!storedUserData) {
         Alert.alert('Error', 'Please login first');
@@ -46,6 +51,28 @@ export default function AddCards() {
 
       const userData = JSON.parse(storedUserData);
       
+      // Create new card data
+      const newCard = {
+        CardId: Date.now().toString(), // Generate a unique ID
+        Company: formData.company,
+        Email: formData.email,
+        PhoneNumber: formData.phoneNumber,
+        title: formData.occupation,
+        socialLinks: [],
+        // Add any other card fields you need
+      };
+
+      // Get existing cards from AsyncStorage
+      const existingCardsJson = await AsyncStorage.getItem('userCards');
+      const existingCards = existingCardsJson ? JSON.parse(existingCardsJson) : [];
+
+      // Add new card to the array
+      const updatedCards = [...existingCards, newCard];
+
+      // Save updated cards to AsyncStorage
+      await AsyncStorage.setItem('userCards', JSON.stringify(updatedCards));
+
+      /* Comment out server communication for now
       const response = await fetch(buildUrl(ENDPOINTS.ADD_CARD), {
         method: 'POST',
         headers: {
@@ -66,8 +93,18 @@ export default function AddCards() {
       }
 
       const result = await response.json();
-      Alert.alert('Success', 'Card created successfully');
-      navigation.goBack();
+      */
+
+      Alert.alert('Success', 'Card created successfully', [
+        {
+          text: 'OK',
+          onPress: () => {
+            // Go back to previous screen (CardsScreen)
+            navigation.goBack();
+          }
+        }
+      ]);
+
     } catch (error) {
       console.error('Error creating card:', error);
       Alert.alert('Error', 'Failed to create card. Please try again.');
@@ -88,82 +125,93 @@ export default function AddCards() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content}>
-        {/* Warning Message */}
-        <View style={styles.warningBox}>
-          <MaterialIcons name="info" size={20} color={COLORS.black} />
-          <Text style={styles.warningText}>
-            1/5 card limit met. Save and upgrade to premium plan to keep this card
-          </Text>
-        </View>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 30 : 0}
+      >
+        <ScrollView 
+          style={styles.content}
+          contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 20 : 20 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Warning Message */}
+          <View style={styles.warningBox}>
+            <MaterialIcons name="info" size={20} color={COLORS.black} />
+            <Text style={styles.warningText}>
+              1/5 card limit met. Save and upgrade to premium plan to keep this card
+            </Text>
+          </View>
 
-        {/* Images & Layout Section */}
-        <Text style={styles.sectionTitle}>Images & layout</Text>
-        <View style={styles.imageButtons}>
-          <TouchableOpacity style={styles.imageButton}>
-            <MaterialIcons name="add" size={24} color={COLORS.black} />
-            <Text style={styles.buttonText}>Profile Picture</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.imageButton}>
-            <MaterialIcons name="add" size={24} color={COLORS.black} />
-            <Text style={styles.buttonText}>Company logo</Text>
-          </TouchableOpacity>
-        </View>
+          {/* Images & Layout Section */}
+          <Text style={styles.sectionTitle}>Images & layout</Text>
+          <View style={styles.imageButtons}>
+            <TouchableOpacity style={styles.imageButton}>
+              <MaterialIcons name="add" size={24} color={COLORS.black} />
+              <Text style={styles.buttonText}>Profile Picture</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.imageButton}>
+              <MaterialIcons name="add" size={24} color={COLORS.black} />
+              <Text style={styles.buttonText}>Company logo</Text>
+            </TouchableOpacity>
+          </View>
 
-        {/* Personal Details Section */}
-        <Text style={styles.sectionTitle}>Personal details</Text>
-        <View style={styles.form}>
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
-          <TextInput 
-            style={styles.input}
-            placeholder="First name..."
-            placeholderTextColor="#999"
-            value={formData.firstName}
-            onChangeText={(text) => setFormData({...formData, firstName: text})}
-          />
-          <TextInput 
-            style={styles.input}
-            placeholder="Occupation..."
-            placeholderTextColor="#999"
-            value={formData.occupation}
-            onChangeText={(text) => setFormData({...formData, occupation: text})}
-          />
-          <TextInput 
-            style={styles.input}
-            placeholder="Last name..."
-            placeholderTextColor="#999"
-            value={formData.lastName}
-            onChangeText={(text) => setFormData({...formData, lastName: text})}
-          />
-          <TextInput 
-            style={styles.input}
-            placeholder="Company name..."
-            placeholderTextColor="#999"
-            value={formData.company}
-            onChangeText={(text) => setFormData({...formData, company: text})}
-          />
-          <TextInput 
-            style={styles.input}
-            placeholder="Email..."
-            placeholderTextColor="#999"
-            value={formData.email}
-            onChangeText={(text) => setFormData({...formData, email: text})}
-            keyboardType="email-address"
-          />
-          <TextInput 
-            style={styles.input}
-            placeholder="Phone number..."
-            placeholderTextColor="#999"
-            value={formData.phoneNumber}
-            onChangeText={(text) => setFormData({...formData, phoneNumber: text})}
-            keyboardType="phone-pad"
-          />
-          <TouchableOpacity style={styles.addButton} onPress={handleAdd}>
-            <Text style={styles.addButtonText}>Add</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+          {/* Personal Details Section */}
+          <Text style={styles.sectionTitle}>Personal details</Text>
+          <View style={styles.form}>
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            <TextInput 
+              style={styles.input}
+              placeholder="First name..."
+              placeholderTextColor="#999"
+              value={formData.firstName}
+              onChangeText={(text) => setFormData({...formData, firstName: text})}
+            />
+            <TextInput 
+              style={styles.input}
+              placeholder="Occupation..."
+              placeholderTextColor="#999"
+              value={formData.occupation}
+              onChangeText={(text) => setFormData({...formData, occupation: text})}
+            />
+            <TextInput 
+              style={styles.input}
+              placeholder="Last name..."
+              placeholderTextColor="#999"
+              value={formData.lastName}
+              onChangeText={(text) => setFormData({...formData, lastName: text})}
+            />
+            <TextInput 
+              style={styles.input}
+              placeholder="Company name..."
+              placeholderTextColor="#999"
+              value={formData.company}
+              onChangeText={(text) => setFormData({...formData, company: text})}
+            />
+            <TextInput 
+              style={styles.input}
+              placeholder="Email..."
+              placeholderTextColor="#999"
+              value={formData.email}
+              onChangeText={(text) => setFormData({...formData, email: text})}
+              keyboardType="email-address"
+            />
+            <TextInput 
+              style={styles.input}
+              placeholder="Phone number..."
+              placeholderTextColor="#999"
+              value={formData.phoneNumber}
+              onChangeText={(text) => setFormData({...formData, phoneNumber: text})}
+              keyboardType="phone-pad"
+            />
+            <TouchableOpacity style={styles.addButton} onPress={handleAdd}>
+              <Text style={styles.addButtonText}>Add</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -176,7 +224,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 16,
-    marginTop: 200,
+    marginTop: 150,
   },
   warningBox: {
     flexDirection: 'row',
@@ -230,11 +278,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     position: 'absolute',
-    top: 140,
+    top: 100,
     left: 0,
     right: 0,
     zIndex: 1,
-    paddingVertical: 10,
+    paddingVertical: 0,
     backgroundColor: COLORS.white,
   },
   cancelButton: {

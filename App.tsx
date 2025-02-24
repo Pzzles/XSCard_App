@@ -39,6 +39,10 @@ export default function App() {
             },
           },
         }}
+        onStateChange={(state) => {
+          // Optional: Add navigation state logging for debugging
+          console.log('New navigation state:', state);
+        }}
       >
         <AuthNavigator />
       </NavigationContainer>

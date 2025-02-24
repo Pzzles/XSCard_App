@@ -15,16 +15,32 @@ export type Contact = {
   dateAdded: string;
   image: any; // Consider using a more specific type for images
 };
+export type AdminTabParamList = {
+  Analytics: undefined;
+  Calendar: undefined;
+  Settings: undefined;
+};
+
+export type RootStackParamList = {
+  MainTabs: undefined;
+  AddCards: undefined;
+  EditCard: undefined;
+  UnlockPremium: undefined;
+  AdminDashboard: undefined;
+  SignIn: undefined;
+  CardsScreen: undefined;
+  Contacts: undefined;
+  MainApp: undefined;
+};
 
 export type RootTabParamList = {
   Cards: undefined;
   Contacts: undefined;
-  AdminDashboard: undefined;
 };
 
 export type AuthStackParamList = {
   SignIn: undefined;
   SignUp: undefined;
-  AdminDashboard: undefined;
   MainApp: undefined;
+  AdminDashboard: undefined;
 };

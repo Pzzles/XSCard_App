@@ -1,78 +1,207 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, Text, ScrollView, TouchableOpacity } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, View, Text, ScrollView, Dimensions, Platform, ActivityIndicator } from 'react-native';
 import { COLORS } from '../../constants/colors';
 import AdminHeader from '../../components/AdminHeader';
+import { LineChart } from 'react-native-chart-kit';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { authenticatedFetch, getUserId } from '../../utils/api';
+import { useFocusEffect } from '@react-navigation/native';
+
+interface ContactData {
+  contactList: Array<{
+    createdAt: any;
+    howWeMet: string;
+    name: string;
+    number: string;
+    surname: string;
+  }>;
+  id: string;
+}
+
+interface CardData {
+  cards: Array<any>;
+}
 
 export default function AdminDashboard() {
-  const [selectedTab, setSelectedTab] = useState('overview');
+  const [contacts, setContacts] = useState<ContactData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [totalContacts, setTotalContacts] = useState(0);
+  const [totalCards, setTotalCards] = useState(0);
+  const [weeklyData, setWeeklyData] = useState({
+    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+    datasets: [{
+      data: [0, 0, 0, 0, 0, 0],
+      color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`
+    }]
+  });
+  const [cardsWeeklyData, setCardsWeeklyData] = useState([0, 0, 0, 0, 0, 0, 0]);
+
+  const fetchData = async () => {
+    try {
+      const userId = await getUserId();
+      if (!userId) return;
+
+      // Fetch both data sets
+      const [contactsResponse, cardsResponse] = await Promise.all([
+        authenticatedFetch(`/contacts/${userId}`),
+        authenticatedFetch(`/cards/${userId}`)
+      ]);
+
+      const contactsData = await contactsResponse.json();
+      const cardsData = await cardsResponse.json();
+
+      console.log('Raw contacts data:', JSON.stringify(contactsData));
+
+      // Handle contacts data - Fix for contactList structure
+      if (contactsData) {
+        const contacts = contactsData.contactList || [];
+        setTotalContacts(contacts.length);
+        console.log('Number of contacts:', contacts.length);
+
+        // Simple placeholder data for graph
+        const dummyContactsData = [contacts.length, 0, 0, 0, 0, 0];
+        console.log('Contacts graph data:', dummyContactsData);
+
+        // Handle cards data
+        const cards = Array.isArray(cardsData) ? cardsData : [];
+        setTotalCards(cards.length);
+        console.log('Number of cards:', cards.length);
+
+        // Simple placeholder data for graph
+        const dummyCardsData = [cards.length, 0, 0, 0, 0, 0];
+        console.log('Cards graph data:', dummyCardsData);
+
+        // Update chart with both datasets
+        setWeeklyData({
+          labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+          datasets: [
+            {
+              data: dummyCardsData,
+              color: () => '#FF526D' // Pink for cards
+            },
+            {
+              data: dummyContactsData,
+              color: () => '#1B2559' // Dark blue for contacts
+            }
+          ]
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setIsLoading(true);
+      fetchData();
+    }, [])
+  );
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      <AdminHeader title="Admin Dashboard" />
+      <AdminHeader title="Dashboard" />
       
-      <ScrollView style={styles.content}>
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>150</Text>
-            <Text style={styles.statLabel}>Total Users</Text>
+      <ScrollView 
+        style={styles.content}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.sectionTitle}>Overview</Text>
+        
+        {/* Overview Cards */}
+        <View style={styles.overviewContainer}>
+          <View style={[styles.overviewCard, { backgroundColor: COLORS.primary }]}>
+            <Text style={styles.cardNumber}>{totalCards}</Text>
+            <Text style={styles.cardLabel}>Total Cards</Text>
+            <MaterialCommunityIcons name="dots-horizontal" size={24} color="white" style={styles.cardIcon} />
           </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>89</Text>
-            <Text style={styles.statLabel}>Active Cards</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>45</Text>
-            <Text style={styles.statLabel}>New Today</Text>
+          
+          <View style={[styles.overviewCard, { backgroundColor: '#1B2559' }]}>
+            <Text style={styles.cardNumber}>{totalContacts}</Text>
+            <Text style={styles.cardLabel}>Total Contacts</Text>
+            <MaterialCommunityIcons name="dots-horizontal" size={24} color="white" style={styles.cardIcon} />
           </View>
         </View>
 
-        {/* Add more admin dashboard content here */}
+        {/* Weekly Growth Section */}
+        <View style={styles.growthSection}>
+          <View style={styles.growthHeader}>
+            <Text style={styles.sectionTitle}>Weekly Growth</Text>
+            <MaterialCommunityIcons name="dots-horizontal" size={24} color="black" />
+          </View>
+          
+          <LineChart
+            data={weeklyData}
+            width={Dimensions.get('window').width - 40}
+            height={220}
+            chartConfig={{
+              backgroundColor: '#fff',
+              backgroundGradientFrom: '#fff',
+              backgroundGradientTo: '#fff',
+              decimalPlaces: 0,
+              color: (opacity = 1) => `rgba(27, 37, 89, ${opacity})`,
+              style: {
+                borderRadius: 16
+              },
+              propsForDots: {
+                r: '6',
+                strokeWidth: '2',
+                stroke: '#fff'
+              },
+              useShadowColorFromDataset: true // Enable using colors from dataset
+            }}
+            bezier
+            style={styles.chart}
+          />
+          
+          <View style={styles.legendContainer}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: '#FF526D' }]} />
+              <Text style={styles.legendText}>Total Cards</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: '#1B2559' }]} />
+              <Text style={styles.legendText}>Total Contacts</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Bottom Stats */}
+        <View style={styles.bottomStats}>
+          <View style={styles.statBox}>
+            <Text style={styles.statTitle}>Average Card Views</Text>
+            <View style={styles.statContent}>
+              <Text style={styles.statValue}>125</Text>
+              <Text style={styles.statLabel}>Views</Text>
+              <View style={styles.percentageBadge}>
+                <Text style={styles.percentageText}>↑ 34%</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.statBox}>
+            <Text style={styles.statTitle}>Contact Growth</Text>
+            <View style={styles.statContent}>
+              <Text style={styles.growthValue}>+45</Text>
+              <Text style={styles.growthLabel}>Today</Text>
+              <View style={[styles.percentageBadge, styles.pinkBadge]}>
+                <Text style={styles.percentageText}>↑ 12%</Text>
+              </View>
+            </View>
+          </View>
+        </View>
       </ScrollView>
-
-      <View style={styles.footer}>
-        <TouchableOpacity 
-          style={[styles.footerTab, selectedTab === 'overview' && styles.selectedTab]}
-          onPress={() => setSelectedTab('overview')}
-        >
-          <MaterialIcons 
-            name="dashboard" 
-            size={24} 
-            color={selectedTab === 'overview' ? COLORS.primary : COLORS.gray} 
-          />
-          <Text style={[styles.footerText, selectedTab === 'overview' && styles.selectedText]}>
-            Overview
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={[styles.footerTab, selectedTab === 'users' && styles.selectedTab]}
-          onPress={() => setSelectedTab('users')}
-        >
-          <MaterialIcons 
-            name="people" 
-            size={24} 
-            color={selectedTab === 'users' ? COLORS.primary : COLORS.gray} 
-          />
-          <Text style={[styles.footerText, selectedTab === 'users' && styles.selectedText]}>
-            Users
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={[styles.footerTab, selectedTab === 'settings' && styles.selectedTab]}
-          onPress={() => setSelectedTab('settings')}
-        >
-          <MaterialIcons 
-            name="settings" 
-            size={24} 
-            color={selectedTab === 'settings' ? COLORS.primary : COLORS.gray} 
-          />
-          <Text style={[styles.footerText, selectedTab === 'settings' && styles.selectedText]}>
-            Settings
-          </Text>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 }
@@ -80,66 +209,137 @@ export default function AdminDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.white,
+    backgroundColor: '#fff',
   },
   content: {
     flex: 1,
-    marginTop: 120,
-    padding: 20,
+    paddingHorizontal: 20,
+    marginTop: 100,
   },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
+  scrollContent: {
+    paddingBottom: Platform.select({
+      ios: 10,
+      android: 10,
+    }),
+    flexGrow: 1,
   },
-  statCard: {
-    backgroundColor: COLORS.white,
-    padding: 15,
-    borderRadius: 10,
-    width: '30%',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  statNumber: {
+  sectionTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: COLORS.primary,
-    textAlign: 'center',
+    marginBottom: 20,
   },
-  statLabel: {
-    fontSize: 12,
-    color: COLORS.gray,
-    textAlign: 'center',
+  overviewContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 30,
+  },
+  overviewCard: {
+    width: '48%',
+    padding: 20,
+    borderRadius: 15,
+  },
+  cardNumber: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  cardLabel: {
+    fontSize: 16,
+    color: 'white',
     marginTop: 5,
   },
-  footer: {
+  cardIcon: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+  },
+  growthSection: {
+    marginBottom: 30,
+  },
+  growthHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    padding: 10,
-    backgroundColor: COLORS.white,
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-  },
-  footerTab: {
+    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 10,
+    marginBottom: 20,
   },
-  selectedTab: {
-    borderTopWidth: 2,
-    borderTopColor: COLORS.primary,
+  chart: {
+    marginVertical: 8,
+    borderRadius: 16,
   },
-  footerText: {
+  legendContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 10,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 5,
+  },
+  legendText: {
+    color: '#666',
+  },
+  bottomStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: Platform.select({
+      ios: 10,
+      android: 20,
+    }),
+  },
+  statBox: {
+    width: '48%',
+    backgroundColor: '#F8F9FA',
+    padding: 15,
+    borderRadius: 15,
+  },
+  statTitle: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 10,
+  },
+  statContent: {
+    flexDirection: 'column',
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  statLabel: {
+    fontSize: 16,
+    color: '#666',
+  },
+  growthValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  growthLabel: {
+    fontSize: 16,
+    color: '#666',
+  },
+  percentageBadge: {
+    backgroundColor: '#1B2559',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    marginTop: 5,
+  },
+  pinkBadge: {
+    backgroundColor: '#FF526D',
+  },
+  percentageText: {
+    color: 'white',
     fontSize: 12,
-    color: COLORS.gray,
-    marginTop: 4,
   },
-  selectedText: {
-    color: COLORS.primary,
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

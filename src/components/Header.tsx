@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Modal } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Modal, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../constants/colors';
 import { useNavigation } from '@react-navigation/native';
@@ -8,12 +8,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Update this type to match your actual navigation type
 type RootStackParamList = {
-  Home: undefined;
+  MainTabs: undefined;
   AddCards: undefined;
   EditCard: undefined;
-  Login: undefined;
   SignIn: undefined;
-  // ... other screens ...
+  UnlockPremium: undefined;
+  Cards: undefined;
+  Contacts: undefined;
+  AdminDashboard: undefined;
+  MainApp: undefined;
 };
 
 type HeaderProps = {
@@ -23,7 +26,6 @@ type HeaderProps = {
 export default function Header({ title }: HeaderProps) {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const [isMenuVisible, setIsMenuVisible] = useState(false);
-  const [showPremiumTooltip, setShowPremiumTooltip] = useState(false);
 
   const handleAddPress = () => {
     navigation.navigate('AddCards');
@@ -45,6 +47,21 @@ export default function Header({ title }: HeaderProps) {
     }
   };
 
+  const handleNavigate = async (screenName: keyof RootStackParamList) => {
+    setIsMenuVisible(false);
+    try {
+      // For AdminDashboard, just navigate directly
+      if (screenName === 'AdminDashboard') {
+        navigation.navigate('AdminDashboard');
+      } else {
+        navigation.navigate(screenName);
+      }
+    } catch (error) {
+      console.error('Navigation error:', error);
+      Alert.alert('Error', 'Failed to navigate. Please try again.');
+    }
+  };
+
   return (
     <>
       <View style={styles.header}>
@@ -60,9 +77,9 @@ export default function Header({ title }: HeaderProps) {
         </View>
 
         <View style={styles.iconContainer}>
-          {/*<TouchableOpacity style={styles.icon} onPress={handleAddPress}>
+          <TouchableOpacity style={styles.icon} onPress={handleAddPress}>
             <MaterialIcons name="add" size={24} color={COLORS.black} />
-          </TouchableOpacity>*/}
+          </TouchableOpacity>
           <TouchableOpacity style={styles.icon} onPress={handleEditPress}>
             <MaterialIcons name="edit" size={24} color={COLORS.black} />
           </TouchableOpacity>
@@ -83,26 +100,42 @@ export default function Header({ title }: HeaderProps) {
           <View style={styles.menuContainer}>
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={() => {
-                setShowPremiumTooltip(true);
-                setTimeout(() => setShowPremiumTooltip(false), 2000);
-              }}
+              onPress={() => handleNavigate('AdminDashboard')}
             >
-              <MaterialIcons name="star" size={24} color={COLORS.primary} />
-              <Text style={styles.menuText}>Unlock Premium</Text>
-              {showPremiumTooltip && (
-                <View style={styles.tooltip}>
-                  <Text style={styles.tooltipText}>Coming soon</Text>
-                </View>
-              )}
+              <MaterialIcons name="dashboard" size={24} color={COLORS.secondary} />
+              <Text style={[styles.menuText, { color: COLORS.secondary }]}>Dashboard</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => handleNavigate('Cards')}
+            >
+              <MaterialIcons name="credit-card" size={24} color={COLORS.secondary} />
+              <Text style={[styles.menuText, { color: COLORS.secondary }]}>Cards</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => handleNavigate('Contacts')}
+            >
+              <MaterialIcons name="people" size={24} color={COLORS.secondary} />
+              <Text style={[styles.menuText, { color: COLORS.secondary }]}>Contacts</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => handleNavigate('UnlockPremium')}
+            >
+              <MaterialIcons name="star" size={24} color={COLORS.secondary} />
+              <Text style={[styles.menuText, { color: COLORS.secondary }]}>Unlock Premium</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
               style={styles.menuItem}
               onPress={handleLogout}
             >
-              <MaterialIcons name="logout" size={24} color={COLORS.primary} />
-              <Text style={styles.menuText}>Logout</Text>
+              <MaterialIcons name="logout" size={24} color={COLORS.error} />
+              <Text style={[styles.menuText, { color: COLORS.error }]}>Logout</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -177,16 +210,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.black,
     fontWeight: '500',
-  },
-  tooltip: {
-    position: 'absolute',
-    right: -100,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    padding: 8,
-    borderRadius: 4,
-  },
-  tooltipText: {
-    color: COLORS.white,
-    fontSize: 14,
   },
 });
