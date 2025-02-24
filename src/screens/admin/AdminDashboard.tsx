@@ -36,6 +36,27 @@ export default function AdminDashboard() {
   });
   const [cardsWeeklyData, setCardsWeeklyData] = useState([0, 0, 0, 0, 0, 0, 0]);
 
+  const processTimeSeriesData = (data: any[], months: number = 6) => {
+    const today = new Date();
+    const monthLabels = Array.from({length: months}, (_, i) => {
+      const d = new Date();
+      d.setMonth(today.getMonth() - (months - 1 - i));
+      return d.toLocaleString('default', { month: 'short' });
+    });
+
+    const monthData = Array(months).fill(0);
+    
+    data.forEach(item => {
+      const date = new Date(item.createdAt);
+      const monthIndex = monthLabels.indexOf(date.toLocaleString('default', { month: 'short' }));
+      if (monthIndex !== -1) {
+        monthData[monthIndex]++;
+      }
+    });
+
+    return { labels: monthLabels, data: monthData };
+  };
+
   const fetchData = async () => {
     try {
       const userId = await getUserId();
@@ -50,42 +71,31 @@ export default function AdminDashboard() {
       const contactsData = await contactsResponse.json();
       const cardsData = await cardsResponse.json();
 
-      console.log('Raw contacts data:', JSON.stringify(contactsData));
+      // Process contacts data
+      const contacts = contactsData?.contactList || [];
+      setTotalContacts(contacts.length);
+      const contactsTimeData = processTimeSeriesData(contacts);
 
-      // Handle contacts data - Fix for contactList structure
-      if (contactsData) {
-        const contacts = contactsData.contactList || [];
-        setTotalContacts(contacts.length);
-        console.log('Number of contacts:', contacts.length);
+      // Process cards data
+      const cards = Array.isArray(cardsData) ? cardsData : [];
+      setTotalCards(cards.length);
+      const cardsTimeData = processTimeSeriesData(cards);
 
-        // Simple placeholder data for graph
-        const dummyContactsData = [contacts.length, 0, 0, 0, 0, 0];
-        console.log('Contacts graph data:', dummyContactsData);
+      // Update chart with both datasets
+      setWeeklyData({
+        labels: contactsTimeData.labels,
+        datasets: [
+          {
+            data: cardsTimeData.data,
+            color: () => '#FF526D' // Pink for cards
+          },
+          {
+            data: contactsTimeData.data,
+            color: () => '#1B2559' // Dark blue for contacts
+          }
+        ]
+      });
 
-        // Handle cards data
-        const cards = Array.isArray(cardsData) ? cardsData : [];
-        setTotalCards(cards.length);
-        console.log('Number of cards:', cards.length);
-
-        // Simple placeholder data for graph
-        const dummyCardsData = [cards.length, 0, 0, 0, 0, 0];
-        console.log('Cards graph data:', dummyCardsData);
-
-        // Update chart with both datasets
-        setWeeklyData({
-          labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-          datasets: [
-            {
-              data: dummyCardsData,
-              color: () => '#FF526D' // Pink for cards
-            },
-            {
-              data: dummyContactsData,
-              color: () => '#1B2559' // Dark blue for contacts
-            }
-          ]
-        });
-      }
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {

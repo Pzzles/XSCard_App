@@ -64,20 +64,29 @@ exports.addContact = async (req, res) => {
     }
 
     try {
-        const contactData = {
-            userId: db.doc(`users/${userId}`),
-            contactsList: [{
-                ...contactInfo,
-                createdAt: new Date().toISOString()
-            }]
+        const contactRef = db.collection('contacts').doc(userId);
+        const doc = await contactRef.get();
+
+        let currentContacts = [];
+        if (doc.exists) {
+            currentContacts = doc.data().contactList || [];
+        }
+
+        const newContact = {
+            ...contactInfo,
+            createdAt: new Date()  // This will create a proper Firestore timestamp
         };
 
-        const docRef = await db.collection('contacts').add(contactData);
+        currentContacts.push(newContact);
+
+        await contactRef.set({
+            userId: db.doc(`users/${userId}`),
+            contactList: currentContacts
+        }, { merge: true });
         
         res.status(201).send({ 
-            message: 'Contact list created successfully',
-            contactId: docRef.id,
-            contactData
+            message: 'Contact added successfully',
+            contactList: currentContacts
         });
     } catch (error) {
         console.error('Error adding contact:', error);
