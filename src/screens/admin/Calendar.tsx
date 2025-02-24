@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { Calendar as RNCalendar } from 'react-native-calendars';
 import { COLORS } from '../../constants/colors';
 import AdminHeader from '../../components/AdminHeader';
@@ -28,7 +28,11 @@ export default function Calendar() {
   return (
     <View style={styles.container}>
       <AdminHeader title="Calendar" />
-      <View style={styles.content}>
+      <ScrollView 
+        style={styles.content}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.yearSelector}>
           <Text style={styles.yearText}>{selectedYear}</Text>
           <TouchableOpacity>
@@ -75,7 +79,7 @@ export default function Calendar() {
             <Text style={styles.createEventText}>+ Create Events</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -87,8 +91,14 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    marginTop: 120,
+    marginTop: 90,
+  },
+  scrollContent: {
     padding: 20,
+    paddingBottom: Platform.select({
+      ios: 20,
+      android: 40,
+    }),
   },
   yearSelector: {
     flexDirection: 'row',
