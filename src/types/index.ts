@@ -10,6 +10,8 @@ registerRootComponent(App);
 export type Contact = {
   id: number;
   name: string;
+  surname: string;
+  number: string;
   position: string;
   company: string;
   dateAdded: string;
