@@ -14,12 +14,19 @@ type AdminHeaderProps = {
 };
 
 export default function AdminHeader({ title }: AdminHeaderProps) {
-  const navigation = useNavigation<AdminHeaderNavigationProp>();
+  const navigation = useNavigation<any>();
   const [isMenuVisible, setIsMenuVisible] = useState(false);
 
-  const handleNavigate = (screen: keyof AdminTabParamList) => {
+  const handleNavigate = (screen: string) => {
     setIsMenuVisible(false);
-    navigation.navigate(screen);
+    if (screen === 'Cards') {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainApp' }],
+      });
+    } else {
+      navigation.navigate(screen);
+    }
   };
 
   const handleLogout = async () => {
@@ -67,6 +74,14 @@ export default function AdminHeader({ title }: AdminHeaderProps) {
           onPress={() => setIsMenuVisible(false)}
         >
           <View style={styles.menuContainer}>
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => handleNavigate('Cards')}
+            >
+              <MaterialIcons name="credit-card" size={24} color={COLORS.secondary} />
+              <Text style={[styles.menuText, { color: COLORS.secondary }]}>Cards</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity 
               style={styles.menuItem}
               onPress={() => handleNavigate('Analytics')}

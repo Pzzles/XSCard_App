@@ -10,6 +10,8 @@ registerRootComponent(App);
 export type Contact = {
   id: number;
   name: string;
+  surname: string;
+  number: string;
   position: string;
   company: string;
   dateAdded: string;
@@ -19,6 +21,9 @@ export type AdminTabParamList = {
   Analytics: undefined;
   Calendar: undefined;
   Settings: undefined;
+  Cards: undefined;
+  SignIn: undefined;
+  MainApp: undefined;
 };
 
 export type RootStackParamList = {

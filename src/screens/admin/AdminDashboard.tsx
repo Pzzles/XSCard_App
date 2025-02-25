@@ -187,7 +187,7 @@ export default function AdminDashboard() {
           </View>
         </View>
 
-        {/* Bottom Stats */}
+        {/* Bottom Stats - Commented out
         <View style={styles.bottomStats}>
           <View style={styles.statBox}>
             <Text style={styles.statTitle}>Average Card Views</Text>
@@ -211,6 +211,7 @@ export default function AdminDashboard() {
             </View>
           </View>
         </View>
+        */}
       </ScrollView>
     </View>
   );
