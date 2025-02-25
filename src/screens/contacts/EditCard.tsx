@@ -4,11 +4,13 @@ import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Animated } from 'react-native';
 import { COLORS, CARD_COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
-import { useNavigation, CommonActions } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { authenticatedFetch, getUserId, API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import Modal from 'react-native-modal';
+import { EditCardScreenRouteProp, RootStackParamList } from '../../types/navigation';
+import { RouteProp } from '@react-navigation/native';
 
 // Add this interface for the form data type
 interface FormData {
@@ -43,6 +45,8 @@ interface CustomModalProps {
 }
 
 export default function EditCard() {
+  const route = useRoute<EditCardScreenRouteProp>();
+  const cardIndex = route.params?.cardIndex ?? 0; // Provide default value of 0
   const navigation = useNavigation();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -86,17 +90,12 @@ export default function EditCard() {
       }
 
       const response = await authenticatedFetch(ENDPOINTS.GET_CARD + `/${userId}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch user data');
-      }
-
       const cardsData = await response.json();
-      if (cardsData && cardsData.length > 0) {
-        const userData = cardsData[0]; // Get first card data
-
+      
+      if (cardsData && cardsData.length > cardIndex) {
+        const userData = cardsData[cardIndex]; // Use passed cardIndex instead of hardcoded 0
+        
         setSelectedColor(userData.colorScheme || '#1B2B5B');
-
-        // Set form data
         setFormData({
           firstName: userData.name || '',
           lastName: userData.surname || '',
@@ -112,7 +111,6 @@ export default function EditCard() {
           companyLogo: userData.companyLogo || '',
         });
 
-        // Set selected socials
         const existingSocials = Object.entries(userData.socials || {})
           .filter(([_, value]) => typeof value === 'string' && value.trim() !== '')
           .map(([key]) => key);
@@ -195,7 +193,7 @@ export default function EditCard() {
 
       // Send update request
       const response = await authenticatedFetch(
-        ENDPOINTS.UPDATE_CARD.replace(':id', userId) + '?cardIndex=0',
+        `${ENDPOINTS.UPDATE_CARD.replace(':id', userId)}?cardIndex=${cardIndex}`,
         {
           method: 'PATCH',
           body: JSON.stringify(cardData),

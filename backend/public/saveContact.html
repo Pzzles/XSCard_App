@@ -278,20 +278,18 @@
             }
 
             try {
-                const response = await fetch('/saveContactInfo', {
+                const response = await fetch('/AddContact', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        userId: userData.id, // The scanned user's ID
-                        contactInfo: {
-                            name: scannerName,
-                            surname: scannerSurname,
-                            phone: scannerPhone,
-                            howWeMet: howWeMet,
-                            createdAt: new Date().toISOString()
-                        }
+                        userId: userData.id,
+                        name: scannerName,
+                        surname: scannerSurname,
+                        phone: scannerPhone,
+                        howWeMet: howWeMet,
+                        createdAt: new Date().toISOString()
                     })
                 });
 
@@ -317,12 +315,12 @@
             const savedToDb = await saveContactToDatabase();
             if (!savedToDb) return;
 
-            // Then create and download vCard
+            // Create and download vCard
             const vCardData = `BEGIN:VCARD
 VERSION:3.0
 FN:${userData.name} ${userData.surname}
 EMAIL:${userData.email}
-TEL;TYPE=CELL:${userData.phone || 'No phone number available'}
+TEL;TYPE=CELL:${userData.phone || ''}
 ORG:${userData.company}
 TITLE:${userData.occupation}
 END:VCARD`;
@@ -333,10 +331,10 @@ END:VCARD`;
             link.download = `${userData.name}_${userData.surname}.vcf`;
             link.click();
 
-            // Close the webpage after successful save
+            alert('Contact saved successfully!');
             setTimeout(() => {
                 window.close();
-            }, 5000); // Give 1 second for the vCard download to start
+            }, 2000);
         }
 
         // Load user data when page loads

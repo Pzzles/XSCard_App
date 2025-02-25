@@ -13,6 +13,7 @@ const port = 8383;
 const userRoutes = require('./routes/userRoutes');
 const cardRoutes = require('./routes/cardRoutes');
 const contactRoutes = require('./routes/contactRoutes');
+const meetingRoutes = require('./routes/meetingRoutes');
 
 // Configure multer for file upload
 const storage = multer.diskStorage({
@@ -41,6 +42,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/', userRoutes);
 app.use('/', cardRoutes);
 app.use('/', contactRoutes);
+app.use('/', meetingRoutes);
 
 // Modify the user creation route to handle file upload
 app.post('/api/users', upload.single('profileImage'), (req, res, next) => {
