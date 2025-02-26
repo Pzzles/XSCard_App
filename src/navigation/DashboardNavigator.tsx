@@ -6,7 +6,7 @@ import { AdminTabParamList } from '../types';
 
 import AdminDashboard from '../screens/admin/AdminDashboard';
 import Calendar from '../screens/admin/Calendar';
-import Settings from '../screens/admin/Settings';
+// import Settings from '../screens/admin/Settings';
 
 const Tab = createBottomTabNavigator<AdminTabParamList>();
 
@@ -55,6 +55,7 @@ export default function DashboardNavigator() {
           ),
         }}
       />
+      {/* Settings tab commented out
       <Tab.Screen
         name="Settings"
         component={Settings}
@@ -65,6 +66,7 @@ export default function DashboardNavigator() {
           ),
         }}
       />
+      */}
     </Tab.Navigator>
   );
 }

@@ -19,6 +19,9 @@ export type AdminTabParamList = {
   Analytics: undefined;
   Calendar: undefined;
   Settings: undefined;
+  Cards: undefined;
+  SignIn: undefined;
+  MainApp: undefined;
 };
 
 export type RootStackParamList = {
