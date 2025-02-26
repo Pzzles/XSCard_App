@@ -2,6 +2,7 @@ const { db, admin } = require('../firebase.js');
 const QRCode = require('qrcode');
 const multer = require('multer');
 const path = require('path');
+const { formatDate } = require('../utils/dateFormatter');
 
 // Configure storage
 const storage = multer.diskStorage({
@@ -60,52 +61,85 @@ exports.getAllCards = async (req, res) => {
 
 exports.getCardById = async (req, res) => {
     const { id } = req.params;
-    
     try {
-        // Validates that requesting user matches the requested userId
-        await validateUserAccess(id, req.user.uid);
-
         const cardRef = db.collection('cards').doc(id);
         const doc = await cardRef.get();
         
         if (!doc.exists || !doc.data().cards) {
-            return sendError(res, 404, 'No cards found for this user');
+            return res.status(404).send({ message: 'No cards found for this user' });
+        }
+
+        // Convert Firestore timestamps to readable dates
+        const data = doc.data();
+        if (data.cards) {
+            data.cards = data.cards.map(card => ({
+                ...card,
+                createdAt: formatDate(card.createdAt) // Format for display
+            }));
         }
         
-        res.status(200).send(doc.data().cards);
+        res.status(200).send(data.cards);
     } catch (error) {
-        sendError(res, error.message === 'Unauthorized access' ? 403 : 500, 
-            'Failed to fetch card data', error);
+        console.error('Error fetching card:', error);
+        res.status(500).send({ message: 'Error fetching card', error: error.message });
     }
 };
 
 exports.addCard = async (req, res) => {
-    const { 
-        company, 
-        email, 
-        phone, 
-        title, 
-        name,
-        surname,
-        colorScheme,
-        socials 
-    } = req.body;
-    
-    const userId = req.user.uid; // Get the current user's UID from the auth middleware
-    
-    const requiredFields = ['company', 'email', 'phone', 'title'];
-    const missingFields = requiredFields.filter(field => !req.body[field]);
-    
-    if (missingFields.length > 0) {
-        return res.status(400).send({ 
-            message: 'Missing required fields', 
-            missingFields 
-        });
-    }
-
     try {
+        const userId = req.user.uid;
+        if (!userId) {
+            return res.status(401).json({ 
+                success: false,
+                message: 'Unauthorized access - no user ID' 
+            });
+        }
+
+        // Enhanced debug logging
+        console.log('Request headers:', req.headers);
+        console.log('Request files:', req.files);
+        console.log('Request body:', req.body);
+
+        const { 
+            company, 
+            email, 
+            phone, 
+            title, 
+            name,
+            surname
+        } = req.body;
+
+        // Validate fields are not only present but also have values
+        const requiredFields = ['company', 'email', 'phone', 'title'];
+        const missingFields = requiredFields.filter(field => {
+            const value = req.body[field];
+            return value === undefined || value === null || value === '';
+        });
+        
+        if (missingFields.length > 0) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'Missing required fields', 
+                missingFields,
+                receivedFields: req.body // Add this to see what fields were actually received
+            });
+        }
+
         const cardRef = db.collection('cards').doc(userId);
         const cardDoc = await cardRef.get();
+
+        // Handle file paths if files were uploaded
+        let profileImagePath = null;
+        let companyLogoPath = null;
+
+        if (req.files) {
+            if (req.files.profileImage) {
+                profileImagePath = `/profiles/${req.files.profileImage[0].filename}`;
+            }
+            if (req.files.companyLogo) {
+                companyLogoPath = `/profiles/${req.files.companyLogo[0].filename}`;
+            }
+        }
 
         const newCard = {
             company,
@@ -114,12 +148,14 @@ exports.addCard = async (req, res) => {
             occupation: title,
             name: name || '',
             surname: surname || '',
-            socials: socials || {},
-            colorScheme: colorScheme || '#E9C46A', // Use provided color or default
-            createdAt: new Date().toISOString(),
-            profileImage: null,
-            companyLogo: null
+            socials: {},
+            colorScheme: '#E9C46A',
+            createdAt: admin.firestore.Timestamp.now(), // Store as Firestore Timestamp
+            profileImage: profileImagePath,
+            companyLogo: companyLogoPath
         };
+
+        console.log('Creating new card:', newCard); // Debug log
 
         if (cardDoc.exists) {
             await cardRef.update({
@@ -131,12 +167,24 @@ exports.addCard = async (req, res) => {
             });
         }
         
-        res.status(201).send({ 
+        // Format the response
+        const responseCard = {
+            ...newCard,
+            createdAt: formatDate(newCard.createdAt) // Format for display
+        };
+        
+        res.status(201).json({ 
+            success: true,
             message: 'Card added successfully',
-            cardData: newCard
+            cardData: responseCard
         });
     } catch (error) {
-        sendError(res, 500, 'Error adding card', error);
+        console.error('Error in addCard:', error); // Debug log
+        res.status(500).json({
+            success: false,
+            message: 'Error adding card',
+            error: error.message
+        });
     }
 };
 

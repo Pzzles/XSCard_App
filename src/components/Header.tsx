@@ -19,11 +19,13 @@ type RootStackParamList = {
   MainApp: undefined;
 };
 
-type HeaderProps = {
+interface HeaderProps {
   title: string;
-};
+  rightIcon?: React.ReactNode;
+  showAddButton?: boolean;  // Add this prop
+}
 
-export default function Header({ title }: HeaderProps) {
+export default function Header({ title, rightIcon, showAddButton = false }: HeaderProps) {
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const [isMenuVisible, setIsMenuVisible] = useState(false);
 
@@ -69,20 +71,24 @@ export default function Header({ title }: HeaderProps) {
           style={styles.icon}
           onPress={() => setIsMenuVisible(true)}
         >
-          <MaterialIcons name="menu" size={24} color={COLORS.black} />
+          <Text style={styles.iconContainer}>
+            <MaterialIcons name="menu" size={24} color={COLORS.black} />
+          </Text>
         </TouchableOpacity>
 
         <View style={styles.titleContainer}>
           <Text style={styles.title}>{title}</Text>
         </View>
 
-        <View style={styles.iconContainer}>
-          <TouchableOpacity style={styles.icon} onPress={handleAddPress}>
-            <MaterialIcons name="add" size={24} color={COLORS.black} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.icon} onPress={handleEditPress}>
-            <MaterialIcons name="edit" size={24} color={COLORS.black} />
-          </TouchableOpacity>
+        <View style={styles.rightIconContainer}>
+          {showAddButton && (
+            <TouchableOpacity style={styles.icon} onPress={handleAddPress}>
+              <Text style={styles.iconContainer}>
+                <MaterialIcons name="add" size={24} color={COLORS.black} />
+              </Text>
+            </TouchableOpacity>
+          )}
+          {rightIcon}
         </View>
       </View>
 
@@ -178,6 +184,10 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     flexDirection: 'row',
+  },
+  rightIconContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   modalOverlay: {
     flex: 1,

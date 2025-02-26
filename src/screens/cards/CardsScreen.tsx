@@ -5,8 +5,10 @@ import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
 import { API_BASE_URL, ENDPOINTS, buildUrl, authenticatedFetch, getUserId } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../../types/navigation';
 
 // Update interfaces to match new data structure
 interface UserData {
@@ -79,7 +81,10 @@ interface Card {
   socialLinks: any[];
 }
 
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
 export default function CardsScreen() {
+  const navigation = useNavigation<NavigationProp>();
   const [qrCode, setQrCode] = useState<string>('');
   const [userData, setUserData] = useState<UserData | null>(null);
   const [cardColor, setCardColor] = useState(COLORS.secondary);
@@ -325,6 +330,12 @@ export default function CardsScreen() {
     setIsOptionsModalVisible(true);
   };
 
+  const handleEditCard = () => {
+    navigation.navigate('EditCard', { 
+      cardIndex: currentPage // Ensure currentPage is passed
+    });
+  };
+
   // Update the dynamic styles for the share button
   const dynamicStyles = StyleSheet.create({
     sendButton: {
@@ -409,7 +420,17 @@ export default function CardsScreen() {
 
   return (
     <View style={styles.container}>
-      <Header title="Cards" />
+      <Header 
+        title="Cards" 
+        showAddButton={true}  // Add this prop
+        rightIcon={
+          <TouchableOpacity onPress={handleEditCard}>
+            <Text style={styles.headerIconContainer}>
+              <MaterialIcons name="edit" size={24} color={COLORS.black} />
+            </Text>
+          </TouchableOpacity>
+        }
+      />
       <ScrollView 
         horizontal
         pagingEnabled
@@ -904,5 +925,11 @@ qrCode: {
   activeDot: {
     width: 24,
     backgroundColor: COLORS.secondary,
+  },
+  headerEditButton: {
+    padding: 8,
+  },
+  headerIconContainer: {
+    textAlignVertical: 'center',
   },
 });

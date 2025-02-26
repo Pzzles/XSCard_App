@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../../types';
-import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
+import { authenticatedFetch, ENDPOINTS, getUserId, buildUrl, API_BASE_URL } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
+import { pickImage, requestPermissions } from '../../utils/imageUtils';
 
 type AddCardsNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -22,6 +24,8 @@ export default function AddCards() {
     email: '',
     phoneNumber: '',
   });
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [companyLogo, setCompanyLogo] = useState<string | null>(null);
 
   const handleCancel = () => {
     navigation.goBack();
@@ -36,78 +40,141 @@ export default function AddCards() {
     return true;
   };
 
+  const handleProfileImagePick = async () => {
+    const { cameraGranted, galleryGranted } = await requestPermissions();
+    
+    if (!cameraGranted || !galleryGranted) {
+      Alert.alert('Permission Required', 'Camera and gallery permissions are required to use this feature.');
+      return;
+    }
+
+    Alert.alert(
+      'Select Image Source',
+      'Choose where you want to pick your profile picture from',
+      [
+        {
+          text: 'Camera',
+          onPress: async () => {
+            const imageUri = await pickImage(true);
+            if (imageUri) setProfileImage(imageUri);
+          },
+        },
+        {
+          text: 'Gallery',
+          onPress: async () => {
+            const imageUri = await pickImage(false);
+            if (imageUri) setProfileImage(imageUri);
+          },
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  const handleLogoUpload = async () => {
+    const { cameraGranted, galleryGranted } = await requestPermissions();
+    
+    if (!cameraGranted || !galleryGranted) {
+      Alert.alert('Permission Required', 'Camera and gallery permissions are required to use this feature.');
+      return;
+    }
+
+    Alert.alert(
+      'Select Logo Source',
+      'Choose where you want to pick your company logo from',
+      [
+        {
+          text: 'Camera',
+          onPress: async () => {
+            const imageUri = await pickImage(true);
+            if (imageUri) setCompanyLogo(imageUri);
+          },
+        },
+        {
+          text: 'Gallery',
+          onPress: async () => {
+            const imageUri = await pickImage(false);
+            if (imageUri) setCompanyLogo(imageUri);
+          },
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
   const handleAdd = async () => {
     try {
       if (!validateForm()) {
         return;
       }
 
-      // Get stored user data
-      const storedUserData = await AsyncStorage.getItem('userData');
-      if (!storedUserData) {
+      const userId = await getUserId();
+      const token = await AsyncStorage.getItem('userToken');
+
+      if (!userId || !token) {
         Alert.alert('Error', 'Please login first');
         return;
       }
 
-      const userData = JSON.parse(storedUserData);
+      const form = new FormData();
       
-      // Create new card data
-      const newCard = {
-        CardId: Date.now().toString(), // Generate a unique ID
-        Company: formData.company,
-        Email: formData.email,
-        PhoneNumber: formData.phoneNumber,
-        title: formData.occupation,
-        socialLinks: [],
-        // Add any other card fields you need
-      };
+      // Use formData state to append values
+      form.append('company', formData.company);
+      form.append('email', formData.email);
+      form.append('phone', formData.phoneNumber);
+      form.append('title', formData.occupation);
+      form.append('name', formData.firstName);
+      form.append('surname', formData.lastName);
 
-      // Get existing cards from AsyncStorage
-      const existingCardsJson = await AsyncStorage.getItem('userCards');
-      const existingCards = existingCardsJson ? JSON.parse(existingCardsJson) : [];
+      if (profileImage) {
+        const imageName = profileImage.split('/').pop() || 'profile.jpg';
+        form.append('profileImage', {
+          uri: profileImage,
+          type: 'image/jpeg',
+          name: imageName,
+        } as any);
+      }
 
-      // Add new card to the array
-      const updatedCards = [...existingCards, newCard];
+      if (companyLogo) {
+        const logoName = companyLogo.split('/').pop() || 'logo.jpg';
+        form.append('companyLogo', {
+          uri: companyLogo,
+          type: 'image/jpeg',
+          name: logoName,
+        } as any);
+      }
 
-      // Save updated cards to AsyncStorage
-      await AsyncStorage.setItem('userCards', JSON.stringify(updatedCards));
-
-      /* Comment out server communication for now
       const response = await fetch(buildUrl(ENDPOINTS.ADD_CARD), {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Authorization': `${token}`,  // Add token here
         },
-        body: JSON.stringify({
-          Company: formData.company,
-          Email: formData.email,
-          PhoneNumber: formData.phoneNumber,
-          UserId: userData.id,
-          title: formData.occupation,
-          socialLinks: []
-        }),
+        body: form,
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to create card');
-      }
+      const responseData = await response.json();
+      console.log('Server Response:', responseData);
 
-      const result = await response.json();
-      */
+      if (!response.ok) {
+        throw new Error(responseData.message || 'Failed to create card');
+      }
 
       Alert.alert('Success', 'Card created successfully', [
         {
           text: 'OK',
-          onPress: () => {
-            // Go back to previous screen (CardsScreen)
-            navigation.goBack();
-          }
+          onPress: () => navigation.goBack()
         }
       ]);
 
     } catch (error) {
       console.error('Error creating card:', error);
-      Alert.alert('Error', 'Failed to create card. Please try again.');
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to create card');
     }
   };
 
@@ -147,14 +214,26 @@ export default function AddCards() {
           {/* Images & Layout Section */}
           <Text style={styles.sectionTitle}>Images & layout</Text>
           <View style={styles.imageButtons}>
-            <TouchableOpacity style={styles.imageButton}>
-              <MaterialIcons name="add" size={24} color={COLORS.black} />
-              <Text style={styles.buttonText}>Profile Picture</Text>
+            <TouchableOpacity style={styles.imageButton} onPress={handleProfileImagePick}>
+              {profileImage ? (
+                <Image source={{ uri: profileImage }} style={styles.imagePreview} />
+              ) : (
+                <>
+                  <MaterialIcons name="add" size={24} color={COLORS.black} />
+                  <Text style={styles.buttonText}>Profile Picture</Text>
+                </>
+              )}
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.imageButton}>
-              <MaterialIcons name="add" size={24} color={COLORS.black} />
-              <Text style={styles.buttonText}>Company logo</Text>
+            <TouchableOpacity style={styles.imageButton} onPress={handleLogoUpload}>
+              {companyLogo ? (
+                <Image source={{ uri: companyLogo }} style={styles.imagePreview} />
+              ) : (
+                <>
+                  <MaterialIcons name="add" size={24} color={COLORS.black} />
+                  <Text style={styles.buttonText}>Company logo</Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
 
@@ -308,5 +387,10 @@ const styles = StyleSheet.create({
   errorText: {
     color: 'red',
     marginBottom: 10,
+  },
+  imagePreview: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
 });

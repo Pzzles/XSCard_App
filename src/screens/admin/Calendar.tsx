@@ -11,12 +11,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 type CalendarNavigationProp = BottomTabNavigationProp<AdminTabParamList, 'Calendar'>;
 
 type Event = {
-  id: string;
-  date: string;
-  title: string;
-  time: string;
-  contactName: string;
-  note: string;
+  id?: string;  // Optional as backend generates this
+  meetingWith: string;
+  meetingWhen: string;
+  description: string;
 };
 
 interface MarkedDates {
@@ -151,7 +149,8 @@ export default function Calendar() {
         // Create marked dates object
         const marks: MarkedDates = {};
         parsedEvents.forEach((event: Event) => {
-          marks[event.date] = { marked: true, dotColor: '#FF69B4' };
+          const eventDate = event.meetingWhen.split('T')[0];  // Extract date part from ISO string
+          marks[eventDate] = { marked: true, dotColor: '#FF69B4' };
         });
         setMarkedDates(marks);
       }
@@ -166,28 +165,44 @@ export default function Calendar() {
 
   const handleSaveEvent = async () => {
     try {
-      const newEvent: Event = {
-        id: Date.now().toString(),
-        date: selectedDate,
-        title: `Meeting with ${selectedContact?.name}`,
-        time: selectedTime,
-        contactName: selectedContact?.name || '',
-        note: eventNote
+      // Format the date and time to ISO string
+      const [year, month, day] = selectedDate.split('-');
+      const [hour, minute] = selectedTime.split(':');
+      const meetingDate = new Date(
+        parseInt(year),
+        parseInt(month) - 1, // JavaScript months are 0-based
+        parseInt(day),
+        parseInt(hour),
+        parseInt(minute)
+      );
+
+      const newEvent = {
+        meetingWith: `${selectedContact?.name} ${selectedContact?.surname}`.trim(),
+        meetingWhen: meetingDate.toISOString(),
+        description: eventNote
       };
 
-      // Get existing events
-      const existingEventsJson = await AsyncStorage.getItem('calendarEvents');
-      const existingEvents = existingEventsJson ? JSON.parse(existingEventsJson) : [];
-      
-      // Add new event
-      const updatedEvents = [...existingEvents, newEvent];
-      
-      // Save to AsyncStorage
-      await AsyncStorage.setItem('calendarEvents', JSON.stringify(updatedEvents));
-      
-      // Update state
-      setEvents(updatedEvents);
-      
+      // Save to backend
+      const response = await authenticatedFetch(ENDPOINTS.CREATE_MEETING, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newEvent)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save meeting to server');
+      }
+
+      const savedMeeting = await response.json();
+
+      // Update local state for immediate UI update
+      setEvents(prevEvents => [...prevEvents, {
+        ...newEvent,
+        id: savedMeeting.id // Use the ID from the server response
+      }]);
+
       // Update marked dates
       setMarkedDates(prev => ({
         ...prev,
@@ -248,11 +263,13 @@ export default function Calendar() {
             {events.map((event) => (
               <View key={`event-${event.id}`} style={styles.eventCard}>
                 <Text style={styles.eventDate}>
-                  {new Date(event.date).getDate()} {new Date(event.date).toLocaleString('default', { weekday: 'short' }).toUpperCase()}
+                  {new Date(event.meetingWhen).getDate()} {new Date(event.meetingWhen).toLocaleString('default', { weekday: 'short' }).toUpperCase()}
                 </Text>
-                <Text style={styles.eventTitle}>{event.title}</Text>
-                <Text style={styles.eventTime}>{event.time}</Text>
-                {event.note && <Text style={styles.eventNote}>{event.note}</Text>}
+                <Text style={styles.eventTitle}>Meeting with {event.meetingWith}</Text>
+                <Text style={styles.eventTime}>
+                  {new Date(event.meetingWhen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+                {event.description && <Text style={styles.eventNote}>{event.description}</Text>}
               </View>
             ))}
           </ScrollView>

@@ -4,6 +4,7 @@ const config = require('../config/config');
 const { sendMailWithStatus } = require('../public/Utils/emailService');
 require('dotenv').config();
 const { AUTH_ENDPOINTS, EMAIL_TEMPLATES, AUTH_CONSTANTS } = require('../constants/auth');
+const { formatDate } = require('../utils/dateFormatter');
 
 const sendVerificationEmail = async (userData, req) => {
     const now = Date.now();
@@ -102,18 +103,23 @@ exports.addUser = async (req, res) => {
 
         const verificationToken = Math.random().toString(36).substring(2) + Date.now().toString(36);
         
-        // Data for users collection
+        // Data for users collection - using Firestore Timestamp
         const userData = {
             uid: userRecord.uid,
             email,
             status,
             plan,
-            createdAt: new Date().toISOString(),
+            createdAt: admin.firestore.Timestamp.now(), // Changed to Firestore Timestamp
             isEmailVerified: false,
             verificationToken
         };
 
-        // Data for cards collection
+        const responseData = {
+            ...userData,
+            createdAt: formatDate(userData.createdAt) // Format for display
+        };
+
+        // Data for cards collection - using Firestore Timestamp
         const cardData = {
             cards: [{
                 name,
@@ -126,7 +132,7 @@ exports.addUser = async (req, res) => {
                 companyLogo: req.files?.companyLogo ? `/profiles/${req.files.companyLogo[0].filename}` : null,
                 socials,
                 colorScheme: '#E9C46A', // Default color
-                createdAt: new Date().toISOString()
+                createdAt: admin.firestore.Timestamp.now() // Changed to Firestore Timestamp
             }]
         };
 
@@ -156,7 +162,7 @@ exports.addUser = async (req, res) => {
             message: 'User added successfully. Please check your email to verify your account.',
             userId: userRecord.uid,
             userData: {
-                ...userData,
+                ...responseData,
                 verificationToken: undefined // Don't send token in response
             }
         });

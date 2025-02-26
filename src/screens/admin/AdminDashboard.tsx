@@ -7,23 +7,21 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { authenticatedFetch, getUserId } from '../../utils/api';
 import { useFocusEffect } from '@react-navigation/native';
 
-interface ContactData {
-  contactList: Array<{
-    createdAt: any;
-    howWeMet: string;
-    name: string;
-    number: string;
-    surname: string;
-  }>;
-  id: string;
+interface Contact {
+  createdAt: string;  // Changed to string format
 }
 
-interface CardData {
-  cards: Array<any>;
+interface Card {
+  createdAt: string;  // Changed to string format
+}
+
+interface MonthCounts {
+  cards: number;
+  contacts: number;
 }
 
 export default function AdminDashboard() {
-  const [contacts, setContacts] = useState<ContactData[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [totalContacts, setTotalContacts] = useState(0);
   const [totalCards, setTotalCards] = useState(0);
@@ -36,25 +34,38 @@ export default function AdminDashboard() {
   });
   const [cardsWeeklyData, setCardsWeeklyData] = useState([0, 0, 0, 0, 0, 0, 0]);
 
-  const processTimeSeriesData = (data: any[], months: number = 6) => {
-    const today = new Date();
-    const monthLabels = Array.from({length: months}, (_, i) => {
-      const d = new Date();
-      d.setMonth(today.getMonth() - (months - 1 - i));
-      return d.toLocaleString('default', { month: 'short' });
-    });
-
-    const monthData = Array(months).fill(0);
+  const countByMonth = (dates: string[]) => {
+    type MonthCounts = {
+      [key: string]: number;
+    };
     
-    data.forEach(item => {
-      const date = new Date(item.createdAt);
-      const monthIndex = monthLabels.indexOf(date.toLocaleString('default', { month: 'short' }));
-      if (monthIndex !== -1) {
-        monthData[monthIndex]++;
+    const counts: MonthCounts = {
+      'Dec': 0,
+      'Jan': 0,
+      'Feb': 0,
+      'Mar': 0,
+      'Apr': 0
+    };
+
+    dates.forEach(dateStr => {
+      if (!dateStr) {
+        console.log('Invalid date string:', dateStr);
+        return;
+      }
+
+      try {
+        // Extract month from date string like "February 25, 2025 at 6:25:00 PM GMT+2"
+        const monthFull = dateStr.split(' ')[0];
+        const monthShort = monthFull.slice(0, 3) as keyof MonthCounts;
+        if (monthShort in counts) {
+          counts[monthShort]++;
+        }
+      } catch (error) {
+        console.error('Error processing date string:', dateStr, error);
       }
     });
 
-    return { labels: monthLabels, data: monthData };
+    return counts;
   };
 
   const fetchData = async () => {
@@ -62,7 +73,6 @@ export default function AdminDashboard() {
       const userId = await getUserId();
       if (!userId) return;
 
-      // Fetch both data sets
       const [contactsResponse, cardsResponse] = await Promise.all([
         authenticatedFetch(`/contacts/${userId}`),
         authenticatedFetch(`/cards/${userId}`)
@@ -71,33 +81,45 @@ export default function AdminDashboard() {
       const contactsData = await contactsResponse.json();
       const cardsData = await cardsResponse.json();
 
-      // Process contacts data
-      const contacts = contactsData?.contactList || [];
-      setTotalContacts(contacts.length);
-      const contactsTimeData = processTimeSeriesData(contacts);
+      // Extract dates and ensure they're in the correct string format
+      const contactDates = contactsData?.contactList
+        ?.map((contact: Contact) => contact?.createdAt)
+        ?.filter(Boolean) || [];
+      
+      const cardDates = cardsData
+        ?.map((card: Card) => card?.createdAt)
+        ?.filter(Boolean) || [];
 
-      // Process cards data
-      const cards = Array.isArray(cardsData) ? cardsData : [];
-      setTotalCards(cards.length);
-      const cardsTimeData = processTimeSeriesData(cards);
+      console.log('Contact Dates Sample:', contactDates[0]);
+      console.log('Card Dates Sample:', cardDates[0]);
 
-      // Update chart with both datasets
+      // Count items by month
+      const cardCounts = countByMonth(cardDates);
+      const contactCounts = countByMonth(contactDates);
+
+      // Create chart data
+      const months = ['Dec', 'Jan', 'Feb', 'Mar', 'Apr'];
       setWeeklyData({
-        labels: contactsTimeData.labels,
+        labels: months,
         datasets: [
           {
-            data: cardsTimeData.data,
-            color: () => '#FF526D' // Pink for cards
+            data: months.map(month => cardCounts[month as keyof MonthCounts]),
+            color: () => '#FF526D'
           },
           {
-            data: contactsTimeData.data,
-            color: () => '#1B2559' // Dark blue for contacts
+            data: months.map(month => contactCounts[month]),
+            color: () => '#1B2559'
           }
         ]
       });
 
+      // Update totals
+      setTotalContacts(contactsData?.contactList?.length || 0);
+      setTotalCards(cardsData?.length || 0);
+
     } catch (error) {
       console.error('Error fetching data:', error);
+      setIsLoading(false);
     } finally {
       setIsLoading(false);
     }
@@ -155,6 +177,7 @@ export default function AdminDashboard() {
             data={weeklyData}
             width={Dimensions.get('window').width - 40}
             height={220}
+            yAxisInterval={1} // Force 1 unit intervals
             chartConfig={{
               backgroundColor: '#fff',
               backgroundGradientFrom: '#fff',
@@ -169,8 +192,12 @@ export default function AdminDashboard() {
                 strokeWidth: '2',
                 stroke: '#fff'
               },
-              useShadowColorFromDataset: true // Enable using colors from dataset
+              useShadowColorFromDataset: true,
+              count: 5,
+              formatYLabel: (value) => Math.floor(Number(value)).toString() // Ensure integer labels
             }}
+            fromZero={true}
+            segments={4}
             bezier
             style={styles.chart}
           />
