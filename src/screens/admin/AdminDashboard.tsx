@@ -169,7 +169,7 @@ export default function AdminDashboard() {
         {/* Weekly Growth Section */}
         <View style={styles.growthSection}>
           <View style={styles.growthHeader}>
-            <Text style={styles.sectionTitle}>Weekly Growth</Text>
+            <Text style={styles.sectionTitle}>Monthly Growth</Text>
             <MaterialCommunityIcons name="dots-horizontal" size={24} color="black" />
           </View>
           

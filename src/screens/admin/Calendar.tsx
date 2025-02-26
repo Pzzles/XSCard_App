@@ -7,6 +7,7 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { AdminTabParamList, Contact } from '../../types';
 import { API_BASE_URL, ENDPOINTS, authenticatedFetch, getUserId } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
 
 type CalendarNavigationProp = BottomTabNavigationProp<AdminTabParamList, 'Calendar'>;
 
@@ -128,6 +129,7 @@ export default function Calendar() {
   const [events, setEvents] = useState<Event[]>([]);
   const [markedDates, setMarkedDates] = useState<MarkedDates>({});
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [selectedEventIndex, setSelectedEventIndex] = useState<number | null>(null);
   
   const timeSlots = [
     '09:00', '10:00', '11:00', '12:00',
@@ -290,10 +292,39 @@ export default function Calendar() {
           <Text style={styles.upcomingTitle}>Upcoming Events</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {events.map((event, index) => (
-              <View 
+              <TouchableOpacity 
                 key={event.id ? `event-${event.id}-${index}` : `event-${index}`} 
                 style={styles.eventCard}
+                onPress={() => setSelectedEventIndex(selectedEventIndex === index ? null : index)}
               >
+                {selectedEventIndex === index && (
+                  <TouchableOpacity 
+                    style={styles.deleteIcon}
+                    onPress={() => {
+                      Alert.alert(
+                        "Delete Event",
+                        "Are you sure you want to delete this event?",
+                        [
+                          { text: "Cancel", style: "cancel" },
+                          { 
+                            text: "Delete", 
+                            style: "destructive",
+                            onPress: () => {
+                              const updatedEvents = events.filter((e, i) => i !== index);
+                              setEvents(updatedEvents);
+                              const newMarkedDates = { ...markedDates };
+                              delete newMarkedDates[event.meetingWhen.split('T')[0]];
+                              setMarkedDates(newMarkedDates);
+                              setSelectedEventIndex(null);
+                            }
+                          }
+                        ]
+                      );
+                    }}
+                  >
+                    <Ionicons name="close-circle" size={24} color="red" />
+                  </TouchableOpacity>
+                )}
                 <Text style={styles.eventDate}>
                   {new Date(event.meetingWhen).getDate()} {new Date(event.meetingWhen).toLocaleString('default', { weekday: 'short' }).toUpperCase()}
                 </Text>
@@ -302,7 +333,7 @@ export default function Calendar() {
                   {new Date(event.meetingWhen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </Text>
                 {event.description && <Text style={styles.eventNote}>{event.description}</Text>}
-              </View>
+              </TouchableOpacity>
             ))}
           </ScrollView>
           <TouchableOpacity 
@@ -486,6 +517,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.22,
     shadowRadius: 2.22,
     minWidth: 150,
+    position: 'relative',
   },
   eventDate: {
     color: '#FF69B4',
@@ -676,5 +708,10 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '500',
+  },
+  deleteIcon: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
   },
 });
