@@ -36,9 +36,10 @@ export const ENDPOINTS = {
     UPDATE_USER_COLOR: '/Users/:id/color', 
     ADD_TO_WALLET: '/Users/:id/wallet',
     DELETE_CONTACT: '/Contacts',
-    UPDATE_CARD: '/Cards/:id',  // Update this line
-    UPDATE_CARD_COLOR: '/Cards/:id/color',  // Add this line
+    UPDATE_CARD: '/Cards/:id',
+    UPDATE_CARD_COLOR: '/Cards/:id/color',
     CREATE_MEETING: '/meetings',
+    DELETE_CARD: '/Users/:id/cards',
 };
 
 export const buildUrl = (endpoint: string) => `${API_BASE_URL}${endpoint}`;

@@ -465,6 +465,11 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
     </Modal>
   );
 
+  const handleDelete = () => {
+    setModalMessage('Are you sure you want to delete this card? This action cannot be undone.');
+    setIsConfirmModalVisible(true);
+  };
+
   return (
     <View style={styles.container}>
       <Header title="Edit Card" />
@@ -487,7 +492,10 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
         <ScrollView 
           ref={scrollViewRef}
           style={styles.content}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: 100 } // Add extra padding for delete button
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -665,14 +673,22 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
               </Animated.View>
             ))}
           </View>
+
+          {/* Delete Button */}
+          <TouchableOpacity 
+            style={styles.deleteButton}
+            onPress={handleDelete}
+          >
+            <Text style={styles.deleteButtonText}>Delete Card</Text>
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
 
       <CustomModal
         isVisible={isConfirmModalVisible}
         onClose={() => setIsConfirmModalVisible(false)}
-        title="Remove Social Link"
-        message="Are you sure you want to remove this social link? Any entered data will be lost."
+        title="Delete Card"
+        message={modalMessage}
         buttons={[
           {
             text: 'Cancel',
@@ -680,17 +696,40 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
             onPress: () => setIsConfirmModalVisible(false)
           },
           {
-            text: 'Remove',
+            text: 'Delete',
             type: 'confirm',
-            onPress: () => {
-              if (currentSocialToRemove) {
-                setSelectedSocials(selectedSocials.filter(id => id !== currentSocialToRemove));
-                setFormData({
-                  ...formData,
-                  [currentSocialToRemove]: undefined
-                });
+            onPress: async () => {
+              try {
+                const userId = await getUserId();
+                if (!userId) {
+                  setError('User ID not found');
+                  return;
+                }
+
+                const response = await authenticatedFetch(
+                  `${ENDPOINTS.DELETE_CARD.replace(':id', userId)}?cardIndex=${cardIndex}`,
+                  {
+                    method: 'DELETE'
+                  }
+                );
+
+                if (!response.ok) {
+                  throw new Error('Failed to delete card');
+                }
+
+                // Get updated cards list from response
+                const updatedData = await response.json();
+                
+                // Update local storage with new cards list
+                await AsyncStorage.setItem('userCards', JSON.stringify(updatedData.cards));
+
+                setIsConfirmModalVisible(false);
+                setModalMessage('Card deleted successfully');
+                setIsSuccessModalVisible(true);
+              } catch (error) {
+                console.error('Error deleting card:', error);
+                setError('Failed to delete card');
               }
-              setIsConfirmModalVisible(false);
             }
           }
         ]}
@@ -737,9 +776,7 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
             type: 'confirm',
             onPress: () => {
               setIsSuccessModalVisible(false);
-              if (modalMessage.includes('Card updated')) {
-                navigation.goBack();
-              }
+              navigation.goBack();
             }
           }
         ]}
@@ -1007,6 +1044,20 @@ const styles = StyleSheet.create({
   },
   modalButtonTextCancel: {
     color: COLORS.black,
+  },
+  deleteButton: {
+    backgroundColor: COLORS.error, // or '#FF0000' for red
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 20,
+    marginHorizontal: 16,
+    marginBottom: 20,
+  },
+  deleteButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Platform, Modal, Alert, TextInput, KeyboardAvoidingView } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Platform, Modal, Alert, TextInput, KeyboardAvoidingView, Animated } from 'react-native';
 import { Calendar as RNCalendar, DateData } from 'react-native-calendars';
 import { COLORS } from '../../constants/colors';
 import AdminHeader from '../../components/AdminHeader';
@@ -7,6 +7,7 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { AdminTabParamList, Contact } from '../../types';
 import { API_BASE_URL, ENDPOINTS, authenticatedFetch, getUserId } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
 
 type CalendarNavigationProp = BottomTabNavigationProp<AdminTabParamList, 'Calendar'>;
 
@@ -37,6 +38,11 @@ interface NoteModalProps {
   onRequestClose: () => void;
 }
 
+interface SuccessModalProps {
+  visible: boolean;
+  onClose: () => void;
+}
+
 const NoteModal = ({ 
   visible, 
   selectedContact, 
@@ -59,18 +65,16 @@ const NoteModal = ({
     >
       <View style={styles.modalContainer}>
         <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Add Note</Text>
+          <Text style={styles.modalTitle}>Add Note (Optional)</Text>
           <Text style={styles.selectedInfo}>
             Meeting with {selectedContact?.name} at {selectedTime}
           </Text>
           <TextInput
             style={styles.noteInput}
-            placeholder="Enter meeting notes..."
+            placeholder="Add meeting notes (optional)..."
             multiline
             value={eventNote}
-            onChangeText={(text) => {
-              onChangeNote(text);
-            }}
+            onChangeText={onChangeNote}
             autoCapitalize="sentences"
             textAlignVertical="top"
           />
@@ -85,12 +89,30 @@ const NoteModal = ({
               style={[styles.noteButton, styles.saveButton]}
               onPress={onSave}
             >
-              <Text style={styles.saveButtonText}>Save Event</Text>
+              <Text style={styles.saveButtonText}>Create Meeting</Text>
             </TouchableOpacity>
           </View>
         </View>
       </View>
     </KeyboardAvoidingView>
+  </Modal>
+);
+
+const SuccessModal = ({ visible, onClose }: SuccessModalProps) => (
+  <Modal
+    visible={visible}
+    transparent={true}
+    animationType="fade"
+  >
+    <View style={styles.modalContainer}>
+      <View style={styles.successModalContent}>
+        <Text style={styles.successIcon}>✓</Text>
+        <Text style={styles.successTitle}>Meeting Created!</Text>
+        <TouchableOpacity style={styles.successButton} onPress={onClose}>
+          <Text style={styles.successButtonText}>Done</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   </Modal>
 );
 
@@ -106,6 +128,8 @@ export default function Calendar() {
   const [eventNote, setEventNote] = useState('');
   const [events, setEvents] = useState<Event[]>([]);
   const [markedDates, setMarkedDates] = useState<MarkedDates>({});
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [selectedEventIndex, setSelectedEventIndex] = useState<number | null>(null);
   
   const timeSlots = [
     '09:00', '10:00', '11:00', '12:00',
@@ -165,21 +189,26 @@ export default function Calendar() {
 
   const handleSaveEvent = async () => {
     try {
+      if (!selectedDate || !selectedTime || !selectedContact) {
+        Alert.alert('Error', 'Please select date, time and contact');
+        return;
+      }
+
       // Format the date and time to ISO string
       const [year, month, day] = selectedDate.split('-');
       const [hour, minute] = selectedTime.split(':');
       const meetingDate = new Date(
         parseInt(year),
-        parseInt(month) - 1, // JavaScript months are 0-based
+        parseInt(month) - 1,
         parseInt(day),
         parseInt(hour),
         parseInt(minute)
       );
 
       const newEvent = {
-        meetingWith: `${selectedContact?.name} ${selectedContact?.surname}`.trim(),
+        meetingWith: `${selectedContact.name} ${selectedContact.surname}`.trim(),
         meetingWhen: meetingDate.toISOString(),
-        description: eventNote
+        description: eventNote // Use the eventNote value instead of empty string
       };
 
       // Save to backend
@@ -191,16 +220,17 @@ export default function Calendar() {
         body: JSON.stringify(newEvent)
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to save meeting to server');
+      const savedMeeting = await response.json();
+      
+      if (savedMeeting.error) {
+        throw new Error(savedMeeting.error);
       }
 
-      const savedMeeting = await response.json();
-
-      // Update local state for immediate UI update
+      // Update local state with the note included
       setEvents(prevEvents => [...prevEvents, {
         ...newEvent,
-        id: savedMeeting.id // Use the ID from the server response
+        id: savedMeeting.id,
+        description: eventNote // Ensure note is included in local state
       }]);
 
       // Update marked dates
@@ -209,15 +239,16 @@ export default function Calendar() {
         [selectedDate]: { marked: true, dotColor: '#FF69B4' }
       }));
 
-      // Clear form
+      // Show success and reset states
+      setShowSuccessModal(true);
       setIsNoteModalVisible(false);
       setSelectedContact(null);
       setEventNote('');
-      
-      Alert.alert('Success', 'Event saved successfully');
+      setSelectedDate('');
+      setSelectedTime('');
     } catch (error) {
       console.error('Error saving event:', error);
-      Alert.alert('Error', 'Failed to save event');
+      setShowSuccessModal(false);
     }
   };
 
@@ -260,8 +291,40 @@ export default function Calendar() {
         <View style={styles.eventsSection}>
           <Text style={styles.upcomingTitle}>Upcoming Events</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {events.map((event) => (
-              <View key={`event-${event.id}`} style={styles.eventCard}>
+            {events.map((event, index) => (
+              <TouchableOpacity 
+                key={event.id ? `event-${event.id}-${index}` : `event-${index}`} 
+                style={styles.eventCard}
+                onPress={() => setSelectedEventIndex(selectedEventIndex === index ? null : index)}
+              >
+                {selectedEventIndex === index && (
+                  <TouchableOpacity 
+                    style={styles.deleteIcon}
+                    onPress={() => {
+                      Alert.alert(
+                        "Delete Event",
+                        "Are you sure you want to delete this event?",
+                        [
+                          { text: "Cancel", style: "cancel" },
+                          { 
+                            text: "Delete", 
+                            style: "destructive",
+                            onPress: () => {
+                              const updatedEvents = events.filter((e, i) => i !== index);
+                              setEvents(updatedEvents);
+                              const newMarkedDates = { ...markedDates };
+                              delete newMarkedDates[event.meetingWhen.split('T')[0]];
+                              setMarkedDates(newMarkedDates);
+                              setSelectedEventIndex(null);
+                            }
+                          }
+                        ]
+                      );
+                    }}
+                  >
+                    <Ionicons name="close-circle" size={24} color="red" />
+                  </TouchableOpacity>
+                )}
                 <Text style={styles.eventDate}>
                   {new Date(event.meetingWhen).getDate()} {new Date(event.meetingWhen).toLocaleString('default', { weekday: 'short' }).toUpperCase()}
                 </Text>
@@ -270,7 +333,7 @@ export default function Calendar() {
                   {new Date(event.meetingWhen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </Text>
                 {event.description && <Text style={styles.eventNote}>{event.description}</Text>}
-              </View>
+              </TouchableOpacity>
             ))}
           </ScrollView>
           <TouchableOpacity 
@@ -389,6 +452,11 @@ export default function Calendar() {
         onSave={handleSaveEvent}
         onRequestClose={() => setIsNoteModalVisible(false)}
       />
+
+      <SuccessModal 
+        visible={showSuccessModal}
+        onClose={() => setShowSuccessModal(false)}
+      />
     </View>
   );
 }
@@ -449,6 +517,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.22,
     shadowRadius: 2.22,
     minWidth: 150,
+    position: 'relative',
   },
   eventDate: {
     color: '#FF69B4',
@@ -580,12 +649,13 @@ const styles = StyleSheet.create({
   noteButtonsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 10,
+    gap: 8,
+    marginTop: 10,
   },
   noteButton: {
     flex: 1,
-    padding: 15,
-    borderRadius: 10,
+    padding: 10,
+    borderRadius: 8,
     alignItems: 'center',
   },
   backButton: {
@@ -596,12 +666,12 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '500',
   },
   saveButtonText: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '500',
   },
   eventNote: {
@@ -609,5 +679,39 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 5,
     fontStyle: 'italic',
+  },
+  successModalContent: {
+    backgroundColor: 'white',
+    padding: 30,
+    borderRadius: 20,
+    alignItems: 'center',
+    width: '80%',
+  },
+  successIcon: {
+    fontSize: 50,
+    color: '#4CAF50',
+    marginBottom: 20,
+  },
+  successTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    color: '#333',
+  },
+  successButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 10,
+  },
+  successButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  deleteIcon: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
   },
 });
