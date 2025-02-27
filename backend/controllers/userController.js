@@ -487,59 +487,6 @@ exports.updateUserColor = async (req, res) => {
     }
 };
 
-exports.addToWallet = async (req, res) => {
-    const { id } = req.params;
-
-    try {
-        const userRef = db.collection('users').doc(id);
-        const userDoc = await userRef.get();
-
-        if (!userDoc.exists) {
-            return res.status(404).send({ message: 'User not found' });
-        }
-
-        const userData = userDoc.data();
-        
-        const thumbnailUrl = userData.profileImage ? `${config.PASSCREATOR_PUBLIC_URL}${userData.profileImage}` : null;
-        const logoUrl = userData.companyLogo ? `${config.PASSCREATOR_PUBLIC_URL}${userData.companyLogo}` : null;
-
-        const passData = {
-            name: `${userData.name} ${userData.surname}`,
-            company: userData.company,
-            jobTitle: userData.occupation,
-            urlToThumbnail: thumbnailUrl,
-            urlToLogo: logoUrl,
-            barcodeValue: `${config.PASSCREATOR_PUBLIC_URL}/queries.html?userId=${id}`
-        };
-
-        const response = await axios.post(
-            `${process.env.PASSCREATOR_BASE_URL}/api/pass?passtemplate=${process.env.PASSCREATOR_TEMPLATE_ID}&zapierStyle=true`, 
-            passData, 
-            {
-                headers: {
-                    'Authorization': process.env.PASSCREATOR_API_KEY,
-                    'Content-Type': 'application/json'
-                }
-            }
-        );
-
-        res.status(200).send({
-            message: 'Wallet pass created successfully',
-            passUri: response.data.uri,
-            passFileUrl: response.data.linkToPassFile,
-            passPageUrl: response.data.linkToPassPage,
-            identifier: response.data.identifier
-        });
-
-    } catch (error) {
-        console.error('Error creating wallet pass:', error);
-        res.status(500).send({
-            message: 'Failed to create wallet pass' + error.message,
-            error: error.message
-        });
-    }
-};
-
 exports.logout = async (req, res) => {
     try {
         const uid = req.user.uid;
@@ -579,6 +526,42 @@ exports.logout = async (req, res) => {
                 message: error.message,
                 timestamp: Date.now()
             }
+        });
+    }
+};
+
+exports.upgradeToPremium = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const userRef = db.collection('users').doc(id);
+        const doc = await userRef.get();
+
+        if (!doc.exists) {
+            return res.status(404).send({ message: 'User not found' });
+        }
+
+        // Update user to premium
+        await userRef.update({
+            plan: 'premium',
+            status: 'active',
+            trialStartDate: admin.firestore.Timestamp.now()
+        });
+
+        const updatedDoc = await userRef.get();
+        const userData = {
+            id: updatedDoc.id,
+            ...updatedDoc.data()
+        };
+
+        res.status(200).send({
+            message: 'User upgraded to premium successfully',
+            user: userData
+        });
+    } catch (error) {
+        console.error('Error upgrading user:', error);
+        res.status(500).send({
+            message: 'Failed to upgrade user',
+            error: error.message
         });
     }
 };

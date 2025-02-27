@@ -184,7 +184,8 @@ export default function CardsScreen() {
   const fetchQRCode = async (userId: string) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
-      const response = await fetch(buildUrl(ENDPOINTS.GENERATE_QR_CODE) + `/${userId}`, {
+      // Update URL to include currentPage as cardIndex
+      const response = await fetch(buildUrl(ENDPOINTS.GENERATE_QR_CODE) + `/${userId}/${currentPage}`, {
         method: 'GET',
         headers: {
           'Authorization': token || '',
@@ -192,6 +193,10 @@ export default function CardsScreen() {
         }
       });
       
+      if (!response.ok) {
+        throw new Error('Failed to fetch QR code');
+      }
+
       const blob = await response.blob();
       const reader = new FileReader();
       reader.onload = () => {
@@ -202,8 +207,20 @@ export default function CardsScreen() {
       reader.readAsDataURL(blob);
     } catch (error) {
       console.error('Error fetching QR code:', error);
+      Alert.alert('Error', 'Failed to generate QR code');
     }
   };
+
+  // Add an effect to update QR code when page changes
+  useEffect(() => {
+    const updateQRCode = async () => {
+      const userId = await getUserId();
+      if (userId) {
+        fetchQRCode(userId);
+      }
+    };
+    updateQRCode();
+  }, [currentPage]); // Re-run when currentPage changes
 
   useEffect(() => {
     Animated.timing(borderRotation, {
@@ -283,27 +300,36 @@ export default function CardsScreen() {
   };
 
   const handleAddToWallet = async () => {
-    if (!userData?.id) {
-      Alert.alert('Error', 'User data not available');
-      return;
-    }
-
-    setIsWalletLoading(true);
     try {
-      const response = await fetch(buildUrl(ENDPOINTS.ADD_TO_WALLET.replace(':id', userData.id)), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to create wallet pass' + data.message);
+      setIsWalletLoading(true);
+      
+      // Get userId using the shared utility function
+      const userId = await getUserId();
+      if (!userId) {
+        Alert.alert('Error', 'User ID not found');
+        return;
       }
 
-      // Open the pass page URL in browser
+      // Build the endpoint with userId and current card index
+      const endpoint = ENDPOINTS.ADD_TO_WALLET
+        .replace(':userId', userId)
+        .replace(':cardIndex', currentPage.toString());
+
+      console.log('Making wallet request to:', endpoint);
+
+      // Use authenticatedFetch which automatically handles the token
+      const response = await authenticatedFetch(endpoint, {
+        method: 'POST'
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText);
+      }
+
+      const data = await response.json();
+      console.log('Wallet pass created:', data);
+
       if (data.passPageUrl) {
         await Linking.openURL(data.passPageUrl);
       } else {
@@ -311,8 +337,11 @@ export default function CardsScreen() {
       }
 
     } catch (error) {
-      console.error('Error adding to wallet:', error);
-      Alert.alert('Error', 'Failed to add to Google Wallet');
+      console.error('Wallet error:', error);
+      Alert.alert(
+        'Error', 
+        `Failed to add to ${Platform.OS === 'ios' ? 'Apple' : 'Google'} Wallet`
+      );
     } finally {
       setIsWalletLoading(false);
     }

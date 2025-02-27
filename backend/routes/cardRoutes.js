@@ -49,14 +49,10 @@ router.post('/AddCard',
 );
 router.patch('/Cards/:id', upload.single('image'), cardController.updateCard);
 router.delete('/Cards/:id', cardController.deleteCard);
+router.post('/Cards/:userId/wallet/:cardIndex?', cardController.createWalletPass);
 
-// Card customization
 router.patch('/Cards/:id/color', cardController.updateCardColor);
-
-// QR code generation
-router.get('/generateQR/:userId', cardController.generateQR);
-
-// Remove getAllCards if not being used in the frontend
+router.get('/generateQR/:userId/:cardIndex', cardController.generateQR);
 // router.get('/Cards', cardController.getAllCards);
 
 module.exports = router;

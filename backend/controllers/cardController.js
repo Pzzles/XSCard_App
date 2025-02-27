@@ -2,6 +2,8 @@ const { db, admin } = require('../firebase.js');
 const QRCode = require('qrcode');
 const multer = require('multer');
 const path = require('path');
+const axios = require('axios');
+const config = require('../config/config');
 const { formatDate } = require('../utils/dateFormatter');
 
 // Configure storage
@@ -31,6 +33,16 @@ const validateUserAccess = async (userId, userUid) => {
     if (userUid !== userId) {
         throw new Error('Unauthorized access');
     }
+};
+
+// Add this function at the top with other helper functions
+const logPasscreatorConfig = () => {
+  console.log('=== Passcreator Configuration ===');
+  console.log('PASSCREATOR_BASE_URL:', process.env.PASSCREATOR_BASE_URL || 'Not set');
+  console.log('PASSCREATOR_TEMPLATE_ID:', process.env.PASSCREATOR_TEMPLATE_ID || 'Not set');
+  console.log('PASSCREATOR_API_KEY:', process.env.PASSCREATOR_API_KEY ? '✓ Present' : '✗ Missing');
+  console.log('PASSCREATOR_PUBLIC_URL:', config.PASSCREATOR_PUBLIC_URL || 'Not set');
+  console.log('==============================');
 };
 
 exports.getAllCards = async (req, res) => {
@@ -285,23 +297,35 @@ exports.deleteCard = async (req, res) => {
 };
 
 exports.generateQR = async (req, res) => {
-    const { userId } = req.params;
+    const { userId, cardIndex } = req.params;
     
     try {
         await validateUserAccess(userId, req.user.uid);
 
-        const userRef = db.collection('users').doc(userId);
-        const userDoc = await userRef.get();
+        const cardRef = db.collection('cards').doc(userId);
+        const cardDoc = await cardRef.get();
         
-        if (!userDoc.exists) {
-            return sendError(res, 404, 'User not found');
+        if (!cardDoc.exists) {
+            return sendError(res, 404, 'User cards not found');
         }
 
-        const redirectUrl = `${req.protocol}://${req.get('host')}/saveContact?userId=${userId}`;
+        const cardsData = cardDoc.data();
+        if (!cardsData.cards || !cardsData.cards[cardIndex]) {
+            return sendError(res, 404, 'Card not found at specified index');
+        }
+
+        // Create URL with both userId and cardIndex
+        const redirectUrl = `${req.protocol}://${req.get('host')}/saveContact?userId=${userId}&cardIndex=${cardIndex}`;
+        
+        // Generate QR code with better quality settings
         const qrCodeBuffer = await QRCode.toBuffer(redirectUrl, {
             errorCorrectionLevel: 'H',
             margin: 1,
-            width: 300
+            width: 300,
+            color: {
+                dark: '#000000',
+                light: '#ffffff'
+            }
         });
 
         res.setHeader('Content-Type', 'image/png');
@@ -357,5 +381,104 @@ exports.updateCardColor = async (req, res) => {
         });
     } catch (error) {
         sendError(res, 500, 'Failed to update card color', error);
+    }
+};
+
+exports.createWalletPass = async (req, res) => {
+    const { userId, cardIndex = 0 } = req.params;
+
+    try {
+        // Log configuration before making the request
+        logPasscreatorConfig();
+        console.log('\nCreating wallet pass for:', { userId, cardIndex });
+
+        // Validate required environment variables
+        if (!process.env.PASSCREATOR_BASE_URL || 
+            !process.env.PASSCREATOR_TEMPLATE_ID || 
+            !process.env.PASSCREATOR_API_KEY || 
+            !config.PASSCREATOR_PUBLIC_URL) {
+            throw new Error('Missing required Passcreator configuration');
+        }
+
+        const cardRef = db.collection('cards').doc(userId);
+        const cardDoc = await cardRef.get();
+
+        if (!cardDoc.exists) {
+            console.log('Card document not found for userId:', userId);
+            return res.status(404).send({ message: 'User cards not found' });
+        }
+
+        const cardsData = cardDoc.data();
+        if (!cardsData.cards || !cardsData.cards[cardIndex]) {
+            console.log('Card not found at index:', cardIndex);
+            return res.status(404).send({ message: 'Card not found at specified index' });
+        }
+
+        const card = cardsData.cards[cardIndex];
+        
+        // Log image URLs
+        const thumbnailUrl = card.profileImage ? `${config.PASSCREATOR_PUBLIC_URL}${card.profileImage}` : null;
+        const logoUrl = card.companyLogo ? `${config.PASSCREATOR_PUBLIC_URL}${card.companyLogo}` : null;
+        
+        console.log('Image URLs:', {
+            thumbnailUrl,
+            logoUrl
+        });
+
+        const passData = {
+            name: `${card.name} ${card.surname}`,
+            company: card.company,
+            jobTitle: card.occupation,
+            urlToThumbnail: thumbnailUrl,
+            urlToLogo: logoUrl,
+            barcodeValue: `${config.PASSCREATOR_PUBLIC_URL}/queries.html?userId=${userId}&cardIndex=${cardIndex}`
+        };
+
+        console.log('Pass Data being sent:', passData);
+
+        // Log request details
+        const requestUrl = `${process.env.PASSCREATOR_BASE_URL}/api/pass?passtemplate=${process.env.PASSCREATOR_TEMPLATE_ID}&zapierStyle=true`;
+        console.log('Making request to:', requestUrl);
+
+        const response = await axios.post(
+            requestUrl,
+            passData,
+            {
+                headers: {
+                    'Authorization': process.env.PASSCREATOR_API_KEY,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        console.log('Passcreator API Response:', {
+            uri: response.data.uri,
+            fileUrl: response.data.linkToPassFile,
+            pageUrl: response.data.linkToPassPage,
+            identifier: response.data.identifier
+        });
+
+        res.status(200).send({
+            message: 'Wallet pass created successfully',
+            passUri: response.data.uri,
+            passFileUrl: response.data.linkToPassFile,
+            passPageUrl: response.data.linkToPassPage,
+            identifier: response.data.identifier,
+            cardIndex: cardIndex
+        });
+
+    } catch (error) {
+        console.error('Error creating wallet pass:', {
+            message: error.message,
+            response: error.response?.data,
+            config: error.config
+        });
+
+        // Send a more detailed error response
+        res.status(500).send({
+            message: 'Failed to create wallet pass',
+            error: error.message,
+            details: error.response?.data || 'No additional details available'
+        });
     }
 };
