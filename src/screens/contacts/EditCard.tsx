@@ -76,9 +76,11 @@ export default function EditCard() {
   const [currentSocialToRemove, setCurrentSocialToRemove] = useState<string | null>(null);
   const [modalType, setModalType] = useState<'profile' | 'logo' | null>(null);
   const [modalMessage, setModalMessage] = useState('');
+  const [userPlan, setUserPlan] = useState<string>('free');
 
   useEffect(() => {
     loadUserData();
+    getUserPlan();
   }, []);
 
   const loadUserData = async () => {
@@ -122,6 +124,18 @@ export default function EditCard() {
       setError('Failed to load user data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const getUserPlan = async () => {
+    try {
+      const userData = await AsyncStorage.getItem('userData');
+      if (userData) {
+        const { plan } = JSON.parse(userData);
+        setUserPlan(plan);
+      }
+    } catch (error) {
+      console.error('Error fetching user plan:', error);
     }
   };
 
@@ -675,12 +689,14 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
           </View>
 
           {/* Delete Button */}
-          <TouchableOpacity 
-            style={styles.deleteButton}
-            onPress={handleDelete}
-          >
-            <Text style={styles.deleteButtonText}>Delete Card</Text>
-          </TouchableOpacity>
+          {userPlan !== 'free' && (
+            <TouchableOpacity 
+              style={styles.deleteButton}
+              onPress={handleDelete}
+            >
+              <Text style={styles.deleteButtonText}>Delete Card</Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
 

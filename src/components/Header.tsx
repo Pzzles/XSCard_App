@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Modal, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../constants/colors';
@@ -22,12 +22,30 @@ type RootStackParamList = {
 interface HeaderProps {
   title: string;
   rightIcon?: React.ReactNode;
-  showAddButton?: boolean;  // Add this prop
+  showAddButton?: boolean;
 }
 
 export default function Header({ title, rightIcon, showAddButton = false }: HeaderProps) {
+  const [userPlan, setUserPlan] = useState<string>('free');
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const [isMenuVisible, setIsMenuVisible] = useState(false);
+
+  // Add this useEffect to get the user's plan
+  useEffect(() => {
+    const getUserPlan = async () => {
+      try {
+        const userData = await AsyncStorage.getItem('userData');
+        if (userData) {
+          const { plan } = JSON.parse(userData);
+          setUserPlan(plan);
+        }
+      } catch (error) {
+        console.error('Error fetching user plan:', error);
+      }
+    };
+
+    getUserPlan();
+  }, []);
 
   const handleAddPress = () => {
     navigation.navigate('AddCards');
@@ -81,7 +99,7 @@ export default function Header({ title, rightIcon, showAddButton = false }: Head
         </View>
 
         <View style={styles.rightIconContainer}>
-          {showAddButton && (
+          {showAddButton && userPlan !== 'free' && (
             <TouchableOpacity style={styles.icon} onPress={handleAddPress}>
               <Text style={styles.iconContainer}>
                 <MaterialIcons name="add" size={24} color={COLORS.black} />
@@ -104,13 +122,15 @@ export default function Header({ title, rightIcon, showAddButton = false }: Head
           onPress={() => setIsMenuVisible(false)}
         >
           <View style={styles.menuContainer}>
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => handleNavigate('AdminDashboard')}
-            >
-              <MaterialIcons name="dashboard" size={24} color={COLORS.secondary} />
-              <Text style={[styles.menuText, { color: COLORS.secondary }]}>Dashboard</Text>
-            </TouchableOpacity>
+            {userPlan !== 'free' && (
+              <TouchableOpacity 
+                style={styles.menuItem}
+                onPress={() => handleNavigate('AdminDashboard')}
+              >
+                <MaterialIcons name="dashboard" size={24} color={COLORS.secondary} />
+                <Text style={[styles.menuText, { color: COLORS.secondary }]}>Dashboard</Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity 
               style={styles.menuItem}

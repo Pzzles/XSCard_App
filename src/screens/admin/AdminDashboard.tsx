@@ -5,7 +5,10 @@ import AdminHeader from '../../components/AdminHeader';
 import { LineChart } from 'react-native-chart-kit';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { authenticatedFetch, getUserId } from '../../utils/api';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { AuthStackParamList } from '../../types';
 
 interface Contact {
   createdAt: string;  // Changed to string format
@@ -20,6 +23,8 @@ interface MonthCounts {
   contacts: number;
 }
 
+type AdminDashboardNavigationProp = StackNavigationProp<AuthStackParamList>;
+
 export default function AdminDashboard() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -33,6 +38,8 @@ export default function AdminDashboard() {
     }]
   });
   const [cardsWeeklyData, setCardsWeeklyData] = useState([0, 0, 0, 0, 0, 0, 0]);
+  const [userPlan, setUserPlan] = useState<string>('free');
+  const navigation = useNavigation<AdminDashboardNavigationProp>();
 
   const countByMonth = (dates: string[]) => {
     type MonthCounts = {
@@ -131,6 +138,34 @@ export default function AdminDashboard() {
       fetchData();
     }, [])
   );
+
+  useEffect(() => {
+    const checkUserPlan = async () => {
+      try {
+        const userData = await AsyncStorage.getItem('userData');
+        if (userData) {
+          const { plan } = JSON.parse(userData);
+          setUserPlan(plan);
+          
+          // Redirect if user is on free plan
+          if (plan === 'free') {
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'MainApp', params: undefined }],
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error checking user plan:', error);
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'MainApp', params: undefined }],
+        });
+      }
+    };
+
+    checkUserPlan();
+  }, [navigation]);
 
   if (isLoading) {
     return (

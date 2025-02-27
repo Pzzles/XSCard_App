@@ -4,12 +4,15 @@ import { Calendar as RNCalendar, DateData } from 'react-native-calendars';
 import { COLORS } from '../../constants/colors';
 import AdminHeader from '../../components/AdminHeader';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { AdminTabParamList, Contact } from '../../types';
+import { AdminTabParamList, Contact, AuthStackParamList } from '../../types';
 import { API_BASE_URL, ENDPOINTS, authenticatedFetch, getUserId } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 
 type CalendarNavigationProp = BottomTabNavigationProp<AdminTabParamList, 'Calendar'>;
+type CalendarScreenNavigationProp = StackNavigationProp<AuthStackParamList>;
 
 type Event = {
   id?: string;  // Optional as backend generates this
@@ -130,6 +133,8 @@ export default function Calendar() {
   const [markedDates, setMarkedDates] = useState<MarkedDates>({});
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [selectedEventIndex, setSelectedEventIndex] = useState<number | null>(null);
+  const [userPlan, setUserPlan] = useState<string>('free');
+  const navigation = useNavigation<CalendarScreenNavigationProp>();
   
   const timeSlots = [
     '09:00', '10:00', '11:00', '12:00',
@@ -186,6 +191,34 @@ export default function Calendar() {
   useEffect(() => {
     loadEvents();
   }, []);
+
+  useEffect(() => {
+    const checkUserPlan = async () => {
+      try {
+        const userData = await AsyncStorage.getItem('userData');
+        if (userData) {
+          const { plan } = JSON.parse(userData);
+          setUserPlan(plan);
+          
+          // Redirect if user is on free plan
+          if (plan === 'free') {
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'MainApp', params: undefined }],
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error checking user plan:', error);
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'MainApp', params: undefined }],
+        });
+      }
+    };
+
+    checkUserPlan();
+  }, [navigation]);
 
   const handleSaveEvent = async () => {
     try {
