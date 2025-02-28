@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,13 +6,11 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
-  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
-import { API_BASE_URL, ENDPOINTS, authenticatedFetch, getUserId } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type RootStackParamList = {
@@ -22,79 +20,60 @@ type RootStackParamList = {
 
 const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList, 'UnlockPremium'>) => {
   const [selectedPlan, setSelectedPlan] = useState('annually');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [userPlan, setUserPlan] = useState<string>('free');
 
-  const handleStartTrial = async () => {
-    try {
-      setIsLoading(true);
-      const userId = await getUserId();
-      
-      if (!userId) {
-        throw new Error('User ID not found');
+  useEffect(() => {
+    const getUserPlan = async () => {
+      try {
+        const userData = await AsyncStorage.getItem('userData');
+        if (userData) {
+          const { plan } = JSON.parse(userData);
+          setUserPlan(plan);
+        }
+      } catch (error) {
+        console.error('Error getting user plan:', error);
       }
+    };
 
-      const endpoint = ENDPOINTS.UPGRADE_USER.replace(':id', userId);
-      const response = await authenticatedFetch(endpoint, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          plan: selectedPlan
-        })
-      });
+    getUserPlan();
+  }, []);
 
-      if (!response.ok) {
-        throw new Error('Failed to start trial');
-      }
-
-      Alert.alert(
-        'Success',
-        'Your 7-day free trial has started!',
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
-      );
-    } catch (error) {
-      Alert.alert('Error', 'Failed to start trial. Please try again.');
-      console.error('Trial start error:', error);
-    } finally {
-      setIsLoading(false);
-    }
+  const handleCancelSubscription = () => {
+    Alert.alert(
+      'Cancel Subscription',
+      'Are you sure you want to cancel your premium subscription? You will lose access to premium features at the end of your billing period.',
+      [
+        {
+          text: 'No, Keep Premium',
+          style: 'cancel',
+        },
+        {
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: () => {
+            // Add your subscription cancellation logic here
+            Alert.alert('Subscription Cancelled', 'Your subscription will end at the end of your billing period.');
+          },
+        },
+      ]
+    );
   };
 
-  const handlePayment = async () => {
-    try {
-      setIsProcessingPayment(true);
-      const userData = await AsyncStorage.getItem('userData');
-      const userEmail = userData ? JSON.parse(userData).email : null;
-
-      if (!userEmail) {
-        throw new Error('User email not found');
-      }
-
-      const response = await authenticatedFetch(ENDPOINTS.INITIALIZE_PAYMENT, {
-        method: 'POST',
-        body: JSON.stringify({
-          email: userEmail,
-          amount: 259.00 // R259.00
-        })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Payment initialization failed');
-      }
-
-      // Open payment URL in browser/webview
-      if (data.data?.authorization_url) {
-        Linking.openURL(data.data.authorization_url);
-      }
-
-    } catch (error) {
-      Alert.alert('Error', 'Failed to initialize payment. Please try again.');
-      console.error('Payment error:', error);
-    } finally {
-      setIsProcessingPayment(false);
-    }
-  };
+  const renderPremiumUserUI = () => (
+    <View style={styles.premiumContainer}>
+      <MaterialIcons name="verified" size={80} color={COLORS.primary} />
+      <Text style={styles.premiumTitle}>Premium Subscription Active</Text>
+      <Text style={styles.premiumSubtitle}>
+        You have access to all premium features
+      </Text>
+      <TouchableOpacity
+        style={styles.cancelButton}
+        onPress={handleCancelSubscription}
+      >
+        <Text style={styles.cancelButtonText}>Cancel Subscription</Text>
+      </TouchableOpacity>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -105,177 +84,171 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
         <Text style={styles.closeButtonText}>✕</Text>
       </TouchableOpacity>
 
-      <ScrollView style={styles.content}>
-        <Text style={styles.title}>
-          Be a better networker, upgrade to XSCard premium
-        </Text>
-
-        <TouchableOpacity 
-          style={[styles.trialButton, { marginVertical: 20 }]}
-          onPress={handlePayment}
-          disabled={isProcessingPayment}
-        >
-          <Text style={styles.trialButtonText}>
-            {isProcessingPayment ? 'Processing...' : 'Pay Monthly R159.00'}
+      {userPlan === 'premium' ? (
+        renderPremiumUserUI()
+      ) : (
+        <ScrollView style={styles.content}>
+          <Text style={styles.title}>
+            Be a better networker, upgrade to XSCard premium
           </Text>
-        </TouchableOpacity>
-
-        {/* Pricing Options */}
-        <View style={styles.pricingContainer}>
-          <TouchableOpacity 
-            style={[
-              styles.planOption,
-              selectedPlan === 'annually' && styles.selectedPlan
-            ]}
-            onPress={() => setSelectedPlan('annually')}
-          >
-            <View style={styles.saveBadge}>
-              <Text style={styles.saveText}>Save R120</Text>
-            </View>
-            <Text style={styles.planType}>Annually</Text>
-            <Text style={styles.price}>R1,800.00</Text>
-            <Text style={styles.monthlyPrice}>R150.00/month</Text>
-          </TouchableOpacity>
 
           <TouchableOpacity 
-            style={[
-              styles.planOption,
-              selectedPlan === 'monthly' && styles.selectedPlan
-            ]}
-            onPress={() => setSelectedPlan('monthly')}
+            style={[styles.trialButton, { marginVertical: 20 }]}
           >
-            <Text style={styles.planType}>Monthly</Text>
-            <Text style={styles.price}>R159.99</Text>
+            <Text style={styles.trialButtonText}>Start your 7-day free trial</Text>
           </TouchableOpacity>
-        </View>
 
-        <Text style={styles.cancelText}>Start 7-day free trial. Cancel anytime</Text>
+          {/* Pricing Options */}
+          <View style={styles.pricingContainer}>
+            <TouchableOpacity 
+              style={[
+                styles.planOption,
+                selectedPlan === 'annually' && styles.selectedPlan
+              ]}
+              onPress={() => setSelectedPlan('annually')}
+            >
+              <View style={styles.saveBadge}>
+                <Text style={styles.saveText}>Save R120</Text>
+              </View>
+              <Text style={styles.planType}>Annually</Text>
+              <Text style={styles.price}>R1,800.00</Text>
+              <Text style={styles.monthlyPrice}>R150.00/month</Text>
+            </TouchableOpacity>
 
-        {/* Feature Comparison */}
-        <View style={styles.comparisonContainer}>
-          <View style={styles.comparisonCard}>
-            <View style={styles.headerRow}>
-              <View style={styles.featureHeaderColumn}>
-                <Text style={styles.headerTitle}>Features</Text>
-              </View>
-              <View style={styles.valueHeaderColumn}>
-                <Text style={styles.headerText}>Free</Text>
-              </View>
-              <View style={styles.valueHeaderColumn}>
-                <Text style={styles.headerTextPremium}>Premium</Text>
-              </View>
-            </View>
+            <TouchableOpacity 
+              style={[
+                styles.planOption,
+                selectedPlan === 'monthly' && styles.selectedPlan
+              ]}
+              onPress={() => setSelectedPlan('monthly')}
+            >
+              <Text style={styles.planType}>Monthly</Text>
+              <Text style={styles.price}>R159.99</Text>
+            </TouchableOpacity>
+          </View>
 
-            <View style={styles.featureRow}>
-              <View style={styles.featureColumn}>
-                <Text style={styles.featureTitle}>Maximum number of cards</Text>
-                <Text style={styles.featureSubtitle}>Create up to 5 cards with XSCard</Text>
-              </View>
-              <View style={styles.valueColumn}>
-                <Text style={styles.freeValue}>1</Text>
-              </View>
-              <View style={styles.valueColumn}>
-                <Text style={styles.premiumValue}>5</Text>
-              </View>
-            </View>
+          <Text style={styles.cancelText}>7-day free trial. Cancel anytime</Text>
 
-            <View style={styles.featureRow}>
-              <View style={styles.featureColumn}>
-                <Text style={styles.featureTitle}>Add a custom color to your card</Text>
-                <Text style={styles.featureSubtitle}>Set your color theme to be any color you like.</Text>
+          {/* Feature Comparison */}
+          <View style={styles.comparisonContainer}>
+            <View style={styles.comparisonCard}>
+              <View style={styles.headerRow}>
+                <View style={styles.featureHeaderColumn}>
+                  <Text style={styles.headerTitle}>Features</Text>
+                </View>
+                <View style={styles.valueHeaderColumn}>
+                  <Text style={styles.headerText}>Free</Text>
+                </View>
+                <View style={styles.valueHeaderColumn}>
+                  <Text style={styles.headerTextPremium}>Premium</Text>
+                </View>
               </View>
-              <View style={styles.valueColumn}>
-                <MaterialIcons name="lock" size={24} color="#9E9E9E" />
-              </View>
-              <View style={styles.valueColumn}>
-                <MaterialIcons name="check-circle" size={24} color="#FF6B6B" />
-              </View>
-            </View>
 
-            <View style={styles.featureRow}>
-              <View style={styles.featureColumn}>
-                <Text style={styles.featureTitle}>QR code customization</Text>
-                <Text style={styles.featureSubtitle}>Premium QR code designs with brand colours</Text>
+              <View style={styles.featureRow}>
+                <View style={styles.featureColumn}>
+                  <Text style={styles.featureTitle}>Maximum number of cards</Text>
+                  <Text style={styles.featureSubtitle}>Create up to 5 cards with XSCard</Text>
+                </View>
+                <View style={styles.valueColumn}>
+                  <Text style={styles.freeValue}>1</Text>
+                </View>
+                <View style={styles.valueColumn}>
+                  <Text style={styles.premiumValue}>5</Text>
+                </View>
               </View>
-              <View style={styles.valueColumn}>
-                <MaterialIcons name="lock" size={24} color="#9E9E9E" />
-              </View>
-              <View style={styles.valueColumn}>
-                <MaterialIcons name="check-circle" size={24} color="#FF6B6B" />
-              </View>
-            </View>
 
-            <View style={styles.featureRow}>
-              <View style={styles.featureColumn}>
-                <Text style={styles.featureTitle}>Analytics</Text>
-                <Text style={styles.featureSubtitle}>Track scans, contacts, and engagement</Text>
+              <View style={styles.featureRow}>
+                <View style={styles.featureColumn}>
+                  <Text style={styles.featureTitle}>Add a custom color to your card</Text>
+                  <Text style={styles.featureSubtitle}>Set your color theme to be any color you like.</Text>
+                </View>
+                <View style={styles.valueColumn}>
+                  <MaterialIcons name="lock" size={24} color="#9E9E9E" />
+                </View>
+                <View style={styles.valueColumn}>
+                  <MaterialIcons name="check-circle" size={24} color="#FF6B6B" />
+                </View>
               </View>
-              <View style={styles.valueColumn}>
-                <MaterialIcons name="lock" size={24} color="#9E9E9E" />
-              </View>
-              <View style={styles.valueColumn}>
-                <MaterialIcons name="check-circle" size={24} color="#FF6B6B" />
-              </View>
-            </View>
 
-            <View style={styles.featureRow}>
-              <View style={styles.featureColumn}>
-                <Text style={styles.featureTitle}>Email support</Text>
-                <Text style={styles.featureSubtitle}>48h response → 12h priority support</Text>
+              <View style={styles.featureRow}>
+                <View style={styles.featureColumn}>
+                  <Text style={styles.featureTitle}>QR code customization</Text>
+                  <Text style={styles.featureSubtitle}>Premium QR code designs with brand colours</Text>
+                </View>
+                <View style={styles.valueColumn}>
+                  <MaterialIcons name="lock" size={24} color="#9E9E9E" />
+                </View>
+                <View style={styles.valueColumn}>
+                  <MaterialIcons name="check-circle" size={24} color="#FF6B6B" />
+                </View>
               </View>
-              <View style={styles.valueColumn}>
-                <Text style={styles.freeValue}>48h</Text>
-              </View>
-              <View style={styles.valueColumn}>
-                <Text style={styles.premiumValue}>12h</Text>
-              </View>
-            </View>
 
-            <View style={styles.featureRow}>
-              <View style={styles.featureColumn}>
-                <Text style={styles.featureTitle}>Calendar integration</Text>
-                <Text style={styles.featureSubtitle}>Direct calendar booking and invites</Text>
+              <View style={styles.featureRow}>
+                <View style={styles.featureColumn}>
+                  <Text style={styles.featureTitle}>Analytics</Text>
+                  <Text style={styles.featureSubtitle}>Track scans, contacts, and engagement</Text>
+                </View>
+                <View style={styles.valueColumn}>
+                  <MaterialIcons name="lock" size={24} color="#9E9E9E" />
+                </View>
+                <View style={styles.valueColumn}>
+                  <MaterialIcons name="check-circle" size={24} color="#FF6B6B" />
+                </View>
               </View>
-              <View style={styles.valueColumn}>
-                <MaterialIcons name="lock" size={24} color="#9E9E9E" />
-              </View>
-              <View style={styles.valueColumn}>
-                <MaterialIcons name="check-circle" size={24} color="#FF6B6B" />
-              </View>
-            </View>
 
-            <View style={styles.featureRow}>
-              <View style={styles.featureColumn}>
-                <Text style={styles.featureTitle}>Social media integration</Text>
-                <Text style={styles.featureSubtitle}>Connect all your social profiles</Text>
+              <View style={styles.featureRow}>
+                <View style={styles.featureColumn}>
+                  <Text style={styles.featureTitle}>Email support</Text>
+                  <Text style={styles.featureSubtitle}>48h response → 12h priority support</Text>
+                </View>
+                <View style={styles.valueColumn}>
+                  <Text style={styles.freeValue}>48h</Text>
+                </View>
+                <View style={styles.valueColumn}>
+                  <Text style={styles.premiumValue}>12h</Text>
+                </View>
               </View>
-              <View style={styles.valueColumn}>
-                <MaterialIcons name="lock" size={24} color="#9E9E9E" />
+
+              <View style={styles.featureRow}>
+                <View style={styles.featureColumn}>
+                  <Text style={styles.featureTitle}>Calendar integration</Text>
+                  <Text style={styles.featureSubtitle}>Direct calendar booking and invites</Text>
+                </View>
+                <View style={styles.valueColumn}>
+                  <MaterialIcons name="lock" size={24} color="#9E9E9E" />
+                </View>
+                <View style={styles.valueColumn}>
+                  <MaterialIcons name="check-circle" size={24} color="#FF6B6B" />
+                </View>
               </View>
-              <View style={styles.valueColumn}>
-                <MaterialIcons name="check-circle" size={24} color="#FF6B6B" />
+
+              <View style={styles.featureRow}>
+                <View style={styles.featureColumn}>
+                  <Text style={styles.featureTitle}>Social media integration</Text>
+                  <Text style={styles.featureSubtitle}>Connect all your social profiles</Text>
+                </View>
+                <View style={styles.valueColumn}>
+                  <MaterialIcons name="lock" size={24} color="#9E9E9E" />
+                </View>
+                <View style={styles.valueColumn}>
+                  <MaterialIcons name="check-circle" size={24} color="#FF6B6B" />
+                </View>
               </View>
             </View>
           </View>
-        </View>
 
-        <TouchableOpacity>
-          <Text style={styles.alreadyPaidText}>
-            I have already paid for XSCard Premium.{' '}
-            <Text style={styles.tapHereText}>Tap here</Text>
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity>
+            <Text style={styles.alreadyPaidText}>
+              I have already paid for XSCard Premium.{' '}
+              <Text style={styles.tapHereText}>Tap here</Text>
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={styles.bottomTrialButton}
-          onPress={handlePayment}
-          disabled={isProcessingPayment}
-        >
-          <Text style={styles.bottomTrialButtonText}>
-            {isProcessingPayment ? 'Processing...' : 'Pay Monthly R159.00'}
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
+          <TouchableOpacity style={styles.bottomTrialButton}>
+            <Text style={styles.bottomTrialButtonText}>Start 7-day free trial</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 };
@@ -469,6 +442,38 @@ const styles = StyleSheet.create({
   tapHereText: {
     textDecorationLine: 'underline',
     color: '#666',
+  },
+  premiumContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  premiumTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.black,
+    marginTop: 20,
+    textAlign: 'center',
+  },
+  premiumSubtitle: {
+    fontSize: 16,
+    color: COLORS.gray,
+    marginTop: 10,
+    textAlign: 'center',
+    marginBottom: 30,
+  },
+  cancelButton: {
+    backgroundColor: '#FF4444',
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+    marginTop: 20,
+  },
+  cancelButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 

@@ -46,6 +46,12 @@ interface SuccessModalProps {
   onClose: () => void;
 }
 
+interface DeleteModalProps {
+  visible: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}
+
 const NoteModal = ({ 
   visible, 
   selectedContact, 
@@ -119,6 +125,35 @@ const SuccessModal = ({ visible, onClose }: SuccessModalProps) => (
   </Modal>
 );
 
+const DeleteConfirmationModal = ({ visible, onClose, onConfirm }: DeleteModalProps) => (
+  <Modal
+    visible={visible}
+    transparent={true}
+    animationType="fade"
+  >
+    <View style={styles.modalContainer}>
+      <View style={styles.modalContent}>
+        <Text style={styles.modalTitle}>Delete Meeting</Text>
+        <Text style={styles.modalMessage}>Are you sure you want to delete this meeting?</Text>
+        <View style={styles.modalButtonsContainer}>
+          <TouchableOpacity
+            style={[styles.modalButton, styles.modalButtonCancel]}
+            onPress={onClose}
+          >
+            <Text style={[styles.modalButtonText, styles.modalButtonTextCancel]}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.modalButton, styles.modalButtonConfirm]}
+            onPress={onConfirm}
+          >
+            <Text style={styles.modalButtonText}>Delete</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  </Modal>
+);
+
 export default function Calendar() {
   const [selectedYear, setSelectedYear] = useState('2024');
   const [selectedDate, setSelectedDate] = useState('');
@@ -134,6 +169,8 @@ export default function Calendar() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [selectedEventIndex, setSelectedEventIndex] = useState<number | null>(null);
   const [userPlan, setUserPlan] = useState<string>('free');
+  const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
+  const [meetingToDelete, setMeetingToDelete] = useState<number | null>(null);
   const navigation = useNavigation<CalendarScreenNavigationProp>();
   
   const timeSlots = [
@@ -334,25 +371,8 @@ export default function Calendar() {
                   <TouchableOpacity 
                     style={styles.deleteIcon}
                     onPress={() => {
-                      Alert.alert(
-                        "Delete Event",
-                        "Are you sure you want to delete this event?",
-                        [
-                          { text: "Cancel", style: "cancel" },
-                          { 
-                            text: "Delete", 
-                            style: "destructive",
-                            onPress: () => {
-                              const updatedEvents = events.filter((e, i) => i !== index);
-                              setEvents(updatedEvents);
-                              const newMarkedDates = { ...markedDates };
-                              delete newMarkedDates[event.meetingWhen.split('T')[0]];
-                              setMarkedDates(newMarkedDates);
-                              setSelectedEventIndex(null);
-                            }
-                          }
-                        ]
-                      );
+                      setMeetingToDelete(index);
+                      setIsDeleteModalVisible(true);
                     }}
                   >
                     <Ionicons name="close-circle" size={24} color="red" />
@@ -489,6 +509,26 @@ export default function Calendar() {
       <SuccessModal 
         visible={showSuccessModal}
         onClose={() => setShowSuccessModal(false)}
+      />
+
+      <DeleteConfirmationModal
+        visible={isDeleteModalVisible}
+        onClose={() => {
+          setIsDeleteModalVisible(false);
+          setMeetingToDelete(null);
+        }}
+        onConfirm={() => {
+          if (meetingToDelete !== null) {
+            const updatedEvents = events.filter((e, i) => i !== meetingToDelete);
+            setEvents(updatedEvents);
+            const newMarkedDates = { ...markedDates };
+            delete newMarkedDates[events[meetingToDelete].meetingWhen.split('T')[0]];
+            setMarkedDates(newMarkedDates);
+            setSelectedEventIndex(null);
+          }
+          setIsDeleteModalVisible(false);
+          setMeetingToDelete(null);
+        }}
       />
     </View>
   );
@@ -746,5 +786,37 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 10,
     right: 10,
+  },
+  modalMessage: {
+    fontSize: 16,
+    marginBottom: 20,
+    textAlign: 'center',
+    color: COLORS.black,
+  },
+  modalButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    gap: 10,
+  },
+  modalButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modalButtonCancel: {
+    backgroundColor: '#F0F0F0',
+  },
+  modalButtonConfirm: {
+    backgroundColor: COLORS.error,
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: COLORS.white,
+  },
+  modalButtonTextCancel: {
+    color: COLORS.black,
   },
 });

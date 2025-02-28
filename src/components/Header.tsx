@@ -152,8 +152,14 @@ export default function Header({ title, rightIcon, showAddButton = false }: Head
               style={styles.menuItem}
               onPress={() => handleNavigate('UnlockPremium')}
             >
-              <MaterialIcons name="star" size={24} color={COLORS.secondary} />
-              <Text style={[styles.menuText, { color: COLORS.secondary }]}>Unlock Premium</Text>
+              <MaterialIcons 
+                name={userPlan === 'free' ? "star" : "settings"} 
+                size={24} 
+                color={COLORS.secondary} 
+              />
+              <Text style={[styles.menuText, { color: COLORS.secondary }]}>
+                {userPlan === 'free' ? 'Unlock Premium' : 'Manage Subscription'}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
