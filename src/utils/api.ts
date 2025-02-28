@@ -14,7 +14,7 @@ export interface PasscreatorResponse {
 const getBaseUrl = () => {
 
    //return 'https://xscard-app.onrender.com';
-    return 'http://192.168.68.107:8383';
+    return 'http://192.168.207.93:8383';
    /// return 'http://192.168.119.148:8383';
 };
 

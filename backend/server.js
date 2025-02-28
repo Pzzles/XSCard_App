@@ -15,6 +15,7 @@ const userRoutes = require('./routes/userRoutes');
 const cardRoutes = require('./routes/cardRoutes');
 const contactRoutes = require('./routes/contactRoutes');
 const meetingRoutes = require('./routes/meetingRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
 
 // Configure multer for file upload
 const storage = multer.diskStorage({
@@ -166,6 +167,7 @@ app.use('/', userRoutes);
 app.use('/', cardRoutes);
 app.use('/', contactRoutes);
 app.use('/', meetingRoutes);
+app.use('/', paymentRoutes);
 
 // Modify the user creation route to handle file upload
 app.post('/api/users', upload.single('profileImage'), (req, res, next) => {
