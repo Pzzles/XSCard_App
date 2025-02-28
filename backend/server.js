@@ -42,6 +42,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Public routes - must be before authentication middleware
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/', paymentRoutes); // Add this line before protected routes
 
 app.get('/saveContact', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'saveContact.html'));

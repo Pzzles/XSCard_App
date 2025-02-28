@@ -5,11 +5,15 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  Alert,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
+import { API_BASE_URL, ENDPOINTS, authenticatedFetch, getUserId } from '../../utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type RootStackParamList = {
   UnlockPremium: undefined;
@@ -18,6 +22,79 @@ type RootStackParamList = {
 
 const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList, 'UnlockPremium'>) => {
   const [selectedPlan, setSelectedPlan] = useState('annually');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
+  const handleStartTrial = async () => {
+    try {
+      setIsLoading(true);
+      const userId = await getUserId();
+      
+      if (!userId) {
+        throw new Error('User ID not found');
+      }
+
+      const endpoint = ENDPOINTS.UPGRADE_USER.replace(':id', userId);
+      const response = await authenticatedFetch(endpoint, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          plan: selectedPlan
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to start trial');
+      }
+
+      Alert.alert(
+        'Success',
+        'Your 7-day free trial has started!',
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+    } catch (error) {
+      Alert.alert('Error', 'Failed to start trial. Please try again.');
+      console.error('Trial start error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handlePayment = async () => {
+    try {
+      setIsProcessingPayment(true);
+      const userData = await AsyncStorage.getItem('userData');
+      const userEmail = userData ? JSON.parse(userData).email : null;
+
+      if (!userEmail) {
+        throw new Error('User email not found');
+      }
+
+      const response = await authenticatedFetch(ENDPOINTS.INITIALIZE_PAYMENT, {
+        method: 'POST',
+        body: JSON.stringify({
+          email: userEmail,
+          amount: 259.00 // R259.00
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Payment initialization failed');
+      }
+
+      // Open payment URL in browser/webview
+      if (data.data?.authorization_url) {
+        Linking.openURL(data.data.authorization_url);
+      }
+
+    } catch (error) {
+      Alert.alert('Error', 'Failed to initialize payment. Please try again.');
+      console.error('Payment error:', error);
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -35,8 +112,12 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
 
         <TouchableOpacity 
           style={[styles.trialButton, { marginVertical: 20 }]}
+          onPress={handlePayment}
+          disabled={isProcessingPayment}
         >
-          <Text style={styles.trialButtonText}>Start your 7-day free trial</Text>
+          <Text style={styles.trialButtonText}>
+            {isProcessingPayment ? 'Processing...' : 'Pay Monthly R159.00'}
+          </Text>
         </TouchableOpacity>
 
         {/* Pricing Options */}
@@ -68,7 +149,7 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.cancelText}>7-day free trial. Cancel anytime</Text>
+        <Text style={styles.cancelText}>Start 7-day free trial. Cancel anytime</Text>
 
         {/* Feature Comparison */}
         <View style={styles.comparisonContainer}>
@@ -185,8 +266,14 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.bottomTrialButton}>
-          <Text style={styles.bottomTrialButtonText}>Start 7-day free trial</Text>
+        <TouchableOpacity 
+          style={styles.bottomTrialButton}
+          onPress={handlePayment}
+          disabled={isProcessingPayment}
+        >
+          <Text style={styles.bottomTrialButtonText}>
+            {isProcessingPayment ? 'Processing...' : 'Pay Monthly R159.00'}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
