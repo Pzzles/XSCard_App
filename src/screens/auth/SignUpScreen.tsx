@@ -269,7 +269,7 @@ export default function SignUpScreen() {
       />
       
       <KeyboardAvoidingView 
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
         <ScrollView 
@@ -425,11 +425,13 @@ export default function SignUpScreen() {
           <View style={styles.bottomPadding} />
         </ScrollView>
 
-        <LinearGradient
-          colors={['transparent', COLORS.white]}
-          style={styles.fadeEffect}
-          pointerEvents="none"
-        />
+        {Platform.OS === 'android' && (
+          <LinearGradient
+            colors={['transparent', COLORS.white]}
+            style={styles.fadeEffect}
+            pointerEvents="none"
+          />
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

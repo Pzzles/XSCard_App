@@ -100,14 +100,6 @@ export default function AdminHeader({ title }: AdminHeaderProps) {
 
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={() => handleNavigate('Settings')}
-            >
-              <MaterialIcons name="settings" size={24} color={COLORS.secondary} />
-              <Text style={[styles.menuText, { color: COLORS.secondary }]}>Settings</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.menuItem}
               onPress={() => {
                 handleLogout();
               }}
