@@ -262,37 +262,85 @@ exports.deleteCard = async (req, res) => {
     const { id: userId } = req.params;
     const { cardIndex } = req.query;
     
-    if (!cardIndex && cardIndex !== 0) {
-        return res.status(400).send({ message: 'Card index is required' });
-    }
-
     try {
+        console.log('Delete request received:', { userId, cardIndex }); // Debug log
+
+        // Ensure proper content type is set
+        res.setHeader('Content-Type', 'application/json');
+
+        // Validate cardIndex
+        const parsedIndex = parseInt(cardIndex);
+        if (isNaN(parsedIndex)) {
+            console.log('Invalid card index:', cardIndex); // Debug log
+            return res.status(400).json({ 
+                success: false,
+                message: 'Invalid card index'
+            });
+        }
+
         const cardRef = db.collection('cards').doc(userId);
         const doc = await cardRef.get();
         
         if (!doc.exists) {
-            return res.status(404).send({ message: 'User cards not found' });
+            console.log('User cards not found for:', userId); // Debug log
+            return res.status(404).json({ 
+                success: false,
+                message: 'User cards not found' 
+            });
         }
 
         const cardsData = doc.data();
-        if (!cardsData.cards || !cardsData.cards[cardIndex]) {
-            return res.status(404).send({ message: 'Card not found at specified index' });
+        if (!cardsData.cards || !Array.isArray(cardsData.cards)) {
+            console.log('No cards array found for user:', userId); // Debug log
+            return res.status(404).json({ 
+                success: false,
+                message: 'No cards found for user' 
+            });
+        }
+
+        if (parsedIndex < 0 || parsedIndex >= cardsData.cards.length) {
+            console.log('Card index out of range:', { parsedIndex, totalCards: cardsData.cards.length }); // Debug log
+            return res.status(404).json({ 
+                success: false,
+                message: 'Card index out of range' 
+            });
         }
 
         // Remove the card at the specified index
-        const updatedCards = cardsData.cards.filter((_, index) => index !== parseInt(cardIndex));
+        const updatedCards = cardsData.cards.filter((_, index) => index !== parsedIndex);
 
         // Update the document with the modified array
         await cardRef.update({
             cards: updatedCards
         });
 
-        res.status(200).send({ 
+        // Format the cards before sending
+        const formattedCards = updatedCards.map(card => ({
+            ...card,
+            createdAt: {
+                _seconds: card.createdAt?._seconds || 0,
+                _nanoseconds: card.createdAt?._nanoseconds || 0
+            }
+        }));
+
+        console.log('Card deleted successfully:', { userId, cardIndex, remainingCards: updatedCards.length }); // Debug log
+
+        // Return success response with formatted cards array
+        const response = {
+            success: true,
             message: 'Card deleted successfully',
-            deletedCardIndex: cardIndex
-        });
+            cards: formattedCards,
+            deletedCardIndex: parsedIndex
+        };
+
+        return res.status(200).json(response);
     } catch (error) {
-        sendError(res, 500, 'Failed to delete card', error);
+        console.error('Delete card error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to delete card',
+            error: error.message
+        });
     }
 };
 

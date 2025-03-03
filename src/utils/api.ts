@@ -35,12 +35,12 @@ export const ENDPOINTS = {
     UPDATE_PROFILE_IMAGE: '/Users/:id/profile-image',
     UPDATE_COMPANY_LOGO: '/Users/:id/company-logo', 
     UPDATE_USER_COLOR: '/Users/:id/color', 
-    ADD_TO_WALLET: '/Cards/:userId/wallet/:cardIndex', // Updated endpoint
+    ADD_TO_WALLET: '/Cards/:userId/wallet/:cardIndex',
     DELETE_CONTACT: '/Contacts',
     UPDATE_CARD: '/Cards/:id',
     UPDATE_CARD_COLOR: '/Cards/:id/color',
     CREATE_MEETING: '/meetings',
-    DELETE_CARD: '/Users/:id/cards',
+    DELETE_CARD: '/Cards/:id',  // Change this to match the working endpoint
     UPGRADE_USER: '/Users/:id/upgrade',
     INITIALIZE_PAYMENT: '/payment/initialize',
 };

@@ -50,7 +50,6 @@ router.post('/AddCard',
 router.patch('/Cards/:id', upload.single('image'), cardController.updateCard);
 router.delete('/Cards/:id', cardController.deleteCard);
 router.post('/Cards/:userId/wallet/:cardIndex?', cardController.createWalletPass);
-
 router.patch('/Cards/:id/color', cardController.updateCardColor);
 router.get('/generateQR/:userId/:cardIndex', cardController.generateQR);
 // router.get('/Cards', cardController.getAllCards);
