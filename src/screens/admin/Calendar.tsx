@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Platform, Modal, Alert, TextInput, KeyboardAvoidingView, Animated } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Platform, Modal, Alert, TextInput, KeyboardAvoidingView, Animated, ActivityIndicator } from 'react-native';
 import { Calendar as RNCalendar, DateData } from 'react-native-calendars';
 import { COLORS } from '../../constants/colors';
 import AdminHeader from '../../components/AdminHeader';
@@ -40,6 +40,7 @@ interface NoteModalProps {
   onBack: () => void;
   onSave: () => void;
   onRequestClose: () => void;
+  isLoading: boolean;
 }
 
 interface SuccessModalProps {
@@ -61,7 +62,8 @@ const NoteModal = ({
   onChangeNote, 
   onBack, 
   onSave,
-  onRequestClose 
+  onRequestClose,
+  isLoading
 }: NoteModalProps) => (
   <Modal
     visible={visible}
@@ -92,14 +94,20 @@ const NoteModal = ({
             <TouchableOpacity 
               style={[styles.noteButton, styles.backButton]}
               onPress={onBack}
+              disabled={isLoading}
             >
               <Text style={styles.backButtonText}>Back</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.noteButton, styles.saveButton]}
               onPress={onSave}
+              disabled={isLoading}
             >
-              <Text style={styles.saveButtonText}>Create Meeting</Text>
+              {isLoading ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <Text style={styles.saveButtonText}>Create Meeting</Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -188,6 +196,7 @@ export default function Calendar() {
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
   const [meetingToDelete, setMeetingToDelete] = useState<number | null>(null);
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+  const [isCreatingMeeting, setIsCreatingMeeting] = useState(false);
   const navigation = useNavigation<CalendarScreenNavigationProp>();
   
   const timeSlots = [
@@ -303,7 +312,11 @@ const loadEvents = async () => {
   }, [navigation]);
 
   const handleSaveEvent = async () => {
+    if (isCreatingMeeting) return; // Prevent double submission
+    
     try {
+      setIsCreatingMeeting(true);
+
       if (!selectedDate || !selectedTime || !selectedContact) {
         Alert.alert('Error', 'Please select date, time and contact');
         return;
@@ -317,7 +330,7 @@ const loadEvents = async () => {
       const newEvent = {
         meetingWith: `${selectedContact.name} ${selectedContact.surname}`.trim(),
         meetingWhen: meetingDate.toISOString(),
-        description: eventNote
+        description: eventNote || '' // Ensure description is never undefined
       };
 
       const response = await authenticatedFetch(ENDPOINTS.CREATE_MEETING, {
@@ -326,7 +339,8 @@ const loadEvents = async () => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to create meeting');
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to create meeting');
       }
 
       // Reload events to get updated list
@@ -340,9 +354,11 @@ const loadEvents = async () => {
       setSelectedDate('');
       setSelectedTime('');
 
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error saving event:', error);
-      Alert.alert('Error', 'Failed to create meeting');
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to create meeting');
+    } finally {
+      setIsCreatingMeeting(false);
     }
   };
 
@@ -590,6 +606,7 @@ const renderEventDate = (dateStr: string) => {
         }}
         onSave={handleSaveEvent}
         onRequestClose={() => setIsNoteModalVisible(false)}
+        isLoading={isCreatingMeeting}
       />
 
       <SuccessModal 
@@ -829,6 +846,8 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     backgroundColor: COLORS.primary,
+    minHeight: 45, // Add minimum height to prevent size change during loading
+    justifyContent: 'center',
   },
   backButtonText: {
     color: 'white',

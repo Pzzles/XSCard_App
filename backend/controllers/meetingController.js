@@ -65,13 +65,14 @@ exports.getAllMeetings = async (req, res) => {
 };
 
 exports.createMeeting = async (req, res) => {
-    const { meetingWith, meetingWhen, description } = req.body;
+    const { meetingWith, meetingWhen } = req.body;
+    const description = req.body.description || ''; // Make description optional
     const userId = req.user.uid;
 
-    if (!meetingWith || !meetingWhen || !description) {
+    if (!meetingWith || !meetingWhen) {
         return res.status(400).send({ 
             message: 'Missing required fields',
-            required: ['meetingWith', 'meetingWhen', 'description']
+            required: ['meetingWith', 'meetingWhen']
         });
     }
 

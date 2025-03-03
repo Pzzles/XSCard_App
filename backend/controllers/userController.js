@@ -131,7 +131,7 @@ exports.addUser = async (req, res) => {
                 profileImage: req.files?.profileImage ? `/profiles/${req.files.profileImage[0].filename}` : null,
                 companyLogo: req.files?.companyLogo ? `/profiles/${req.files.companyLogo[0].filename}` : null,
                 socials,
-                colorScheme: '#E9C46A', // Default color
+                colorScheme: '#1B2B5B', // Default color
                 createdAt: admin.firestore.Timestamp.now() // Changed to Firestore Timestamp
             }]
         };

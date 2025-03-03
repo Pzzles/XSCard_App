@@ -8,6 +8,7 @@ export interface PasscreatorResponse {
     passFileUrl: string;
     passPageUrl: string;
     identifier: string;
+    colorScheme?: string; // Add default color support
 }
 
 // Helper function to get the appropriate base URL

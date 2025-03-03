@@ -12,43 +12,18 @@ import { API_BASE_URL, ENDPOINTS, buildUrl } from '../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import UnlockPremium from '../screens/Unlockpremium/UnlockPremium';
+import { useColorScheme } from '../context/ColorSchemeContext';
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
 const Stack = createStackNavigator<RootStackParamList>();
 
 function TabNavigator() {
-  const [activeColor, setActiveColor] = useState(COLORS.secondary);
-
-  useFocusEffect(
-    React.useCallback(() => {
-      loadUserColor();
-    }, [])
-  );
-
-  const loadUserColor = async () => {
-    try {
-      const storedUserData = await AsyncStorage.getItem('userData');
-      if (storedUserData) {
-        const parsedUserData = JSON.parse(storedUserData);
-        
-        // Fetch user details to get the color scheme
-        const response = await fetch(buildUrl(ENDPOINTS.GET_USER) + `/${parsedUserData.id}`);
-        const userData = await response.json();
-        
-        // Set color from user data
-        if (userData.colorScheme) {
-          setActiveColor(userData.colorScheme);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading user color:', error);
-    }
-  };
+  const { colorScheme } = useColorScheme();
 
   return (
     <Tab.Navigator
       screenOptions={{
-        tabBarActiveTintColor: activeColor,
+        tabBarActiveTintColor: colorScheme,
         tabBarInactiveTintColor: COLORS.gray,
         tabBarStyle: {
           backgroundColor: COLORS.white,

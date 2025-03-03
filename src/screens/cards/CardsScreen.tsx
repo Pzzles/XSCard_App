@@ -9,6 +9,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../types/navigation';
+import { useColorScheme } from '../../context/ColorSchemeContext';
 
 // Update interfaces to match new data structure
 interface UserData {
@@ -87,7 +88,7 @@ export default function CardsScreen() {
   const navigation = useNavigation<NavigationProp>();
   const [qrCode, setQrCode] = useState<string>('');
   const [userData, setUserData] = useState<UserData | null>(null);
-  const [cardColor, setCardColor] = useState(COLORS.secondary);
+  const { colorScheme, updateColorScheme } = useColorScheme();
   // Remove cardData state since it's now part of userData
   const borderRotation = useRef(new Animated.Value(0)).current;
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
@@ -163,7 +164,7 @@ export default function CardsScreen() {
 
         // Set card color from the first card (index 0)
         if (cardsArray[0].colorScheme) {
-          setCardColor(cardsArray[0].colorScheme);
+          updateColorScheme(cardsArray[0].colorScheme);
         }
       }
 
@@ -176,8 +177,9 @@ export default function CardsScreen() {
 
   // Add this effect to update card color when page changes
   useEffect(() => {
-    if (userData?.cards && userData.cards[currentPage]?.colorScheme) {
-      setCardColor(userData.cards[currentPage].colorScheme);
+    if (userData?.cards && userData.cards[currentPage]) {
+      const newColor = userData.cards[currentPage].colorScheme || COLORS.secondary;
+      updateColorScheme(newColor);
     }
   }, [currentPage, userData]);
 
@@ -369,7 +371,7 @@ export default function CardsScreen() {
   const dynamicStyles = StyleSheet.create({
     sendButton: {
       flexDirection: 'row',
-      backgroundColor: cardColor,
+      backgroundColor: colorScheme,
       paddingVertical: 10,
       paddingHorizontal: 20,
       borderRadius: 25,
@@ -386,7 +388,7 @@ export default function CardsScreen() {
     },
     shareButton: {
       flexDirection: 'row',
-      backgroundColor: cardColor,
+      backgroundColor: colorScheme,
       paddingVertical: 12,
       paddingHorizontal: 24,
       borderRadius: 25,
@@ -400,14 +402,14 @@ export default function CardsScreen() {
     input: {
       width: '80%',
       height: 40,
-      borderColor: cardColor,
+      borderColor: colorScheme,
       borderWidth: 1,
       marginBottom: 20,
       padding: 10,
     },
     contactBorder: {
       borderWidth: 1,
-      borderColor: cardColor,
+      borderColor: colorScheme,
       borderRadius: 8,
       padding: 10,
       marginBottom: 15,
@@ -442,7 +444,7 @@ export default function CardsScreen() {
       alignSelf: 'center',  // Center horizontally
       width: '55%',  // Re60ore original width
       borderWidth: 2,
-      borderColor: cardColor,
+      borderColor: colorScheme,
       gap: 8,
     },
   });
@@ -574,11 +576,11 @@ export default function CardsScreen() {
                   disabled={isWalletLoading}
                 >
                   {isWalletLoading ? (
-                    <ActivityIndicator size="small" color={cardColor} />
+                    <ActivityIndicator size="small" color={colorScheme} />
                   ) : (
                     <>
-                      <MaterialCommunityIcons name="wallet" size={24} color={cardColor} />
-                      <Text style={[styles.walletButtonText, { color: cardColor }]}>
+                      <MaterialCommunityIcons name="wallet" size={24} color={colorScheme} />
+                      <Text style={[styles.walletButtonText, { color: colorScheme }]}>
 
                         Add to {Platform.OS === 'ios' ? 'Apple' : 'Google'} Wallet
                       </Text>
@@ -670,7 +672,7 @@ export default function CardsScreen() {
 
             <View style={styles.optionsContainer}>
               <TouchableOpacity
-                style={[styles.optionButton, { backgroundColor: cardColor }]}
+                style={[styles.optionButton, { backgroundColor: colorScheme }]}
                 onPress={async () => {
                   await Clipboard.setStringAsync(modalData);
                   setIsOptionsModalVisible(false);
@@ -684,7 +686,7 @@ export default function CardsScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.optionButton, { backgroundColor: cardColor }]}
+                style={[styles.optionButton, { backgroundColor: colorScheme }]}
                 onPress={() => {
                   const url = modalType === 'email' ? `mailto:${modalData}` : `tel:${modalData}`;
                   Linking.openURL(url).catch(() => {

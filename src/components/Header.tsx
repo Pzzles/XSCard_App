@@ -5,6 +5,7 @@ import { COLORS } from '../constants/colors';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useColorScheme } from '../context/ColorSchemeContext';
 
 // Update this type to match your actual navigation type
 type RootStackParamList = {
@@ -29,6 +30,7 @@ export default function Header({ title, rightIcon, showAddButton = false }: Head
   const [userPlan, setUserPlan] = useState<string>('free');
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const [isMenuVisible, setIsMenuVisible] = useState(false);
+  const { colorScheme } = useColorScheme();
 
   // Add this useEffect to get the user's plan
   useEffect(() => {
@@ -244,7 +246,7 @@ const styles = StyleSheet.create({
   },
   menuText: {
     fontSize: 16,
-    color: COLORS.black,
     fontWeight: '500',
+    color: COLORS.secondary,
   },
 });

@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useColorScheme } from '../../context/ColorSchemeContext';
 
 // Update interfaces to match Firestore structure
 interface Contact {
@@ -43,13 +44,14 @@ export default function ContactsScreen() {
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [cardColor, setCardColor] = useState(COLORS.secondary);
   const [isOptionsModalVisible, setIsOptionsModalVisible] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
   const [modalTitle, setModalTitle] = useState('');
   const [confirmModalVisible, setConfirmModalVisible] = useState(false);
   const [contactToDelete, setContactToDelete] = useState<number | null>(null);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+
+  const { colorScheme } = useColorScheme();
 
   useFocusEffect(
     React.useCallback(() => {
@@ -69,10 +71,6 @@ export default function ContactsScreen() {
       const userResponse = await authenticatedFetch(ENDPOINTS.GET_USER + `/${userId}`);
       const userData = await userResponse.json();
       
-      if (userData?.colorScheme) {
-        setCardColor(userData.colorScheme);
-      }
-
       // Fetch contacts
       const contactResponse = await authenticatedFetch(ENDPOINTS.GET_CONTACTS + `/${userId}`);
       const data = await contactResponse.json();
@@ -286,7 +284,7 @@ export default function ContactsScreen() {
     shareCardButton: {
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
-      backgroundColor: cardColor,
+      backgroundColor: colorScheme,
       paddingVertical: 12,
       paddingHorizontal: 24,
       borderRadius: 25,
@@ -301,7 +299,7 @@ export default function ContactsScreen() {
       elevation: 5,
     },
     shareAction: {
-      backgroundColor: cardColor,
+      backgroundColor: colorScheme,
       justifyContent: 'center' as const,
       alignItems: 'center' as const,
       width: 80,

@@ -161,7 +161,7 @@ exports.addCard = async (req, res) => {
             name: name || '',
             surname: surname || '',
             socials: {},
-            colorScheme: '#E9C46A',
+            colorScheme: '#1B2B5B',
             createdAt: admin.firestore.Timestamp.now(), // Store as Firestore Timestamp
             profileImage: profileImagePath,
             companyLogo: companyLogoPath
