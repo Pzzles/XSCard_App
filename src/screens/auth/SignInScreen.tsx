@@ -97,10 +97,13 @@ export default function SignInScreen() {
 
       if (response.ok) {
         // Store the token and user data, making sure to include the uid as id
-        await AsyncStorage.setItem('userToken', `Bearer ${data.token}`);
+        const token = `Bearer ${data.token}`;
+        await AsyncStorage.setItem('userToken', token);
         const userData = {
           ...data.user,
-          id: data.user.uid // Ensure the uid is stored as id
+          id: data.user.uid,
+          name: data.user.name || '',
+          email: data.user.email || ''
         };
         await AsyncStorage.setItem('userData', JSON.stringify(userData));
         navigation.replace('MainApp');

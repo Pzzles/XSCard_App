@@ -4,11 +4,13 @@ import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Animated } from 'react-native';
 import { COLORS, CARD_COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
-import { useNavigation, CommonActions } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { authenticatedFetch, getUserId, API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import Modal from 'react-native-modal';
+import { EditCardScreenRouteProp, RootStackParamList } from '../../types/navigation';
+import { RouteProp } from '@react-navigation/native';
 
 // Add this interface for the form data type
 interface FormData {
@@ -43,6 +45,8 @@ interface CustomModalProps {
 }
 
 export default function EditCard() {
+  const route = useRoute<EditCardScreenRouteProp>();
+  const cardIndex = route.params?.cardIndex ?? 0; // Provide default value of 0
   const navigation = useNavigation();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -72,9 +76,11 @@ export default function EditCard() {
   const [currentSocialToRemove, setCurrentSocialToRemove] = useState<string | null>(null);
   const [modalType, setModalType] = useState<'profile' | 'logo' | null>(null);
   const [modalMessage, setModalMessage] = useState('');
+  const [userPlan, setUserPlan] = useState<string>('free');
 
   useEffect(() => {
     loadUserData();
+    getUserPlan();
   }, []);
 
   const loadUserData = async () => {
@@ -86,17 +92,12 @@ export default function EditCard() {
       }
 
       const response = await authenticatedFetch(ENDPOINTS.GET_CARD + `/${userId}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch user data');
-      }
-
       const cardsData = await response.json();
-      if (cardsData && cardsData.length > 0) {
-        const userData = cardsData[0]; // Get first card data
-
+      
+      if (cardsData && cardsData.length > cardIndex) {
+        const userData = cardsData[cardIndex]; // Use passed cardIndex instead of hardcoded 0
+        
         setSelectedColor(userData.colorScheme || '#1B2B5B');
-
-        // Set form data
         setFormData({
           firstName: userData.name || '',
           lastName: userData.surname || '',
@@ -112,7 +113,6 @@ export default function EditCard() {
           companyLogo: userData.companyLogo || '',
         });
 
-        // Set selected socials
         const existingSocials = Object.entries(userData.socials || {})
           .filter(([_, value]) => typeof value === 'string' && value.trim() !== '')
           .map(([key]) => key);
@@ -124,6 +124,18 @@ export default function EditCard() {
       setError('Failed to load user data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const getUserPlan = async () => {
+    try {
+      const userData = await AsyncStorage.getItem('userData');
+      if (userData) {
+        const { plan } = JSON.parse(userData);
+        setUserPlan(plan);
+      }
+    } catch (error) {
+      console.error('Error fetching user plan:', error);
     }
   };
 
@@ -195,7 +207,7 @@ export default function EditCard() {
 
       // Send update request
       const response = await authenticatedFetch(
-        ENDPOINTS.UPDATE_CARD.replace(':id', userId) + '?cardIndex=0',
+        `${ENDPOINTS.UPDATE_CARD.replace(':id', userId)}?cardIndex=${cardIndex}`,
         {
           method: 'PATCH',
           body: JSON.stringify(cardData),
@@ -467,6 +479,11 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
     </Modal>
   );
 
+  const handleDelete = () => {
+    setModalMessage('Are you sure you want to delete this card? This action cannot be undone.');
+    setIsConfirmModalVisible(true);
+  };
+
   return (
     <View style={styles.container}>
       <Header title="Edit Card" />
@@ -489,7 +506,10 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
         <ScrollView 
           ref={scrollViewRef}
           style={styles.content}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: 100 } // Add extra padding for delete button
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -667,14 +687,24 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
               </Animated.View>
             ))}
           </View>
+
+          {/* Delete Button */}
+          {userPlan !== 'free' && (
+            <TouchableOpacity 
+              style={styles.deleteButton}
+              onPress={handleDelete}
+            >
+              <Text style={styles.deleteButtonText}>Delete Card</Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
 
       <CustomModal
         isVisible={isConfirmModalVisible}
         onClose={() => setIsConfirmModalVisible(false)}
-        title="Remove Social Link"
-        message="Are you sure you want to remove this social link? Any entered data will be lost."
+        title="Delete Card"
+        message={modalMessage}
         buttons={[
           {
             text: 'Cancel',
@@ -682,17 +712,40 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
             onPress: () => setIsConfirmModalVisible(false)
           },
           {
-            text: 'Remove',
+            text: 'Delete',
             type: 'confirm',
-            onPress: () => {
-              if (currentSocialToRemove) {
-                setSelectedSocials(selectedSocials.filter(id => id !== currentSocialToRemove));
-                setFormData({
-                  ...formData,
-                  [currentSocialToRemove]: undefined
-                });
+            onPress: async () => {
+              try {
+                const userId = await getUserId();
+                if (!userId) {
+                  setError('User ID not found');
+                  return;
+                }
+
+                const response = await authenticatedFetch(
+                  `${ENDPOINTS.DELETE_CARD.replace(':id', userId)}?cardIndex=${cardIndex}`,
+                  {
+                    method: 'DELETE'
+                  }
+                );
+
+                if (!response.ok) {
+                  throw new Error('Failed to delete card');
+                }
+
+                // Get updated cards list from response
+                const updatedData = await response.json();
+                
+                // Update local storage with new cards list
+                await AsyncStorage.setItem('userCards', JSON.stringify(updatedData.cards));
+
+                setIsConfirmModalVisible(false);
+                setModalMessage('Card deleted successfully');
+                setIsSuccessModalVisible(true);
+              } catch (error) {
+                console.error('Error deleting card:', error);
+                setError('Failed to delete card');
               }
-              setIsConfirmModalVisible(false);
             }
           }
         ]}
@@ -739,9 +792,7 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
             type: 'confirm',
             onPress: () => {
               setIsSuccessModalVisible(false);
-              if (modalMessage.includes('Card updated')) {
-                navigation.goBack();
-              }
+              navigation.goBack();
             }
           }
         ]}
@@ -1009,6 +1060,20 @@ const styles = StyleSheet.create({
   },
   modalButtonTextCancel: {
     color: COLORS.black,
+  },
+  deleteButton: {
+    backgroundColor: COLORS.error, // or '#FF0000' for red
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 20,
+    marginHorizontal: 16,
+    marginBottom: 20,
+  },
+  deleteButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
 

@@ -3,30 +3,38 @@ import { StyleSheet, View, Text, TouchableOpacity, Modal } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../constants/colors';
 import { useNavigation } from '@react-navigation/native';
-import { StackNavigationProp } from '@react-navigation/stack';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { AdminTabParamList } from '../types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-type RootStackParamList = {
-  SignIn: undefined;
-  AdminDashboard: undefined;
-  MainApp: undefined;
-  // Add other screen names as needed
-};
+type AdminHeaderNavigationProp = BottomTabNavigationProp<AdminTabParamList>;
 
 type AdminHeaderProps = {
   title: string;
 };
 
 export default function AdminHeader({ title }: AdminHeaderProps) {
-  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
+  const navigation = useNavigation<any>();
   const [isMenuVisible, setIsMenuVisible] = useState(false);
+
+  const handleNavigate = (screen: string) => {
+    setIsMenuVisible(false);
+    if (screen === 'Cards') {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainApp' }],
+      });
+    } else {
+      navigation.navigate(screen);
+    }
+  };
 
   const handleLogout = async () => {
     try {
       await AsyncStorage.clear();
       navigation.reset({
         index: 0,
-        routes: [{ name: 'SignIn' }],
+        routes: [{ name: 'SignIn' as keyof AdminTabParamList }],
       });
     } catch (error) {
       console.error('Error during logout:', error);
@@ -40,7 +48,7 @@ export default function AdminHeader({ title }: AdminHeaderProps) {
           style={styles.icon}
           onPress={() => setIsMenuVisible(true)}
         >
-          <MaterialIcons name="menu" size={24} color={COLORS.black} />
+          <MaterialIcons name="menu" size={24} color={COLORS.white} />
         </TouchableOpacity>
 
         <View style={styles.titleContainer}>
@@ -49,7 +57,7 @@ export default function AdminHeader({ title }: AdminHeaderProps) {
 
         <View style={styles.iconContainer}>
           <TouchableOpacity style={styles.icon}>
-            <MaterialIcons name="notifications" size={24} color={COLORS.black} />
+            <MaterialIcons name="notifications" size={24} color={COLORS.white} />
           </TouchableOpacity>
         </View>
       </View>
@@ -68,10 +76,36 @@ export default function AdminHeader({ title }: AdminHeaderProps) {
           <View style={styles.menuContainer}>
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={handleLogout}
+              onPress={() => handleNavigate('Cards')}
             >
-              <MaterialIcons name="logout" size={24} color={COLORS.primary} />
-              <Text style={styles.menuText}>Logout</Text>
+              <MaterialIcons name="credit-card" size={24} color={COLORS.secondary} />
+              <Text style={[styles.menuText, { color: COLORS.secondary }]}>Cards</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => handleNavigate('Analytics')}
+            >
+              <MaterialIcons name="dashboard" size={24} color={COLORS.secondary} />
+              <Text style={[styles.menuText, { color: COLORS.secondary }]}>Dashboard</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => handleNavigate('Calendar')}
+            >
+              <MaterialIcons name="calendar-today" size={24} color={COLORS.secondary} />
+              <Text style={[styles.menuText, { color: COLORS.secondary }]}>Calendar</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => {
+                handleLogout();
+              }}
+            >
+              <MaterialIcons name="logout" size={24} color={COLORS.error} />
+              <Text style={[styles.menuText, { color: COLORS.error }]}>Logout</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -91,7 +125,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 16,
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.secondary,
     zIndex: 1,
   },
   titleContainer: {

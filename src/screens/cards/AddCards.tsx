@@ -1,14 +1,20 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
 import { useNavigation } from '@react-navigation/native';
-import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../../types';
+import { authenticatedFetch, ENDPOINTS, getUserId, buildUrl, API_BASE_URL } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
+import { pickImage, requestPermissions } from '../../utils/imageUtils';
+
+type AddCardsNavigationProp = StackNavigationProp<RootStackParamList>;
 
 export default function AddCards() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<AddCardsNavigationProp>();
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     firstName: '',
@@ -18,6 +24,8 @@ export default function AddCards() {
     email: '',
     phoneNumber: '',
   });
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [companyLogo, setCompanyLogo] = useState<string | null>(null);
 
   const handleCancel = () => {
     navigation.goBack();
@@ -32,45 +40,141 @@ export default function AddCards() {
     return true;
   };
 
+  const handleProfileImagePick = async () => {
+    const { cameraGranted, galleryGranted } = await requestPermissions();
+    
+    if (!cameraGranted || !galleryGranted) {
+      Alert.alert('Permission Required', 'Camera and gallery permissions are required to use this feature.');
+      return;
+    }
+
+    Alert.alert(
+      'Select Image Source',
+      'Choose where you want to pick your profile picture from',
+      [
+        {
+          text: 'Camera',
+          onPress: async () => {
+            const imageUri = await pickImage(true);
+            if (imageUri) setProfileImage(imageUri);
+          },
+        },
+        {
+          text: 'Gallery',
+          onPress: async () => {
+            const imageUri = await pickImage(false);
+            if (imageUri) setProfileImage(imageUri);
+          },
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  const handleLogoUpload = async () => {
+    const { cameraGranted, galleryGranted } = await requestPermissions();
+    
+    if (!cameraGranted || !galleryGranted) {
+      Alert.alert('Permission Required', 'Camera and gallery permissions are required to use this feature.');
+      return;
+    }
+
+    Alert.alert(
+      'Select Logo Source',
+      'Choose where you want to pick your company logo from',
+      [
+        {
+          text: 'Camera',
+          onPress: async () => {
+            const imageUri = await pickImage(true);
+            if (imageUri) setCompanyLogo(imageUri);
+          },
+        },
+        {
+          text: 'Gallery',
+          onPress: async () => {
+            const imageUri = await pickImage(false);
+            if (imageUri) setCompanyLogo(imageUri);
+          },
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
   const handleAdd = async () => {
     try {
       if (!validateForm()) {
         return;
       }
 
-      const storedUserData = await AsyncStorage.getItem('userData');
-      if (!storedUserData) {
+      const userId = await getUserId();
+      const token = await AsyncStorage.getItem('userToken');
+
+      if (!userId || !token) {
         Alert.alert('Error', 'Please login first');
         return;
       }
 
-      const userData = JSON.parse(storedUserData);
+      const form = new FormData();
       
+      // Use formData state to append values
+      form.append('company', formData.company);
+      form.append('email', formData.email);
+      form.append('phone', formData.phoneNumber);
+      form.append('title', formData.occupation);
+      form.append('name', formData.firstName);
+      form.append('surname', formData.lastName);
+
+      if (profileImage) {
+        const imageName = profileImage.split('/').pop() || 'profile.jpg';
+        form.append('profileImage', {
+          uri: profileImage,
+          type: 'image/jpeg',
+          name: imageName,
+        } as any);
+      }
+
+      if (companyLogo) {
+        const logoName = companyLogo.split('/').pop() || 'logo.jpg';
+        form.append('companyLogo', {
+          uri: companyLogo,
+          type: 'image/jpeg',
+          name: logoName,
+        } as any);
+      }
+
       const response = await fetch(buildUrl(ENDPOINTS.ADD_CARD), {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Authorization': `${token}`,  // Add token here
         },
-        body: JSON.stringify({
-          Company: formData.company,
-          Email: formData.email,
-          PhoneNumber: formData.phoneNumber,
-          UserId: userData.id,
-          title: formData.occupation,
-          socialLinks: []
-        }),
+        body: form,
       });
 
+      const responseData = await response.json();
+      console.log('Server Response:', responseData);
+
       if (!response.ok) {
-        throw new Error('Failed to create card');
+        throw new Error(responseData.message || 'Failed to create card');
       }
 
-      const result = await response.json();
-      Alert.alert('Success', 'Card created successfully');
-      navigation.goBack();
+      Alert.alert('Success', 'Card created successfully', [
+        {
+          text: 'OK',
+          onPress: () => navigation.goBack()
+        }
+      ]);
+
     } catch (error) {
       console.error('Error creating card:', error);
-      Alert.alert('Error', 'Failed to create card. Please try again.');
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to create card');
     }
   };
 
@@ -88,82 +192,105 @@ export default function AddCards() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content}>
-        {/* Warning Message */}
-        <View style={styles.warningBox}>
-          <MaterialIcons name="info" size={20} color={COLORS.black} />
-          <Text style={styles.warningText}>
-            1/5 card limit met. Save and upgrade to premium plan to keep this card
-          </Text>
-        </View>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 30 : 0}
+      >
+        <ScrollView 
+          style={styles.content}
+          contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 20 : 20 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Warning Message */}
+          <View style={styles.warningBox}>
+            <MaterialIcons name="info" size={20} color={COLORS.black} />
+            <Text style={styles.warningText}>
+              New Card, new you! Create a card that will help you connect with your network. 
+            </Text>
+          </View>
 
-        {/* Images & Layout Section */}
-        <Text style={styles.sectionTitle}>Images & layout</Text>
-        <View style={styles.imageButtons}>
-          <TouchableOpacity style={styles.imageButton}>
-            <MaterialIcons name="add" size={24} color={COLORS.black} />
-            <Text style={styles.buttonText}>Profile Picture</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.imageButton}>
-            <MaterialIcons name="add" size={24} color={COLORS.black} />
-            <Text style={styles.buttonText}>Company logo</Text>
-          </TouchableOpacity>
-        </View>
+          {/* Images & Layout Section */}
+          <Text style={styles.sectionTitle}>Images & layout</Text>
+          <View style={styles.imageButtons}>
+            <TouchableOpacity style={styles.imageButton} onPress={handleProfileImagePick}>
+              {profileImage ? (
+                <Image source={{ uri: profileImage }} style={styles.imagePreview} />
+              ) : (
+                <>
+                  <MaterialIcons name="add" size={24} color={COLORS.black} />
+                  <Text style={styles.buttonText}>Profile Picture</Text>
+                </>
+              )}
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.imageButton} onPress={handleLogoUpload}>
+              {companyLogo ? (
+                <Image source={{ uri: companyLogo }} style={styles.imagePreview} />
+              ) : (
+                <>
+                  <MaterialIcons name="add" size={24} color={COLORS.black} />
+                  <Text style={styles.buttonText}>Company logo</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
 
-        {/* Personal Details Section */}
-        <Text style={styles.sectionTitle}>Personal details</Text>
-        <View style={styles.form}>
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
-          <TextInput 
-            style={styles.input}
-            placeholder="First name..."
-            placeholderTextColor="#999"
-            value={formData.firstName}
-            onChangeText={(text) => setFormData({...formData, firstName: text})}
-          />
-          <TextInput 
-            style={styles.input}
-            placeholder="Occupation..."
-            placeholderTextColor="#999"
-            value={formData.occupation}
-            onChangeText={(text) => setFormData({...formData, occupation: text})}
-          />
-          <TextInput 
-            style={styles.input}
-            placeholder="Last name..."
-            placeholderTextColor="#999"
-            value={formData.lastName}
-            onChangeText={(text) => setFormData({...formData, lastName: text})}
-          />
-          <TextInput 
-            style={styles.input}
-            placeholder="Company name..."
-            placeholderTextColor="#999"
-            value={formData.company}
-            onChangeText={(text) => setFormData({...formData, company: text})}
-          />
-          <TextInput 
-            style={styles.input}
-            placeholder="Email..."
-            placeholderTextColor="#999"
-            value={formData.email}
-            onChangeText={(text) => setFormData({...formData, email: text})}
-            keyboardType="email-address"
-          />
-          <TextInput 
-            style={styles.input}
-            placeholder="Phone number..."
-            placeholderTextColor="#999"
-            value={formData.phoneNumber}
-            onChangeText={(text) => setFormData({...formData, phoneNumber: text})}
-            keyboardType="phone-pad"
-          />
-          <TouchableOpacity style={styles.addButton} onPress={handleAdd}>
-            <Text style={styles.addButtonText}>Add</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+          {/* Personal Details Section */}
+          <Text style={styles.sectionTitle}>Personal details</Text>
+          <View style={styles.form}>
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            <TextInput 
+              style={styles.input}
+              placeholder="First name"
+              placeholderTextColor="#999"
+              value={formData.firstName}
+              onChangeText={(text) => setFormData({...formData, firstName: text})}
+            />
+            <TextInput 
+              style={styles.input}
+              placeholder="Occupation"
+              placeholderTextColor="#999"
+              value={formData.occupation}
+              onChangeText={(text) => setFormData({...formData, occupation: text})}
+            />
+            <TextInput 
+              style={styles.input}
+              placeholder="Last name"
+              placeholderTextColor="#999"
+              value={formData.lastName}
+              onChangeText={(text) => setFormData({...formData, lastName: text})}
+            />
+            <TextInput 
+              style={styles.input}
+              placeholder="Company name"
+              placeholderTextColor="#999"
+              value={formData.company}
+              onChangeText={(text) => setFormData({...formData, company: text})}
+            />
+            <TextInput 
+              style={styles.input}
+              placeholder="Email"
+              placeholderTextColor="#999"
+              value={formData.email}
+              onChangeText={(text) => setFormData({...formData, email: text})}
+              keyboardType="email-address"
+            />
+            <TextInput 
+              style={styles.input}
+              placeholder="Phone number"
+              placeholderTextColor="#999"
+              value={formData.phoneNumber}
+              onChangeText={(text) => setFormData({...formData, phoneNumber: text})}
+              keyboardType="phone-pad"
+            />
+            <TouchableOpacity style={styles.addButton} onPress={handleAdd}>
+              <Text style={styles.addButtonText}>Add</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -173,10 +300,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.white,
   },
-  content: {
+  content: { 
     flex: 1,
     paddingHorizontal: 16,
-    marginTop: 200,
+    marginTop: 150,
   },
   warningBox: {
     flexDirection: 'row',
@@ -230,11 +357,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     position: 'absolute',
-    top: 140,
+    top: 100,
     left: 0,
     right: 0,
     zIndex: 1,
-    paddingVertical: 10,
+    paddingVertical: 0,
     backgroundColor: COLORS.white,
   },
   cancelButton: {
@@ -260,5 +387,10 @@ const styles = StyleSheet.create({
   errorText: {
     color: 'red',
     marginBottom: 10,
+  },
+  imagePreview: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
 });

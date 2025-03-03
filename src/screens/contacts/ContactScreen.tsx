@@ -8,17 +8,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useColorScheme } from '../../context/ColorSchemeContext';
 
 // Update interfaces to match Firestore structure
 interface Contact {
   name: string;
   surname: string;
-  number: string;
+  phone: string; // Changed from number to phone to match DB
   howWeMet: string;
-  createdAt: {
-    _seconds: number;
-    _nanoseconds: number;
-  };
+  createdAt: string; // Will now be in format "Date: February 25, 2025 at 6:25 PM"
 }
 
 interface ContactData {
@@ -46,13 +44,14 @@ export default function ContactsScreen() {
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [cardColor, setCardColor] = useState(COLORS.secondary);
   const [isOptionsModalVisible, setIsOptionsModalVisible] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
   const [modalTitle, setModalTitle] = useState('');
   const [confirmModalVisible, setConfirmModalVisible] = useState(false);
   const [contactToDelete, setContactToDelete] = useState<number | null>(null);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+
+  const { colorScheme } = useColorScheme();
 
   useFocusEffect(
     React.useCallback(() => {
@@ -72,10 +71,6 @@ export default function ContactsScreen() {
       const userResponse = await authenticatedFetch(ENDPOINTS.GET_USER + `/${userId}`);
       const userData = await userResponse.json();
       
-      if (userData?.colorScheme) {
-        setCardColor(userData.colorScheme);
-      }
-
       // Fetch contacts
       const contactResponse = await authenticatedFetch(ENDPOINTS.GET_CONTACTS + `/${userId}`);
       const data = await contactResponse.json();
@@ -133,46 +128,6 @@ export default function ContactsScreen() {
     }
   };
 
-  // Update formatDate to handle Firestore timestamp
-  const formatDate = (dateString: any) => {
-    try {
-      let date;
-      
-      // Handle Firestore timestamp
-      if (dateString && dateString._seconds) {
-        date = new Date(dateString._seconds * 1000);
-      } else if (typeof dateString === 'string') {
-        date = new Date(dateString);
-      } else if (dateString instanceof Date) {
-        date = dateString;
-      } else {
-        console.error('Unsupported date format:', dateString);
-        return 'Recently';
-      }
-  
-      // Check if the date is valid
-      if (!date || isNaN(date.getTime())) {
-        console.error('Invalid date value:', dateString);
-        return 'Recently';
-      }
-  
-      // Format the date
-      const options: Intl.DateTimeFormatOptions = {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      };
-  
-      return new Intl.DateTimeFormat('en-US', options).format(date);
-    } catch (error) {
-      console.error('Error formatting date:', error, dateString);
-      return 'Recently';
-    }
-  };
-
   const filteredContacts = contacts.filter(contact =>
     `${contact.name} ${contact.surname}`.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -190,7 +145,7 @@ export default function ContactsScreen() {
         const userData = JSON.parse(storedUserData);
         const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
         const message = contact 
-          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.number}\nMet at: ${contact.howWeMet}`
+          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.phone}\nMet at: ${contact.howWeMet}`
           : `Check out my digital business card! ${shareUrl}`;
           
         Linking.openURL(`whatsapp://send?text=${encodeURIComponent(message)}`).catch(() => {
@@ -210,7 +165,7 @@ export default function ContactsScreen() {
         const userData = JSON.parse(storedUserData);
         const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
         const message = contact 
-          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.number}\nMet at: ${contact.howWeMet}`
+          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.phone}\nMet at: ${contact.howWeMet}`
           : `Check out my business card: ${shareUrl}`;
 
         Linking.openURL(`tg://msg?text=${encodeURIComponent(message)}`).catch(() => {
@@ -230,7 +185,7 @@ export default function ContactsScreen() {
         const userData = JSON.parse(storedUserData);
         const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
         const message = contact 
-          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.number}\nMet at: ${contact.howWeMet}`
+          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.phone}\nMet at: ${contact.howWeMet}`
           : `Check out my business card: ${shareUrl}`;
 
         const emailUrl = `mailto:?subject=Business Card&body=${encodeURIComponent(message)}`;
@@ -275,7 +230,7 @@ export default function ContactsScreen() {
       
       let message;
       if (selectedContact) {
-        message = `Contact Information:\nName: ${selectedContact.name} ${selectedContact.surname}\nPhone: ${selectedContact.number}\nMet at: ${selectedContact.howWeMet}`;
+        message = `Contact Information:\nName: ${selectedContact.name} ${selectedContact.surname}\nPhone: ${selectedContact.phone}\nMet at: ${selectedContact.howWeMet}`;
       } else {
         message = `Check out my digital business card! ${shareUrl}`;
       }
@@ -329,7 +284,7 @@ export default function ContactsScreen() {
     shareCardButton: {
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
-      backgroundColor: cardColor,
+      backgroundColor: colorScheme,
       paddingVertical: 12,
       paddingHorizontal: 24,
       borderRadius: 25,
@@ -344,7 +299,7 @@ export default function ContactsScreen() {
       elevation: 5,
     },
     shareAction: {
-      backgroundColor: cardColor,
+      backgroundColor: colorScheme,
       justifyContent: 'center' as const,
       alignItems: 'center' as const,
       width: 80,
@@ -432,13 +387,15 @@ export default function ContactsScreen() {
                           {contact.name} {contact.surname}
                         </Text>
                         <View style={styles.contactSubInfo}>
-                          <Text style={styles.contactPosition}>{contact.number}</Text>
-                          <View style={styles.metContainer}>
-                            <Text style={styles.contactHowWeMet}>Met at: {contact.howWeMet}</Text>
-                            <Text style={styles.contactDate}>
-                              Date: {formatDate(contact.createdAt)}
-                            </Text>
-                          </View>
+                          <Text style={styles.contactPhone}>
+                            {contact.phone || 'No phone number'}
+                          </Text>
+                          <Text style={styles.contactHowWeMet}>
+                            Met at: {contact.howWeMet}
+                          </Text>
+                          <Text style={styles.contactDate}>
+                            {contact.createdAt || 'Recently'}
+                          </Text>
                         </View>
                       </View>
                     </View>
@@ -639,9 +596,13 @@ const styles = StyleSheet.create({
     color: COLORS.black,
   },
   contactSubInfo: {
-    flexDirection: 'column',
     marginTop: 4,
     gap: 2,
+  },
+  contactPhone: {
+    fontSize: 14,
+    color: COLORS.black,
+    marginBottom: 4,
   },
   contactPosition: {
     fontSize: 14,
@@ -768,17 +729,17 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   contactHowWeMet: {
-    fontSize: 12,
+    fontSize: 13,
     color: COLORS.gray,
-    fontStyle: 'italic',
+    marginBottom: 2,
   },
   metContainer: {
     marginTop: 2,
   },
   contactDate: {
-    fontSize: 11,
+    fontSize: 12,
     color: COLORS.gray,
-    marginTop: 2,
+    fontStyle: 'italic',
   },
   deleteAction: {
     backgroundColor: COLORS.error,

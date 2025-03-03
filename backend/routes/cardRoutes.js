@@ -10,7 +10,7 @@ const path = require('path');
 // Configure multer storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'public/profiles/');  // Changed from 'uploads/' to 'public/profiles/'
+    cb(null, 'public/profiles/');  // Store files in public/profiles/
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -40,17 +40,18 @@ router.use(authenticateUser);
 // Group routes by resource
 // Card operations
 router.get('/Cards/:id', cardController.getCardById);
-router.post('/AddCard', cardController.addCard);
+router.post('/AddCard', 
+  upload.fields([
+    { name: 'profileImage', maxCount: 1 },
+    { name: 'companyLogo', maxCount: 1 }
+  ]), 
+  cardController.addCard
+);
 router.patch('/Cards/:id', upload.single('image'), cardController.updateCard);
 router.delete('/Cards/:id', cardController.deleteCard);
-
-// Card customization
+router.post('/Cards/:userId/wallet/:cardIndex?', cardController.createWalletPass);
 router.patch('/Cards/:id/color', cardController.updateCardColor);
-
-// QR code generation
-router.get('/generateQR/:userId', cardController.generateQR);
-
-// Remove getAllCards if not being used in the frontend
+router.get('/generateQR/:userId/:cardIndex', cardController.generateQR);
 // router.get('/Cards', cardController.getAllCards);
 
 module.exports = router;

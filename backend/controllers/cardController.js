@@ -2,6 +2,9 @@ const { db, admin } = require('../firebase.js');
 const QRCode = require('qrcode');
 const multer = require('multer');
 const path = require('path');
+const axios = require('axios');
+const config = require('../config/config');
+const { formatDate } = require('../utils/dateFormatter');
 
 // Configure storage
 const storage = multer.diskStorage({
@@ -32,6 +35,16 @@ const validateUserAccess = async (userId, userUid) => {
     }
 };
 
+// Add this function at the top with other helper functions
+const logPasscreatorConfig = () => {
+  console.log('=== Passcreator Configuration ===');
+  console.log('PASSCREATOR_BASE_URL:', process.env.PASSCREATOR_BASE_URL || 'Not set');
+  console.log('PASSCREATOR_TEMPLATE_ID:', process.env.PASSCREATOR_TEMPLATE_ID || 'Not set');
+  console.log('PASSCREATOR_API_KEY:', process.env.PASSCREATOR_API_KEY ? '✓ Present' : '✗ Missing');
+  console.log('PASSCREATOR_PUBLIC_URL:', config.PASSCREATOR_PUBLIC_URL || 'Not set');
+  console.log('==============================');
+};
+
 exports.getAllCards = async (req, res) => {
     try {
         console.log('Fetching all cards...');
@@ -60,52 +73,85 @@ exports.getAllCards = async (req, res) => {
 
 exports.getCardById = async (req, res) => {
     const { id } = req.params;
-    
     try {
-        // Validates that requesting user matches the requested userId
-        await validateUserAccess(id, req.user.uid);
-
         const cardRef = db.collection('cards').doc(id);
         const doc = await cardRef.get();
         
         if (!doc.exists || !doc.data().cards) {
-            return sendError(res, 404, 'No cards found for this user');
+            return res.status(404).send({ message: 'No cards found for this user' });
+        }
+
+        // Convert Firestore timestamps to readable dates
+        const data = doc.data();
+        if (data.cards) {
+            data.cards = data.cards.map(card => ({
+                ...card,
+                createdAt: formatDate(card.createdAt) // Format for display
+            }));
         }
         
-        res.status(200).send(doc.data().cards);
+        res.status(200).send(data.cards);
     } catch (error) {
-        sendError(res, error.message === 'Unauthorized access' ? 403 : 500, 
-            'Failed to fetch card data', error);
+        console.error('Error fetching card:', error);
+        res.status(500).send({ message: 'Error fetching card', error: error.message });
     }
 };
 
 exports.addCard = async (req, res) => {
-    const { 
-        company, 
-        email, 
-        phone, 
-        title, 
-        name,
-        surname,
-        colorScheme,
-        socials 
-    } = req.body;
-    
-    const userId = req.user.uid; // Get the current user's UID from the auth middleware
-    
-    const requiredFields = ['company', 'email', 'phone', 'title'];
-    const missingFields = requiredFields.filter(field => !req.body[field]);
-    
-    if (missingFields.length > 0) {
-        return res.status(400).send({ 
-            message: 'Missing required fields', 
-            missingFields 
-        });
-    }
-
     try {
+        const userId = req.user.uid;
+        if (!userId) {
+            return res.status(401).json({ 
+                success: false,
+                message: 'Unauthorized access - no user ID' 
+            });
+        }
+
+        // Enhanced debug logging
+        console.log('Request headers:', req.headers);
+        console.log('Request files:', req.files);
+        console.log('Request body:', req.body);
+
+        const { 
+            company, 
+            email, 
+            phone, 
+            title, 
+            name,
+            surname
+        } = req.body;
+
+        // Validate fields are not only present but also have values
+        const requiredFields = ['company', 'email', 'phone', 'title'];
+        const missingFields = requiredFields.filter(field => {
+            const value = req.body[field];
+            return value === undefined || value === null || value === '';
+        });
+        
+        if (missingFields.length > 0) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'Missing required fields', 
+                missingFields,
+                receivedFields: req.body // Add this to see what fields were actually received
+            });
+        }
+
         const cardRef = db.collection('cards').doc(userId);
         const cardDoc = await cardRef.get();
+
+        // Handle file paths if files were uploaded
+        let profileImagePath = null;
+        let companyLogoPath = null;
+
+        if (req.files) {
+            if (req.files.profileImage) {
+                profileImagePath = `/profiles/${req.files.profileImage[0].filename}`;
+            }
+            if (req.files.companyLogo) {
+                companyLogoPath = `/profiles/${req.files.companyLogo[0].filename}`;
+            }
+        }
 
         const newCard = {
             company,
@@ -114,12 +160,14 @@ exports.addCard = async (req, res) => {
             occupation: title,
             name: name || '',
             surname: surname || '',
-            socials: socials || {},
-            colorScheme: colorScheme || '#E9C46A', // Use provided color or default
-            createdAt: new Date().toISOString(),
-            profileImage: null,
-            companyLogo: null
+            socials: {},
+            colorScheme: '#1B2B5B',
+            createdAt: admin.firestore.Timestamp.now(), // Store as Firestore Timestamp
+            profileImage: profileImagePath,
+            companyLogo: companyLogoPath
         };
+
+        console.log('Creating new card:', newCard); // Debug log
 
         if (cardDoc.exists) {
             await cardRef.update({
@@ -131,12 +179,24 @@ exports.addCard = async (req, res) => {
             });
         }
         
-        res.status(201).send({ 
+        // Format the response
+        const responseCard = {
+            ...newCard,
+            createdAt: formatDate(newCard.createdAt) // Format for display
+        };
+        
+        res.status(201).json({ 
+            success: true,
             message: 'Card added successfully',
-            cardData: newCard
+            cardData: responseCard
         });
     } catch (error) {
-        sendError(res, 500, 'Error adding card', error);
+        console.error('Error in addCard:', error); // Debug log
+        res.status(500).json({
+            success: false,
+            message: 'Error adding card',
+            error: error.message
+        });
     }
 };
 
@@ -202,58 +262,118 @@ exports.deleteCard = async (req, res) => {
     const { id: userId } = req.params;
     const { cardIndex } = req.query;
     
-    if (!cardIndex && cardIndex !== 0) {
-        return res.status(400).send({ message: 'Card index is required' });
-    }
-
     try {
+        console.log('Delete request received:', { userId, cardIndex }); // Debug log
+
+        // Ensure proper content type is set
+        res.setHeader('Content-Type', 'application/json');
+
+        // Validate cardIndex
+        const parsedIndex = parseInt(cardIndex);
+        if (isNaN(parsedIndex)) {
+            console.log('Invalid card index:', cardIndex); // Debug log
+            return res.status(400).json({ 
+                success: false,
+                message: 'Invalid card index'
+            });
+        }
+
         const cardRef = db.collection('cards').doc(userId);
         const doc = await cardRef.get();
         
         if (!doc.exists) {
-            return res.status(404).send({ message: 'User cards not found' });
+            console.log('User cards not found for:', userId); // Debug log
+            return res.status(404).json({ 
+                success: false,
+                message: 'User cards not found' 
+            });
         }
 
         const cardsData = doc.data();
-        if (!cardsData.cards || !cardsData.cards[cardIndex]) {
-            return res.status(404).send({ message: 'Card not found at specified index' });
+        if (!cardsData.cards || !Array.isArray(cardsData.cards)) {
+            console.log('No cards array found for user:', userId); // Debug log
+            return res.status(404).json({ 
+                success: false,
+                message: 'No cards found for user' 
+            });
+        }
+
+        if (parsedIndex < 0 || parsedIndex >= cardsData.cards.length) {
+            console.log('Card index out of range:', { parsedIndex, totalCards: cardsData.cards.length }); // Debug log
+            return res.status(404).json({ 
+                success: false,
+                message: 'Card index out of range' 
+            });
         }
 
         // Remove the card at the specified index
-        const updatedCards = cardsData.cards.filter((_, index) => index !== parseInt(cardIndex));
+        const updatedCards = cardsData.cards.filter((_, index) => index !== parsedIndex);
 
         // Update the document with the modified array
         await cardRef.update({
             cards: updatedCards
         });
 
-        res.status(200).send({ 
+        // Format the cards before sending
+        const formattedCards = updatedCards.map(card => ({
+            ...card,
+            createdAt: {
+                _seconds: card.createdAt?._seconds || 0,
+                _nanoseconds: card.createdAt?._nanoseconds || 0
+            }
+        }));
+
+        console.log('Card deleted successfully:', { userId, cardIndex, remainingCards: updatedCards.length }); // Debug log
+
+        // Return success response with formatted cards array
+        const response = {
+            success: true,
             message: 'Card deleted successfully',
-            deletedCardIndex: cardIndex
-        });
+            cards: formattedCards,
+            deletedCardIndex: parsedIndex
+        };
+
+        return res.status(200).json(response);
     } catch (error) {
-        sendError(res, 500, 'Failed to delete card', error);
+        console.error('Delete card error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to delete card',
+            error: error.message
+        });
     }
 };
 
 exports.generateQR = async (req, res) => {
-    const { userId } = req.params;
+    const { userId, cardIndex } = req.params;
     
     try {
         await validateUserAccess(userId, req.user.uid);
 
-        const userRef = db.collection('users').doc(userId);
-        const userDoc = await userRef.get();
+        const cardRef = db.collection('cards').doc(userId);
+        const cardDoc = await cardRef.get();
         
-        if (!userDoc.exists) {
-            return sendError(res, 404, 'User not found');
+        if (!cardDoc.exists) {
+            return sendError(res, 404, 'User cards not found');
         }
 
-        const redirectUrl = `${req.protocol}://${req.get('host')}/saveContact?userId=${userId}`;
+        const cardsData = cardDoc.data();
+        if (!cardsData.cards || !cardsData.cards[cardIndex]) {
+            return sendError(res, 404, 'Card not found at specified index');
+        }
+
+        // Create URL with both userId and cardIndex
+        const redirectUrl = `${req.protocol}://${req.get('host')}/saveContact?userId=${userId}&cardIndex=${cardIndex}`;
+        
+        // Generate QR code with better quality settings
         const qrCodeBuffer = await QRCode.toBuffer(redirectUrl, {
             errorCorrectionLevel: 'H',
             margin: 1,
-            width: 300
+            width: 300,
+            color: {
+                dark: '#000000',
+                light: '#ffffff'
+            }
         });
 
         res.setHeader('Content-Type', 'image/png');
@@ -309,5 +429,104 @@ exports.updateCardColor = async (req, res) => {
         });
     } catch (error) {
         sendError(res, 500, 'Failed to update card color', error);
+    }
+};
+
+exports.createWalletPass = async (req, res) => {
+    const { userId, cardIndex = 0 } = req.params;
+
+    try {
+        // Log configuration before making the request
+        logPasscreatorConfig();
+        console.log('\nCreating wallet pass for:', { userId, cardIndex });
+
+        // Validate required environment variables
+        if (!process.env.PASSCREATOR_BASE_URL || 
+            !process.env.PASSCREATOR_TEMPLATE_ID || 
+            !process.env.PASSCREATOR_API_KEY || 
+            !config.PASSCREATOR_PUBLIC_URL) {
+            throw new Error('Missing required Passcreator configuration');
+        }
+
+        const cardRef = db.collection('cards').doc(userId);
+        const cardDoc = await cardRef.get();
+
+        if (!cardDoc.exists) {
+            console.log('Card document not found for userId:', userId);
+            return res.status(404).send({ message: 'User cards not found' });
+        }
+
+        const cardsData = cardDoc.data();
+        if (!cardsData.cards || !cardsData.cards[cardIndex]) {
+            console.log('Card not found at index:', cardIndex);
+            return res.status(404).send({ message: 'Card not found at specified index' });
+        }
+
+        const card = cardsData.cards[cardIndex];
+        
+        // Log image URLs
+        const thumbnailUrl = card.profileImage ? `${config.PASSCREATOR_PUBLIC_URL}${card.profileImage}` : null;
+        const logoUrl = card.companyLogo ? `${config.PASSCREATOR_PUBLIC_URL}${card.companyLogo}` : null;
+        
+        console.log('Image URLs:', {
+            thumbnailUrl,
+            logoUrl
+        });
+
+        const passData = {
+            name: `${card.name} ${card.surname}`,
+            company: card.company,
+            jobTitle: card.occupation,
+            urlToThumbnail: thumbnailUrl,
+            urlToLogo: logoUrl,
+            barcodeValue: `${config.PASSCREATOR_PUBLIC_URL}/queries.html?userId=${userId}&cardIndex=${cardIndex}`
+        };
+
+        console.log('Pass Data being sent:', passData);
+
+        // Log request details
+        const requestUrl = `${process.env.PASSCREATOR_BASE_URL}/api/pass?passtemplate=${process.env.PASSCREATOR_TEMPLATE_ID}&zapierStyle=true`;
+        console.log('Making request to:', requestUrl);
+
+        const response = await axios.post(
+            requestUrl,
+            passData,
+            {
+                headers: {
+                    'Authorization': process.env.PASSCREATOR_API_KEY,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        console.log('Passcreator API Response:', {
+            uri: response.data.uri,
+            fileUrl: response.data.linkToPassFile,
+            pageUrl: response.data.linkToPassPage,
+            identifier: response.data.identifier
+        });
+
+        res.status(200).send({
+            message: 'Wallet pass created successfully',
+            passUri: response.data.uri,
+            passFileUrl: response.data.linkToPassFile,
+            passPageUrl: response.data.linkToPassPage,
+            identifier: response.data.identifier,
+            cardIndex: cardIndex
+        });
+
+    } catch (error) {
+        console.error('Error creating wallet pass:', {
+            message: error.message,
+            response: error.response?.data,
+            config: error.config
+        });
+
+        // Send a more detailed error response
+        res.status(500).send({
+            message: 'Failed to create wallet pass',
+            error: error.message,
+            details: error.response?.data || 'No additional details available'
+        });
     }
 };

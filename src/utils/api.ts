@@ -8,14 +8,15 @@ export interface PasscreatorResponse {
     passFileUrl: string;
     passPageUrl: string;
     identifier: string;
+    colorScheme?: string; // Add default color support
 }
 
 // Helper function to get the appropriate base URL
 const getBaseUrl = () => {
 
    //return 'https://xscard-app.onrender.com';
-    return 'http://192.168.119.148:8383';
-   // return 'http://192.168.8.7:8383';
+    return 'http://192.168.68.104:8383';
+   /// return 'http://192.168.119.148:8383';
 };
 
 export const API_BASE_URL = getBaseUrl();
@@ -34,10 +35,14 @@ export const ENDPOINTS = {
     UPDATE_PROFILE_IMAGE: '/Users/:id/profile-image',
     UPDATE_COMPANY_LOGO: '/Users/:id/company-logo', 
     UPDATE_USER_COLOR: '/Users/:id/color', 
-    ADD_TO_WALLET: '/Users/:id/wallet',
+    ADD_TO_WALLET: '/Cards/:userId/wallet/:cardIndex',
     DELETE_CONTACT: '/Contacts',
-    UPDATE_CARD: '/Cards/:id',  // Update this line
-    UPDATE_CARD_COLOR: '/Cards/:id/color',  // Add this line
+    UPDATE_CARD: '/Cards/:id',
+    UPDATE_CARD_COLOR: '/Cards/:id/color',
+    CREATE_MEETING: '/meetings',
+    DELETE_CARD: '/Cards/:id',  // Change this to match the working endpoint
+    UPGRADE_USER: '/Users/:id/upgrade',
+    INITIALIZE_PAYMENT: '/payment/initialize',
 };
 
 export const buildUrl = (endpoint: string) => `${API_BASE_URL}${endpoint}`;

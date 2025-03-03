@@ -1,5 +1,6 @@
-const { db } = require('../firebase.js');
+const { db, admin } = require('../firebase.js');
 const { transporter, sendMailWithStatus } = require('../public/Utils/emailService');
+const { formatDate } = require('../utils/dateFormatter');
 
 exports.getAllContacts = async (req, res) => {
     try {
@@ -40,17 +41,26 @@ exports.getContactById = async (req, res) => {
         if (!doc.exists) {
             return res.status(404).send({ message: 'Contact list not found' });
         }
-        
+
+        // Send raw data for debugging
+        const data = doc.data();
+        console.log('Raw contact data:', data); // Debug log
+
+        if (data.contactList) {
+            data.contactList = data.contactList.map(contact => ({
+                ...contact,
+                createdAt: formatDate(contact.createdAt) // Format for display
+            }));
+        }
+
+        // Send the data without modification
         res.status(200).send({
             id: doc.id,
-            ...doc.data()
+            ...data
         });
     } catch (error) {
         console.error('Error fetching contact:', error);
-        res.status(500).send({ 
-            message: 'Internal Server Error', 
-            error: error.message 
-        });
+        res.status(500).send({ message: 'Error fetching contact', error: error.message });
     }
 };
 
@@ -64,20 +74,32 @@ exports.addContact = async (req, res) => {
     }
 
     try {
-        const contactData = {
-            userId: db.doc(`users/${userId}`),
-            contactsList: [{
-                ...contactInfo,
-                createdAt: new Date().toISOString()
-            }]
+        const contactRef = db.collection('contacts').doc(userId);
+        const doc = await contactRef.get();
+
+        let currentContacts = [];
+        if (doc.exists) {
+            currentContacts = doc.data().contactList || [];
+        }
+
+        const newContact = {
+            ...contactInfo,
+            createdAt: admin.firestore.Timestamp.now() // Store as Firestore Timestamp
         };
 
-        const docRef = await db.collection('contacts').add(contactData);
+        currentContacts.push(newContact);
+
+        await contactRef.set({
+            userId: db.doc(`users/${userId}`),
+            contactList: currentContacts
+        }, { merge: true });
         
         res.status(201).send({ 
-            message: 'Contact list created successfully',
-            contactId: docRef.id,
-            contactData
+            message: 'Contact added successfully',
+            contactList: currentContacts.map(contact => ({
+                ...contact,
+                createdAt: formatDate(contact.createdAt) // Format for display
+            }))
         });
     } catch (error) {
         console.error('Error adding contact:', error);
@@ -96,19 +118,19 @@ exports.saveContactInfo = async (req, res) => {
     }
 
     try {
-        // Save contact to database
         const contactsRef = db.collection('contacts').doc(userId);
         const contactsDoc = await contactsRef.get();
 
         let existingContacts = contactsDoc.exists ? contactsDoc.data().contactsList : [];
         if (!Array.isArray(existingContacts)) existingContacts = [];
 
+        // Add new contact with Firestore Timestamp
         existingContacts.push({
             name: contactInfo.name,
             surname: contactInfo.surname,
             number: contactInfo.phone,
             howWeMet: contactInfo.howWeMet,
-            createdAt: new Date().toISOString()
+            createdAt: admin.firestore.Timestamp.now() // Changed to Firestore Timestamp
         });
 
         await contactsRef.set({

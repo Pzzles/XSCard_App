@@ -10,21 +10,42 @@ registerRootComponent(App);
 export type Contact = {
   id: number;
   name: string;
+  surname: string;
+  number: string;
   position: string;
   company: string;
   dateAdded: string;
   image: any; // Consider using a more specific type for images
 };
+export type AdminTabParamList = {
+  Analytics: undefined;
+  Calendar: undefined;
+  Settings: undefined;
+  Cards: undefined;
+  SignIn: undefined;
+  MainApp: undefined;
+};
+
+export type RootStackParamList = {
+  MainTabs: undefined;
+  AddCards: undefined;
+  EditCard: undefined;
+  UnlockPremium: undefined;
+  AdminDashboard: undefined;
+  SignIn: undefined;
+  CardsScreen: undefined;
+  Contacts: undefined;
+  MainApp: undefined;
+};
 
 export type RootTabParamList = {
   Cards: undefined;
   Contacts: undefined;
-  AdminDashboard: undefined;
 };
 
 export type AuthStackParamList = {
   SignIn: undefined;
   SignUp: undefined;
-  AdminDashboard: undefined;
   MainApp: undefined;
+  AdminDashboard: undefined;
 };
