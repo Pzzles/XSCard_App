@@ -14,10 +14,11 @@ import { StackNavigationProp } from '@react-navigation/stack';
 type CalendarNavigationProp = BottomTabNavigationProp<AdminTabParamList, 'Calendar'>;
 type CalendarScreenNavigationProp = StackNavigationProp<AuthStackParamList>;
 
+// Update Event type to match actual Firebase response
 type Event = {
-  id?: string;  // Optional as backend generates this
+  id?: string;
   meetingWith: string;
-  meetingWhen: string;
+  meetingWhen: string;  // Change this to string to match Firebase format
   description: string;
 };
 
@@ -154,6 +155,21 @@ const DeleteConfirmationModal = ({ visible, onClose, onConfirm }: DeleteModalPro
   </Modal>
 );
 
+const MONTH_MAP: { [key: string]: string } = {
+  'January': '01',
+  'February': '02',
+  'March': '03',
+  'April': '04',
+  'May': '05',
+  'June': '06',
+  'July': '07',
+  'August': '08',
+  'September': '09',
+  'October': '10',
+  'November': '11',
+  'December': '12'
+};
+
 export default function Calendar() {
   const [selectedYear, setSelectedYear] = useState('2024');
   const [selectedDate, setSelectedDate] = useState('');
@@ -171,6 +187,7 @@ export default function Calendar() {
   const [userPlan, setUserPlan] = useState<string>('free');
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
   const [meetingToDelete, setMeetingToDelete] = useState<number | null>(null);
+  const [isLoadingEvents, setIsLoadingEvents] = useState(false);
   const navigation = useNavigation<CalendarScreenNavigationProp>();
   
   const timeSlots = [
@@ -205,25 +222,53 @@ export default function Calendar() {
     }
   };
 
-  const loadEvents = async () => {
-    try {
-      const savedEvents = await AsyncStorage.getItem('calendarEvents');
-      if (savedEvents) {
-        const parsedEvents = JSON.parse(savedEvents);
-        setEvents(parsedEvents);
-        
-        // Create marked dates object
-        const marks: MarkedDates = {};
-        parsedEvents.forEach((event: Event) => {
-          const eventDate = event.meetingWhen.split('T')[0];  // Extract date part from ISO string
-          marks[eventDate] = { marked: true, dotColor: '#FF69B4' };
-        });
-        setMarkedDates(marks);
-      }
-    } catch (error) {
-      console.error('Error loading events:', error);
+  // Update loadEvents function to debug date handling
+const loadEvents = async () => {
+  try {
+    setIsLoadingEvents(true);
+    const userId = await getUserId();
+    if (!userId) {
+      throw new Error('No user ID found');
     }
-  };
+
+    const response = await authenticatedFetch(`/meetings/${userId}`);
+    const data = await response.json();
+    
+    console.log('Meetings response:', JSON.stringify(data, null, 2));
+
+    if (data.success && data.data.meetings) {
+      setEvents(data.data.meetings);
+      
+      const marks: MarkedDates = {};
+      data.data.meetings.forEach((event: Event) => {
+        try {
+          const dateStr = event.meetingWhen.replace(' at at ', ' at ');
+          console.log('Processing fixed date:', dateStr);
+          
+          // Parse the date parts
+          const [monthStr, day, year] = dateStr.split(' at ')[0].split(' ');
+          
+          // Get month number from our mapping
+          const month = MONTH_MAP[monthStr];
+          
+          // Format the date in YYYY-MM-DD format
+          const formattedDate = `${year}-${month}-${day.padStart(2, '0')}`;
+          console.log('Formatted date:', formattedDate);
+          
+          marks[formattedDate] = { marked: true, dotColor: '#FF69B4' };
+        } catch (error) {
+          console.error('Error parsing date:', error, event.meetingWhen);
+        }
+      });
+      setMarkedDates(marks);
+    }
+  } catch (error) {
+    console.error('Error loading events:', error);
+    Alert.alert('Error', 'Failed to load meetings');
+  } finally {
+    setIsLoadingEvents(false);
+  }
+};
 
   useEffect(() => {
     loadEvents();
@@ -264,51 +309,29 @@ export default function Calendar() {
         return;
       }
 
-      // Format the date and time to ISO string
-      const [year, month, day] = selectedDate.split('-');
       const [hour, minute] = selectedTime.split(':');
       const meetingDate = new Date(
-        parseInt(year),
-        parseInt(month) - 1,
-        parseInt(day),
-        parseInt(hour),
-        parseInt(minute)
+        selectedDate + 'T' + `${hour}:${minute}:00`
       );
 
       const newEvent = {
         meetingWith: `${selectedContact.name} ${selectedContact.surname}`.trim(),
         meetingWhen: meetingDate.toISOString(),
-        description: eventNote // Use the eventNote value instead of empty string
+        description: eventNote
       };
 
-      // Save to backend
       const response = await authenticatedFetch(ENDPOINTS.CREATE_MEETING, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(newEvent)
       });
 
-      const savedMeeting = await response.json();
-      
-      if (savedMeeting.error) {
-        throw new Error(savedMeeting.error);
+      if (!response.ok) {
+        throw new Error('Failed to create meeting');
       }
 
-      // Update local state with the note included
-      setEvents(prevEvents => [...prevEvents, {
-        ...newEvent,
-        id: savedMeeting.id,
-        description: eventNote // Ensure note is included in local state
-      }]);
-
-      // Update marked dates
-      setMarkedDates(prev => ({
-        ...prev,
-        [selectedDate]: { marked: true, dotColor: '#FF69B4' }
-      }));
-
+      // Reload events to get updated list
+      await loadEvents();
+      
       // Show success and reset states
       setShowSuccessModal(true);
       setIsNoteModalVisible(false);
@@ -316,9 +339,61 @@ export default function Calendar() {
       setEventNote('');
       setSelectedDate('');
       setSelectedTime('');
+
     } catch (error) {
       console.error('Error saving event:', error);
-      setShowSuccessModal(false);
+      Alert.alert('Error', 'Failed to create meeting');
+    }
+  };
+
+  const handleDeleteMeeting = async (index: number) => {
+    try {
+      const userId = await getUserId();
+      if (!userId) {
+        throw new Error('No user ID found');
+      }
+
+      const response = await authenticatedFetch(`/meetings/${userId}/${index}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete meeting');
+      }
+
+      // Reload events after deletion
+      await loadEvents();
+      setIsDeleteModalVisible(false);
+      setMeetingToDelete(null);
+      setSelectedEventIndex(null);
+
+    } catch (error) {
+      console.error('Error deleting meeting:', error);
+      Alert.alert('Error', 'Failed to delete meeting');
+    }
+  };
+
+const renderEventDate = (dateStr: string) => {
+  try {
+    const fixedDateStr = dateStr.replace(' at at ', ' at ');
+    const [monthStr, day, year] = fixedDateStr.split(' at ')[0].split(' ');
+    
+    // Return day, abbreviated month, and year
+    return `${day} ${monthStr.slice(0, 3).toUpperCase()} ${year}`;
+  } catch (error) {
+    console.error('Error rendering date:', error);
+    return 'Invalid date';
+  }
+};
+
+  const renderEventTime = (dateStr: string) => {
+    try {
+      const fixedDateStr = dateStr.replace(' at at ', ' at ');
+      const [, timeStr] = fixedDateStr.split(' at ');
+      return timeStr.split(' ')[0]; // Returns just the time part
+    } catch (error) {
+      console.error('Error rendering time:', error);
+      return 'Invalid time';
     }
   };
 
@@ -360,35 +435,46 @@ export default function Calendar() {
 
         <View style={styles.eventsSection}>
           <Text style={styles.upcomingTitle}>Upcoming Events</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {events.map((event, index) => (
-              <TouchableOpacity 
-                key={event.id ? `event-${event.id}-${index}` : `event-${index}`} 
-                style={styles.eventCard}
-                onPress={() => setSelectedEventIndex(selectedEventIndex === index ? null : index)}
-              >
-                {selectedEventIndex === index && (
-                  <TouchableOpacity 
-                    style={styles.deleteIcon}
-                    onPress={() => {
-                      setMeetingToDelete(index);
-                      setIsDeleteModalVisible(true);
-                    }}
-                  >
-                    <Ionicons name="close-circle" size={24} color="red" />
-                  </TouchableOpacity>
-                )}
-                <Text style={styles.eventDate}>
-                  {new Date(event.meetingWhen).getDate()} {new Date(event.meetingWhen).toLocaleString('default', { weekday: 'short' }).toUpperCase()}
-                </Text>
-                <Text style={styles.eventTitle}>Meeting with {event.meetingWith}</Text>
-                <Text style={styles.eventTime}>
-                  {new Date(event.meetingWhen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </Text>
-                {event.description && <Text style={styles.eventNote}>{event.description}</Text>}
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          {events.length > 0 ? (
+            <ScrollView 
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.eventsScrollView}
+              decelerationRate="fast"
+              snapToAlignment="start"
+              pagingEnabled={false}
+            >
+              {events.map((event, index) => (
+                <TouchableOpacity 
+                  key={event.id ? `event-${event.id}-${index}` : `event-${index}`} 
+                  style={styles.eventCard}
+                  onPress={() => setSelectedEventIndex(selectedEventIndex === index ? null : index)}
+                >
+                  {selectedEventIndex === index && (
+                    <TouchableOpacity 
+                      style={styles.deleteIcon}
+                      onPress={() => {
+                        setMeetingToDelete(index);
+                        setIsDeleteModalVisible(true);
+                      }}
+                    >
+                      <Ionicons name="close-circle" size={24} color="red" />
+                    </TouchableOpacity>
+                  )}
+                  <Text style={styles.eventDate}>
+                    {renderEventDate(event.meetingWhen)}
+                  </Text>
+                  <Text style={styles.eventTitle}>Meeting with {event.meetingWith}</Text>
+                  <Text style={styles.eventTime}>
+                    {renderEventTime(event.meetingWhen)}
+                  </Text>
+                  {event.description && <Text style={styles.eventNote}>{event.description}</Text>}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : (
+            <Text style={styles.emptyEventsMessage}>No events scheduled</Text>
+          )}
           <TouchableOpacity 
             style={[
               styles.createEventButton,
@@ -519,15 +605,8 @@ export default function Calendar() {
         }}
         onConfirm={() => {
           if (meetingToDelete !== null) {
-            const updatedEvents = events.filter((e, i) => i !== meetingToDelete);
-            setEvents(updatedEvents);
-            const newMarkedDates = { ...markedDates };
-            delete newMarkedDates[events[meetingToDelete].meetingWhen.split('T')[0]];
-            setMarkedDates(newMarkedDates);
-            setSelectedEventIndex(null);
+            handleDeleteMeeting(meetingToDelete);
           }
-          setIsDeleteModalVisible(false);
-          setMeetingToDelete(null);
         }}
       />
     </View>
@@ -573,6 +652,7 @@ const styles = StyleSheet.create({
   },
   eventsSection: {
     marginTop: 20,
+    marginBottom: 20, // Add some bottom margin
   },
   upcomingTitle: {
     fontSize: 20,
@@ -589,8 +669,21 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.22,
     shadowRadius: 2.22,
-    minWidth: 150,
+    minWidth: 200, // Increase minimum width
+    maxWidth: 250, // Add maximum width
     position: 'relative',
+    marginVertical: 5, // Add vertical margin
+  },
+  eventsScrollView: {
+    paddingLeft: 20, // Add left padding
+    paddingRight: 5, // Add right padding
+    marginBottom: 15, // Add bottom margin
+  },
+  emptyEventsMessage: {
+    textAlign: 'center',
+    color: '#666',
+    fontSize: 14,
+    paddingVertical: 20,
   },
   eventDate: {
     color: '#FF69B4',

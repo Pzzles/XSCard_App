@@ -6,12 +6,14 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL, ENDPOINTS, authenticatedFetch, getUserId } from '../../utils/api';
 
 type RootStackParamList = {
   UnlockPremium: undefined;
@@ -21,21 +23,24 @@ type RootStackParamList = {
 const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList, 'UnlockPremium'>) => {
   const [selectedPlan, setSelectedPlan] = useState('annually');
   const [userPlan, setUserPlan] = useState<string>('free');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [userEmail, setUserEmail] = useState<string>('');
 
   useEffect(() => {
-    const getUserPlan = async () => {
+    const getUserData = async () => {
       try {
         const userData = await AsyncStorage.getItem('userData');
         if (userData) {
-          const { plan } = JSON.parse(userData);
+          const { email, plan } = JSON.parse(userData);
+          setUserEmail(email);
           setUserPlan(plan);
         }
       } catch (error) {
-        console.error('Error getting user plan:', error);
+        console.error('Error getting user data:', error);
       }
     };
 
-    getUserPlan();
+    getUserData();
   }, []);
 
   const handleCancelSubscription = () => {
@@ -57,6 +62,38 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
         },
       ]
     );
+  };
+
+  const handlePaymentInitiation = async () => {
+    try {
+      setIsProcessing(true);
+      const amount = selectedPlan === 'annually' ? 1800 : 159.99;
+
+      const response = await authenticatedFetch(ENDPOINTS.INITIALIZE_PAYMENT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: userEmail,
+          amount: amount,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.status && data.data?.authorization_url) {
+        // Open payment URL in browser
+        await Linking.openURL(data.data.authorization_url);
+      } else {
+        throw new Error('Payment initialization failed');
+      }
+    } catch (error) {
+      console.error('Payment error:', error);
+      Alert.alert('Error', 'Failed to initiate payment. Please try again.');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const renderPremiumUserUI = () => (
@@ -93,9 +130,17 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
           </Text>
 
           <TouchableOpacity 
-            style={[styles.trialButton, { marginVertical: 20 }]}
+            style={[
+              styles.trialButton, 
+              { marginVertical: 20 },
+              isProcessing && styles.disabledButton
+            ]}
+            onPress={handlePaymentInitiation}
+            disabled={isProcessing}
           >
-            <Text style={styles.trialButtonText}>Start your 7-day free trial</Text>
+            <Text style={styles.trialButtonText}>
+              {isProcessing ? 'Processing...' : 'Start your 7-day free trial'}
+            </Text>
           </TouchableOpacity>
 
           {/* Pricing Options */}
@@ -244,8 +289,17 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.bottomTrialButton}>
-            <Text style={styles.bottomTrialButtonText}>Start 7-day free trial</Text>
+          <TouchableOpacity 
+            style={[
+              styles.bottomTrialButton,
+              isProcessing && styles.disabledButton
+            ]}
+            onPress={handlePaymentInitiation}
+            disabled={isProcessing}
+          >
+            <Text style={styles.bottomTrialButtonText}>
+              {isProcessing ? 'Processing...' : 'Start 7-day free trial'}
+            </Text>
           </TouchableOpacity>
         </ScrollView>
       )}
@@ -474,6 +528,9 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
 });
 
