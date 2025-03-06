@@ -5,7 +5,9 @@ import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
 import { API_BASE_URL, ENDPOINTS, buildUrl, authenticatedFetch, getUserId } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../../types/navigation';
 import { Swipeable } from 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useColorScheme } from '../../context/ColorSchemeContext';
@@ -38,6 +40,9 @@ interface UserData {
 }
 
 export default function ContactsScreen() {
+  // Add navigation prop
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactDocId, setContactDocId] = useState<string>('');
@@ -125,12 +130,21 @@ export default function ContactsScreen() {
         throw new Error(responseData.message || 'Failed to delete contact');
       }
 
-      // Update local state
+      // Update local state correctly - Important change here
       const updatedContacts = [...contacts];
       updatedContacts.splice(index, 1);
       setContacts(updatedContacts);
       
+      // Also update remaining contacts count after successful deletion
+      if (typeof remainingContacts === 'number') {
+        setRemainingContacts(remainingContacts + 1);
+      }
+      
       showModal('Success', responseData.message || 'Contact deleted successfully');
+      
+      // After successful deletion, refresh the contacts list to get updated indices
+      await loadContacts();
+      
     } catch (error) {
       console.error('Error deleting contact:', error);
       showModal('Error', error instanceof Error ? error.message : 'Failed to delete contact');
@@ -287,7 +301,11 @@ export default function ContactsScreen() {
     if (contactToDelete !== null) {
       try {
         await deleteContact(contactToDelete);
-      } finally {
+        setConfirmModalVisible(false);
+        setContactToDelete(null);
+      } catch (error) {
+        console.error('Error in confirmDelete:', error);
+        // Still close the modal even if there's an error
         setConfirmModalVisible(false);
         setContactToDelete(null);
       }
@@ -354,6 +372,12 @@ export default function ContactsScreen() {
     setModalTitle(title);
     setModalMessage(message);
     setIsOptionsModalVisible(true);
+  };
+
+  // Add function to navigate to UnlockPremium
+  const navigateToUpgrade = () => {
+    setShowLimitModal(false);
+    navigation.navigate('UnlockPremium');
   };
 
   return (
@@ -594,11 +618,7 @@ export default function ContactsScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.modalButton, { backgroundColor: colorScheme }]}
-                  onPress={() => {
-                    setShowLimitModal(false);
-                    // Add navigation to upgrade screen if you have one
-                    // navigation.navigate('Upgrade');
-                  }}
+                  onPress={navigateToUpgrade}  // Updated to use the new function
                 >
                   <Text style={styles.deleteButtonText}>Upgrade Now</Text>
                 </TouchableOpacity>
