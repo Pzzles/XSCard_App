@@ -452,42 +452,81 @@ const renderEventDate = (dateStr: string) => {
         <View style={styles.eventsSection}>
           <Text style={styles.upcomingTitle}>Upcoming Events</Text>
           {events.length > 0 ? (
-            <ScrollView 
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.eventsScrollView}
-              decelerationRate="fast"
-              snapToAlignment="start"
-              pagingEnabled={false}
-            >
-              {events.map((event, index) => (
-                <TouchableOpacity 
-                  key={event.id ? `event-${event.id}-${index}` : `event-${index}`} 
-                  style={styles.eventCard}
-                  onPress={() => setSelectedEventIndex(selectedEventIndex === index ? null : index)}
+            Platform.OS === 'ios' ? (
+              <View style={styles.eventsWrapper}>
+                <ScrollView 
+                  horizontal={true}
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.eventsScrollView}
+                  style={styles.eventsScrollContainer}
+                  nestedScrollEnabled={true}
                 >
-                  {selectedEventIndex === index && (
+                  {events.map((event, index) => (
                     <TouchableOpacity 
-                      style={styles.deleteIcon}
-                      onPress={() => {
-                        setMeetingToDelete(index);
-                        setIsDeleteModalVisible(true);
-                      }}
+                      key={event.id ? `event-${event.id}-${index}` : `event-${index}`} 
+                      style={styles.eventCard}
+                      onPress={() => setSelectedEventIndex(selectedEventIndex === index ? null : index)}
                     >
-                      <Ionicons name="close-circle" size={24} color="red" />
+                      {selectedEventIndex === index && (
+                        <TouchableOpacity 
+                          style={styles.deleteIcon}
+                          onPress={() => {
+                            setMeetingToDelete(index);
+                            setIsDeleteModalVisible(true);
+                          }}
+                        >
+                          <Ionicons name="close-circle" size={24} color="red" />
+                        </TouchableOpacity>
+                      )}
+                      <Text style={styles.eventDate}>
+                        {renderEventDate(event.meetingWhen)}
+                      </Text>
+                      <Text style={styles.eventTitle}>Meeting with {event.meetingWith}</Text>
+                      <Text style={styles.eventTime}>
+                        {renderEventTime(event.meetingWhen)}
+                      </Text>
+                      {event.description && <Text style={styles.eventNote}>{event.description}</Text>}
                     </TouchableOpacity>
-                  )}
-                  <Text style={styles.eventDate}>
-                    {renderEventDate(event.meetingWhen)}
-                  </Text>
-                  <Text style={styles.eventTitle}>Meeting with {event.meetingWith}</Text>
-                  <Text style={styles.eventTime}>
-                    {renderEventTime(event.meetingWhen)}
-                  </Text>
-                  {event.description && <Text style={styles.eventNote}>{event.description}</Text>}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+                  ))}
+                </ScrollView>
+              </View>
+            ) : (
+              <View style={styles.androidEventsWrapper}>
+                <ScrollView
+                  horizontal={false}
+                  showsVerticalScrollIndicator={true}
+                  contentContainerStyle={styles.androidEventsScrollView}
+                  style={styles.androidEventsScrollContainer}
+                  nestedScrollEnabled={true}
+                >
+                  <View style={styles.androidEventsGrid}>
+                    {events.map((event, index) => (
+                      <TouchableOpacity 
+                        key={event.id ? `event-${event.id}-${index}` : `event-${index}`} 
+                        style={styles.androidEventCard}
+                        onPress={() => setSelectedEventIndex(selectedEventIndex === index ? null : index)}
+                      >
+                        {selectedEventIndex === index && (
+                          <TouchableOpacity 
+                            style={styles.deleteIcon}
+                            onPress={() => {
+                              setMeetingToDelete(index);
+                              setIsDeleteModalVisible(true);
+                            }}
+                          >
+                            <Ionicons name="close-circle" size={24} color="red" />
+                          </TouchableOpacity>
+                        )}
+                        <Text style={styles.eventDate}>{renderEventDate(event.meetingWhen)}</Text>
+                        <Text style={styles.eventTitle}>Meeting with {event.meetingWith}</Text>
+                        <Text style={styles.eventTime}>{renderEventTime(event.meetingWhen)}</Text>
+                        {event.description && <Text style={styles.eventNote}>{event.description}</Text>}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
+            )
           ) : (
             <Text style={styles.emptyEventsMessage}>No events scheduled</Text>
           )}
@@ -643,7 +682,7 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: Platform.select({
       ios: 20,
-      android: 40,
+      android: 80,
     }),
   },
   yearSelector: {
@@ -724,6 +763,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     borderWidth: 1,
     borderColor: COLORS.primary,
+    marginBottom: Platform.OS === 'android' ? 20 : 0,
   },
   createEventButtonActive: {
     backgroundColor: COLORS.primary,
@@ -930,5 +970,40 @@ const styles = StyleSheet.create({
   },
   modalButtonTextCancel: {
     color: COLORS.black,
+  },
+  eventsWrapper: {
+    flex: 1,
+  },
+  eventsScrollContainer: {
+    flex: 1,
+  },
+  androidEventsWrapper: {
+    height: 200,
+    marginBottom: 10,
+  },
+  androidEventsScrollContainer: {
+    flex: 1,
+  },
+  androidEventsScrollView: {
+    paddingHorizontal: 10,
+  },
+  androidEventsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+  },
+  androidEventCard: {
+    backgroundColor: 'white',
+    padding: 15,
+    borderRadius: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.22,
+    shadowRadius: 2.22,
+    width: '48%',
+    marginBottom: 12,
+    position: 'relative',
   },
 });

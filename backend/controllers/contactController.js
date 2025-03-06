@@ -2,6 +2,9 @@ const { db, admin } = require('../firebase.js');
 const { transporter, sendMailWithStatus } = require('../public/Utils/emailService');
 const { formatDate } = require('../utils/dateFormatter');
 
+// Add constant for free plan limit
+const FREE_PLAN_CONTACT_LIMIT = 3;
+
 exports.getAllContacts = async (req, res) => {
     try {
         console.log('Fetching all contacts...');
@@ -74,6 +77,15 @@ exports.addContact = async (req, res) => {
     }
 
     try {
+        // Get user's plan information
+        const userRef = db.collection('users').doc(userId);
+        const userDoc = await userRef.get();
+        const userData = userDoc.data();
+
+        if (!userData) {
+            return res.status(404).send({ message: 'User not found' });
+        }
+
         const contactRef = db.collection('contacts').doc(userId);
         const doc = await contactRef.get();
 
@@ -82,9 +94,20 @@ exports.addContact = async (req, res) => {
             currentContacts = doc.data().contactList || [];
         }
 
+        // Check if free user has reached contact limit
+        if (userData.plan === 'free' && currentContacts.length >= FREE_PLAN_CONTACT_LIMIT) {
+            console.log(`Contact limit reached for free user ${userId}. Current contacts: ${currentContacts.length}`);
+            return res.status(403).send({
+                message: 'Contact limit reached',
+                error: 'FREE_PLAN_LIMIT_REACHED',
+                currentContacts: currentContacts.length,
+                limit: FREE_PLAN_CONTACT_LIMIT
+            });
+        }
+
         const newContact = {
             ...contactInfo,
-            createdAt: admin.firestore.Timestamp.now() // Store as Firestore Timestamp
+            createdAt: admin.firestore.Timestamp.now()
         };
 
         currentContacts.push(newContact);
@@ -98,8 +121,11 @@ exports.addContact = async (req, res) => {
             message: 'Contact added successfully',
             contactList: currentContacts.map(contact => ({
                 ...contact,
-                createdAt: formatDate(contact.createdAt) // Format for display
-            }))
+                createdAt: formatDate(contact.createdAt)
+            })),
+            remainingContacts: userData.plan === 'free' ? 
+                FREE_PLAN_CONTACT_LIMIT - currentContacts.length : 
+                'unlimited'
         });
     } catch (error) {
         console.error('Error adding contact:', error);
@@ -118,11 +144,31 @@ exports.saveContactInfo = async (req, res) => {
     }
 
     try {
+        // Get user's plan information
+        const userRef = db.collection('users').doc(userId);
+        const userDoc = await userRef.get();
+        const userData = userDoc.data();
+
+        if (!userData) {
+            return res.status(404).send({ message: 'User not found' });
+        }
+
+        // Get current contacts count
         const contactsRef = db.collection('contacts').doc(userId);
         const contactsDoc = await contactsRef.get();
-
         let existingContacts = contactsDoc.exists ? contactsDoc.data().contactsList : [];
         if (!Array.isArray(existingContacts)) existingContacts = [];
+
+        // Check if free user has reached contact limit
+        if (userData.plan === 'free' && existingContacts.length >= FREE_PLAN_CONTACT_LIMIT) {
+            console.log(`Contact limit reached for free user ${userId}. Current contacts: ${existingContacts.length}`);
+            return res.status(403).send({
+                message: 'Contact limit reached',
+                error: 'FREE_PLAN_LIMIT_REACHED',
+                currentContacts: existingContacts.length,
+                limit: FREE_PLAN_CONTACT_LIMIT
+            });
+        }
 
         // Add new contact with Firestore Timestamp
         existingContacts.push({
@@ -130,7 +176,7 @@ exports.saveContactInfo = async (req, res) => {
             surname: contactInfo.surname,
             number: contactInfo.phone,
             howWeMet: contactInfo.howWeMet,
-            createdAt: admin.firestore.Timestamp.now() // Changed to Firestore Timestamp
+            createdAt: admin.firestore.Timestamp.now()
         });
 
         await contactsRef.set({
@@ -138,19 +184,15 @@ exports.saveContactInfo = async (req, res) => {
             contactsList: existingContacts
         }, { merge: true });
 
-        // Send email notification with form data
-        const userRef = db.collection('users').doc(userId);
-        const userDoc = await userRef.get();
-        const userData = userDoc.data();
-
-        if (userData && userData.email) {
+        // Send email notification if user has email
+        if (userData.email) {
             const mailOptions = {
                 from: process.env.EMAIL_USER_XSPARK,
                 to: userData.email,
                 subject: 'Someone Saved Your Contact Information',
                 html: `
                     <h2>New Contact Added</h2>
-                    <p> <strong>${contactInfo.name} ${contactInfo.surname}</strong> recently received your XS Card and has sent you their details:</p>
+                    <p><strong>${contactInfo.name} ${contactInfo.surname}</strong> recently received your XS Card and has sent you their details:</p>
                     <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 10px 0;">
                         <p><strong>Contact Details:</strong></p>
                         <ul style="list-style: none; padding-left: 0;">
@@ -161,17 +203,25 @@ exports.saveContactInfo = async (req, res) => {
                         </ul>
                     </div>
                     <p style="color: #666; font-size: 12px;">This is an automated notification from your XS Card application.</p>
+                    ${userData.plan === 'free' ? 
+                        `<p style="color: #ff4b6e;">You have ${FREE_PLAN_CONTACT_LIMIT - existingContacts.length} contacts remaining in your free plan.</p>` 
+                        : ''}
                 `
             };
 
             const mailResult = await sendMailWithStatus(mailOptions);
-
             if (!mailResult.success) {
-                throw new Error('Failed to send email: ' + mailResult.error);
+                console.error('Failed to send email notification:', mailResult.error);
             }
         }
 
-        res.status(200).send({ message: 'Contact saved successfully and email notification sent' });
+        res.status(200).send({ 
+            message: 'Contact saved successfully',
+            contactsCount: existingContacts.length,
+            remainingContacts: userData.plan === 'free' ? 
+                FREE_PLAN_CONTACT_LIMIT - existingContacts.length : 
+                'unlimited'
+        });
     } catch (error) {
         console.error('Error saving contact:', error);
         res.status(500).json({

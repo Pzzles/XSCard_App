@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, TextInput, Alert, Modal, Linking } from 'react-native';
+import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, TextInput, Alert, Modal, Linking, RefreshControl } from 'react-native';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
@@ -50,6 +50,9 @@ export default function ContactsScreen() {
   const [confirmModalVisible, setConfirmModalVisible] = useState(false);
   const [contactToDelete, setContactToDelete] = useState<number | null>(null);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [remainingContacts, setRemainingContacts] = useState<number | 'unlimited'>(3);
+  const [refreshing, setRefreshing] = useState(false);
 
   const { colorScheme } = useColorScheme();
 
@@ -67,22 +70,22 @@ export default function ContactsScreen() {
         return;
       }
 
-      // Get user color scheme
+      const contactResponse = await authenticatedFetch(ENDPOINTS.GET_CONTACTS + `/${userId}`);
+      const data = await contactResponse.json();
+
+      // Get user data to check plan
       const userResponse = await authenticatedFetch(ENDPOINTS.GET_USER + `/${userId}`);
       const userData = await userResponse.json();
       
-      // Fetch contacts
-      const contactResponse = await authenticatedFetch(ENDPOINTS.GET_CONTACTS + `/${userId}`);
-      const data = await contactResponse.json();
-      
-      console.log('Loaded contacts data:', data); // Debug log
-
       if (data && Array.isArray(data.contactList)) {
         setContacts(data.contactList);
         setContactDocId(userId);
-      } else {
-        console.log('No contacts found or invalid format:', data);
-        setContacts([]);
+        // Set remaining contacts based on plan
+        if (userData.plan === 'free') {
+          setRemainingContacts(Math.max(0, 3 - data.contactList.length));
+        } else {
+          setRemainingContacts('unlimited');
+        }
       }
     } catch (error) {
       console.error('Error loading contacts:', error);
@@ -279,6 +282,11 @@ export default function ContactsScreen() {
     }
   };
 
+  const onRefresh = React.useCallback(() => {
+    setRefreshing(true);
+    loadContacts().finally(() => setRefreshing(false));
+  }, []);
+
   // Add dynamic styles
   const dynamicStyles = {
     shareCardButton: {
@@ -340,7 +348,19 @@ export default function ContactsScreen() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={styles.container}>
         <Header title="Contacts" />
-        <View style={[styles.contactsContainer, { marginTop: 120 }]}>
+        <View style={styles.contactCountContainer}>
+          <Text style={[
+            styles.contactCountText,
+            { color: remainingContacts === 0 ? COLORS.error : COLORS.black }
+          ]}>
+            {remainingContacts === 'unlimited' 
+              ? 'Premium Plan: Unlimited Contacts' 
+              : remainingContacts > 0 
+                  ? `Remaining Contacts: ${remainingContacts}` 
+                  : 'Contact limit reached. Upgrade to add more!'}
+          </Text>
+        </View>
+        <View style={[styles.contactsContainer, { marginTop: 0 }]}>
           <View style={styles.searchContainer}>
             <MaterialIcons name="search" size={24} color={COLORS.gray} style={styles.searchIcon} />
             <TextInput
@@ -365,7 +385,17 @@ export default function ContactsScreen() {
               </TouchableOpacity>
             </View>
           ) : (
-            <ScrollView style={styles.contactsList}>
+            <ScrollView 
+              style={styles.contactsList}
+              refreshControl={
+                <RefreshControl 
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  colors={[colorScheme]} // Uses your app's theme color
+                  tintColor={colorScheme}
+                />
+              }
+            >
               {filteredContacts.map((contact, index) => (
                 <Swipeable
                   key={index}
@@ -521,6 +551,41 @@ export default function ContactsScreen() {
                   onPress={confirmDelete}
                 >
                   <Text style={styles.deleteButtonText}>Delete</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={showLimitModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowLimitModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Contact Limit Reached</Text>
+              <Text style={styles.modalMessage}>
+                You have reached the limit of 3 contacts for free users. 
+                Upgrade to Premium to add unlimited contacts!
+              </Text>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => setShowLimitModal(false)}
+                >
+                  <Text style={styles.cancelButtonText}>Maybe Later</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, { backgroundColor: colorScheme }]}
+                  onPress={() => {
+                    setShowLimitModal(false);
+                    // Add navigation to upgrade screen if you have one
+                    // navigation.navigate('Upgrade');
+                  }}
+                >
+                  <Text style={styles.deleteButtonText}>Upgrade Now</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -775,5 +840,22 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     color: COLORS.white,
     fontWeight: 'bold',
+  },
+  contactCountContainer: {
+    padding: 10,
+    backgroundColor: '#f5f5f5',  // Light gray background
+    borderRadius: 8,
+    margin: 95,
+    marginBottom: 0,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  contactCountText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
