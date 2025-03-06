@@ -94,7 +94,7 @@ exports.addContact = async (req, res) => {
             currentContacts = doc.data().contactList || [];
         }
 
-        // Check if free user has reached contact limit
+        // Check if free user has reached contact limit - Add strict validation
         if (userData.plan === 'free' && currentContacts.length >= FREE_PLAN_CONTACT_LIMIT) {
             console.log(`Contact limit reached for free user ${userId}. Current contacts: ${currentContacts.length}`);
             return res.status(403).send({
@@ -156,10 +156,17 @@ exports.saveContactInfo = async (req, res) => {
         // Get current contacts count
         const contactsRef = db.collection('contacts').doc(userId);
         const contactsDoc = await contactsRef.get();
-        let existingContacts = contactsDoc.exists ? contactsDoc.data().contactsList : [];
+        
+        // Fix contactList vs contactsList inconsistency
+        let existingContacts = [];
+        if (contactsDoc.exists) {
+            // Try to get contactList first, then fall back to contactsList for backward compatibility
+            existingContacts = contactsDoc.data().contactList || contactsDoc.data().contactsList || [];
+        }
+        
         if (!Array.isArray(existingContacts)) existingContacts = [];
 
-        // Check if free user has reached contact limit
+        // Check if free user has reached contact limit - Improve validation
         if (userData.plan === 'free' && existingContacts.length >= FREE_PLAN_CONTACT_LIMIT) {
             console.log(`Contact limit reached for free user ${userId}. Current contacts: ${existingContacts.length}`);
             return res.status(403).send({
@@ -174,14 +181,15 @@ exports.saveContactInfo = async (req, res) => {
         existingContacts.push({
             name: contactInfo.name,
             surname: contactInfo.surname,
-            number: contactInfo.phone,
+            phone: contactInfo.phone, // Use phone instead of number for consistency
             howWeMet: contactInfo.howWeMet,
             createdAt: admin.firestore.Timestamp.now()
         });
 
+        // Use contactList consistently
         await contactsRef.set({
             userId: db.doc(`users/${userId}`),
-            contactsList: existingContacts
+            contactList: existingContacts
         }, { merge: true });
 
         // Send email notification if user has email

@@ -82,7 +82,13 @@ export default function ContactsScreen() {
         setContactDocId(userId);
         // Set remaining contacts based on plan
         if (userData.plan === 'free') {
-          setRemainingContacts(Math.max(0, 3 - data.contactList.length));
+          const remaining = Math.max(0, 3 - data.contactList.length);
+          setRemainingContacts(remaining);
+          
+          // Show limit modal if no contacts remaining
+          if (remaining === 0) {
+            setShowLimitModal(true);
+          }
         } else {
           setRemainingContacts('unlimited');
         }
@@ -201,6 +207,12 @@ export default function ContactsScreen() {
 
   const handleShare = async (contact?: Contact) => {
     try {
+      // If sharing a new contact and limit is reached, show upgrade modal
+      if (!contact && remainingContacts === 0) {
+        setShowLimitModal(true);
+        return;
+      }
+      
       const storedUserData = await AsyncStorage.getItem('userData');
       if (!storedUserData) {
         showModal('Error', 'User data not available');
@@ -348,6 +360,8 @@ export default function ContactsScreen() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={styles.container}>
         <Header title="Contacts" />
+        
+        {/* Add the Remaining Contacts element back with proper padding */}
         <View style={styles.contactCountContainer}>
           <Text style={[
             styles.contactCountText,
@@ -360,7 +374,8 @@ export default function ContactsScreen() {
                   : 'Contact limit reached. Upgrade to add more!'}
           </Text>
         </View>
-        <View style={[styles.contactsContainer, { marginTop: 0 }]}>
+        
+        <View style={styles.contactsContainer}>
           <View style={styles.searchContainer}>
             <MaterialIcons name="search" size={24} color={COLORS.gray} style={styles.searchIcon} />
             <TextInput
@@ -842,20 +857,26 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   contactCountContainer: {
-    padding: 10,
-    backgroundColor: '#f5f5f5',  // Light gray background
+    padding: 12,
+    backgroundColor: '#f7f7f7',
     borderRadius: 8,
-    margin: 95,
-    marginBottom: 0,
+    marginHorizontal: 15,
+    marginTop: 120,  // Add top margin for breathing room from header
+    marginBottom: 10,
     alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
-    elevation: 2,
+    elevation: 1,
+    borderWidth: 1,
+    borderColor: '#e5e5e5',
   },
   contactCountText: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
+    letterSpacing: 0.25,
   },
 });
