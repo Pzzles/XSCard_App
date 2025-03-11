@@ -3,7 +3,6 @@ import { StyleSheet, View, Text, ScrollView, Dimensions, Platform, ActivityIndic
 import { COLORS } from '../../constants/colors';
 import AdminHeader from '../../components/AdminHeader';
 import { LineChart } from 'react-native-chart-kit';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { authenticatedFetch, getUserId } from '../../utils/api';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -186,26 +185,23 @@ export default function AdminDashboard() {
       >
         <Text style={styles.sectionTitle}>Overview</Text>
         
-        {/* Overview Cards */}
+        {/* Overview Cards - Removed ellipses icon */}
         <View style={styles.overviewContainer}>
           <View style={[styles.overviewCard, { backgroundColor: COLORS.primary }]}>
             <Text style={styles.cardNumber}>{totalCards}</Text>
             <Text style={styles.cardLabel}>Total Cards</Text>
-            <MaterialCommunityIcons name="dots-horizontal" size={24} color="white" style={styles.cardIcon} />
           </View>
           
           <View style={[styles.overviewCard, { backgroundColor: '#1B2559' }]}>
             <Text style={styles.cardNumber}>{totalContacts}</Text>
             <Text style={styles.cardLabel}>Total Contacts</Text>
-            <MaterialCommunityIcons name="dots-horizontal" size={24} color="white" style={styles.cardIcon} />
           </View>
         </View>
 
-        {/* Weekly Growth Section */}
+        {/* Weekly Growth Section - Removed ellipses icon */}
         <View style={styles.growthSection}>
           <View style={styles.growthHeader}>
             <Text style={styles.sectionTitle}>Monthly Growth</Text>
-            <MaterialCommunityIcons name="dots-horizontal" size={24} color="black" />
           </View>
           
           <LineChart
@@ -320,11 +316,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: 'white',
     marginTop: 5,
-  },
-  cardIcon: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
   },
   growthSection: {
     marginBottom: 30,
