@@ -23,7 +23,7 @@ const getBaseUrl = () => {
   console.log('Is Development Mode:', __DEV__);
 
     if (__DEV__) {
-        return 'http://192.168.2.237:8383';
+        return 'http://192.168.68.103:8383';
     }
 
     return 'https://xscard-app.onrender.com';
@@ -54,6 +54,8 @@ export const ENDPOINTS = {
     DELETE_CARD: '/Cards/:id',  // Change this to match the working endpoint
     UPGRADE_USER: '/Users/:id/upgrade',
     INITIALIZE_PAYMENT: '/payment/initialize',
+    SUBSCRIPTION_STATUS: '/subscription/status',
+    CANCEL_SUBSCRIPTION: '/subscription/cancel',
 };
 
 export const buildUrl = (endpoint: string) => `${API_BASE_URL}${endpoint}`;

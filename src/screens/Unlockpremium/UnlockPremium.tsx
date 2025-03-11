@@ -25,6 +25,7 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
   const [userPlan, setUserPlan] = useState<string>('free');
   const [isProcessing, setIsProcessing] = useState(false);
   const [userEmail, setUserEmail] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     const getUserData = async () => {
@@ -41,9 +42,35 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
     };
 
     getUserData();
+    checkSubscriptionStatus();
   }, []);
 
-  const handleCancelSubscription = () => {
+  const checkSubscriptionStatus = async () => {
+    try {
+      const response = await authenticatedFetch(ENDPOINTS.SUBSCRIPTION_STATUS, {
+        method: 'GET',
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status && data.data?.isActive) {
+          setUserPlan('premium');
+          
+          // Update local storage with current subscription status
+          const userData = await AsyncStorage.getItem('userData');
+          if (userData) {
+            const parsedUserData = JSON.parse(userData);
+            parsedUserData.plan = 'premium';
+            await AsyncStorage.setItem('userData', JSON.stringify(parsedUserData));
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error checking subscription status:', error);
+    }
+  };
+
+  const handleCancelSubscription = async () => {
     Alert.alert(
       'Cancel Subscription',
       'Are you sure you want to cancel your premium subscription? You will lose access to premium features at the end of your billing period.',
@@ -55,9 +82,44 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
         {
           text: 'Yes, Cancel',
           style: 'destructive',
-          onPress: () => {
-            // Add your subscription cancellation logic here
-            Alert.alert('Subscription Cancelled', 'Your subscription will end at the end of your billing period.');
+          onPress: async () => {
+            try {
+              setIsLoading(true);
+              const response = await authenticatedFetch(ENDPOINTS.CANCEL_SUBSCRIPTION, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                }
+              });
+              
+              if (response.ok) {
+                const result = await response.json();
+                console.log('Cancellation result:', result);
+                
+                if (result.status) {
+                  // Update local user data
+                  const userData = await AsyncStorage.getItem('userData');
+                  if (userData) {
+                    const parsedUserData = JSON.parse(userData);
+                    parsedUserData.plan = 'free';
+                    await AsyncStorage.setItem('userData', JSON.stringify(parsedUserData));
+                  }
+                  
+                  setUserPlan('free');
+                  Alert.alert('Subscription Cancelled', 'Your subscription has been cancelled successfully.');
+                } else {
+                  Alert.alert('Error', result.message || 'Failed to cancel subscription.');
+                }
+              } else {
+                const errorResult = await response.json().catch(() => ({}));
+                Alert.alert('Error', errorResult.message || 'Failed to cancel subscription. Please try again.');
+              }
+            } catch (error) {
+              console.error('Error cancelling subscription:', error);
+              Alert.alert('Error', 'An error occurred while cancelling your subscription. Please try again or contact support.');
+            } finally {
+              setIsLoading(false);
+            }
           },
         },
       ]
@@ -104,10 +166,13 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
         You have access to all premium features
       </Text>
       <TouchableOpacity
-        style={styles.cancelButton}
+        style={[styles.cancelButton, isLoading && styles.disabledButton]}
         onPress={handleCancelSubscription}
+        disabled={isLoading}
       >
-        <Text style={styles.cancelButtonText}>Cancel Subscription</Text>
+        <Text style={styles.cancelButtonText}>
+          {isLoading ? 'Processing...' : 'Cancel Subscription'}
+        </Text>
       </TouchableOpacity>
     </View>
   );

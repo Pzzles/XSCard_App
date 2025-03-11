@@ -324,9 +324,10 @@ const checkExpiredTrials = async () => {
                 // User cancelled during trial
                 console.log(`Marking cancelled trial for user: ${userId}`);
                 
-                // Update user status to reflect cancellation
+                // Update user status to reflect cancellation and change plan to free
                 await doc.ref.update({
                     subscriptionStatus: 'cancelled',
+                    plan: 'free', // Change plan back to free when subscription is cancelled
                     lastUpdated: new Date().toISOString(),
                     trialEndDate: new Date().toISOString(),
                     cancellationDate: new Date().toISOString()
@@ -338,10 +339,9 @@ const checkExpiredTrials = async () => {
                     trialEndDate: new Date().toISOString(),
                     cancellationDate: new Date().toISOString(),
                     lastUpdated: new Date().toISOString(),
-                    plan: 'free'
                 });
                 
-                console.log(`User ${userId} trial marked as cancelled`);
+                console.log(`User ${userId} trial marked as cancelled and plan changed to free`);
             }
         }
     } catch (error) {

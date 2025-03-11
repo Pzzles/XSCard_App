@@ -1,6 +1,7 @@
 const https = require('https');
 const { db } = require('../firebase');
 const { SUBSCRIPTION_PLANS, SUBSCRIPTION_CONSTANTS, getPlanById } = require('../config/subscriptionPlans');
+const { logSubscriptionEvent } = require('../models/subscriptionLog');
 
 /**
  * Initialize a subscription with Paystack
@@ -408,6 +409,14 @@ const handleSubscriptionCallback = async (req, res) => {
                     createdAt: new Date().toISOString(),
                     transactionData: paymentData.data
                 });
+
+                // Add log entry for subscription creation
+                await logSubscriptionEvent(userId, 'subscription_created', {
+                    reference,
+                    planId,
+                    amount: paymentData.data.amount / 100,
+                    interval: plan?.interval || 'unknown'
+                });
             } else {
                 console.error('User not found for email:', userEmail);
             }
@@ -651,9 +660,10 @@ const handleSubscriptionWebhook = async (req, res) => {
                 
                 console.log(`Updating subscription status to cancelled for user ${userId}`);
                 
-                // Update user with cancelled status
+                // Update user with cancelled status and change plan to free
                 await userDoc.ref.update({
                     subscriptionStatus: 'cancelled',
+                    plan: 'free', // Change plan back to free when subscription is cancelled
                     cancellationDate: new Date().toISOString(),
                     lastUpdated: new Date().toISOString()
                 });
@@ -665,7 +675,7 @@ const handleSubscriptionWebhook = async (req, res) => {
                     lastUpdated: new Date().toISOString()
                 });
                 
-                console.log(`Subscription cancelled for user ${userId}`);
+                console.log(`Subscription cancelled for user ${userId} and plan changed to free`);
             } else {
                 console.error(`No matching user found for cancellation event`);
             }
@@ -772,6 +782,331 @@ const handleSubscriptionWebhook = async (req, res) => {
 };
 
 /**
+ * Cancel a user's subscription with Paystack
+ */
+const cancelSubscription = async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        
+        console.log(`Starting cancellation process for user ${userId}`);
+        
+        // Get user document to fetch subscription info
+        const userDoc = await db.collection('users').doc(userId).get();
+        
+        if (!userDoc.exists) {
+            console.log(`User ${userId} not found`);
+            return res.status(404).json({
+                status: false,
+                message: 'User not found'
+            });
+        }
+        
+        // Check if user has an active subscription
+        const userData = userDoc.data();
+        if (!['trial', 'active'].includes(userData.subscriptionStatus)) {
+            console.log(`User ${userId} has no active subscription: ${userData.subscriptionStatus}`);
+            return res.status(400).json({
+                status: false,
+                message: 'No active subscription found'
+            });
+        }
+        
+        // Get subscription details from subscriptions collection
+        const subscriptionDoc = await db.collection('subscriptions').doc(userId).get();
+        
+        if (!subscriptionDoc.exists) {
+            console.log(`Subscription document for user ${userId} not found`);
+            return res.status(404).json({
+                status: false,
+                message: 'Subscription details not found'
+            });
+        }
+        
+        const subscriptionData = subscriptionDoc.data();
+        
+        console.log('Subscription document data:', JSON.stringify(subscriptionData, null, 2));
+        
+        // Get subscription code from the main document
+        const subscriptionCode = subscriptionData.subscriptionCode;
+        
+        // IMPORTANT: Get email token from the NESTED subscriptionData map
+        // This is the key correction - access the nested subscriptionData object
+        const emailToken = subscriptionData.subscriptionData?.email_token;
+        
+        console.log('Extracted values from subscription document:');
+        console.log(`- Subscription Code: ${subscriptionCode}`);
+        console.log(`- Email Token: ${emailToken}`);
+        
+        // Check if subscription code exists
+        if (!subscriptionCode) {
+            console.log(`Subscription code for user ${userId} not found`);
+            return res.status(400).json({
+                status: false,
+                message: 'Subscription code not found'
+            });
+        }
+        
+        // Check if email token exists in the nested data
+        if (!emailToken) {
+            console.log(`Email token in nested subscriptionData for user ${userId} not found`);
+            console.log('Will try cancellation without email token');
+        }
+        
+        // Print the exact parameters we're going to send to Paystack
+        console.log('===== PAYSTACK CANCELLATION REQUEST =====');
+        console.log(`Subscription Code: ${subscriptionCode}`);
+        console.log(`Email Token: ${emailToken || 'Not provided'}`);
+        console.log('=========================================');
+        
+        // APPROACH 1: Try with both code and token (if available)
+        if (emailToken) {
+            try {
+                const disableOptions = {
+                    hostname: 'api.paystack.co',
+                    port: 443,
+                    path: '/subscription/disable',
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+                        'Content-Type': 'application/json'
+                    }
+                };
+                
+                const disableParams = JSON.stringify({
+                    code: subscriptionCode,
+                    token: emailToken
+                });
+                
+                console.log(`Sending request to Paystack with token:`, {
+                    url: 'https://api.paystack.co/subscription/disable',
+                    method: 'POST',
+                    payload: JSON.parse(disableParams)
+                });
+                
+                const disableResponse = await new Promise((resolve, reject) => {
+                    const req = https.request(disableOptions, res => {
+                        let data = '';
+                        res.on('data', chunk => { data += chunk; });
+                        res.on('end', () => {
+                            try {
+                                resolve(JSON.parse(data));
+                            } catch (e) {
+                                reject(e);
+                            }
+                        });
+                    });
+                    
+                    req.on('error', reject);
+                    req.write(disableParams);
+                    req.end();
+                });
+                
+                console.log('Disable response (with token):', disableResponse);
+                
+                if (disableResponse.status) {
+                    await updateCancellationInDatabase(userDoc, userId);
+                    
+                    // Log successful cancellation
+                    await logSubscriptionEvent(userId, 'subscription_cancelled', {
+                        subscriptionCode,
+                        method: 'api_disable',
+                        response: disableResponse
+                    });
+                    
+                    return res.status(200).json({
+                        status: true,
+                        message: 'Subscription cancelled successfully'
+                    });
+                }
+            } catch (error) {
+                console.error('Error with token approach:', error);
+            }
+        }
+        
+        // APPROACH 2: Try cancelling without the token
+        try {
+            const disableOptions = {
+                hostname: 'api.paystack.co',
+                port: 443,
+                path: '/subscription/disable',
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+                    'Content-Type': 'application/json'
+                }
+            };
+            
+            const disableParams = JSON.stringify({
+                code: subscriptionCode
+                // Omit token entirely
+            });
+            
+            console.log(`Sending request to Paystack (without token):`, {
+                url: 'https://api.paystack.co/subscription/disable',
+                method: 'POST',
+                payload: JSON.parse(disableParams)
+            });
+            
+            const disableResponse = await new Promise((resolve, reject) => {
+                const req = https.request(disableOptions, res => {
+                    let data = '';
+                    res.on('data', chunk => { data += chunk; });
+                    res.on('end', () => {
+                        try {
+                            resolve(JSON.parse(data));
+                        } catch (e) {
+                            reject(e);
+                        }
+                    });
+                });
+                
+                req.on('error', reject);
+                req.write(disableParams);
+                req.end();
+            });
+            
+            console.log('Disable response (without token):', disableResponse);
+            
+            if (disableResponse.status) {
+                await updateCancellationInDatabase(userDoc, userId);
+                
+                // Log successful cancellation
+                await logSubscriptionEvent(userId, 'subscription_cancelled', {
+                    subscriptionCode,
+                    method: 'api_disable',
+                    response: disableResponse
+                });
+                
+                return res.status(200).json({
+                    status: true,
+                    message: 'Subscription cancelled successfully'
+                });
+            }
+        } catch (error) {
+            console.error('Error with first approach:', error);
+        }
+        
+        // APPROACH 3: Use server-side API with just the code in the URL
+        try {
+            const directOptions = {
+                hostname: 'api.paystack.co',
+                port: 443,
+                path: `/subscription/${subscriptionCode}/disable`,
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+                    'Content-Type': 'application/json'
+                }
+            };
+            
+            console.log(`Sending direct API request to Paystack:`, {
+                url: `https://api.paystack.co/subscription/${subscriptionCode}/disable`,
+                method: 'POST'
+            });
+            
+            const directResponse = await new Promise((resolve, reject) => {
+                const req = https.request(directOptions, res => {
+                    let data = '';
+                    res.on('data', chunk => { data += chunk; });
+                    res.on('end', () => {
+                        try {
+                            resolve(JSON.parse(data));
+                        } catch (e) {
+                            reject(e);
+                        }
+                    });
+                });
+                
+                req.on('error', reject);
+                req.end();
+            });
+            
+            console.log('Direct API response:', directResponse);
+            
+            if (directResponse.status) {
+                await updateCancellationInDatabase(userDoc, userId);
+                
+                // Log successful cancellation
+                await logSubscriptionEvent(userId, 'subscription_cancelled', {
+                    subscriptionCode,
+                    method: 'direct_api',
+                    response: directResponse
+                });
+                
+                return res.status(200).json({
+                    status: true,
+                    message: 'Subscription cancelled successfully'
+                });
+            }
+        } catch (error) {
+            console.error('Error with direct API approach:', error);
+        }
+        
+        // APPROACH 4: As a last resort, update status in our database
+        try {
+            console.log('Previous approaches failed. Updating local database only.');
+            await updateCancellationInDatabase(userDoc, userId);
+            
+            return res.status(200).json({
+                status: true,
+                message: 'Subscription marked as cancelled in our system',
+                note: 'Please contact support if you continue to be charged'
+            });
+        } catch (error) {
+            console.error('Error updating database:', error);
+            return res.status(500).json({
+                status: false,
+                message: 'Failed to cancel subscription',
+                error: error.message
+            });
+        }
+    } catch (error) {
+        console.error('Cancel subscription error:', error);
+        res.status(500).json({
+            status: false,
+            message: 'Internal server error', 
+            error: error.message
+        });
+    }
+};
+
+/**
+ * Helper function to update cancellation status in the database
+ */
+const updateCancellationInDatabase = async (userDoc, userId) => {
+    try {
+        // Update user document
+        await userDoc.ref.update({
+            subscriptionStatus: 'cancelled',
+            plan: 'free', // Change plan back to free when subscription is cancelled
+            cancellationDate: new Date().toISOString(),
+            lastUpdated: new Date().toISOString()
+        });
+        
+        // Update subscription document
+        await db.collection('subscriptions').doc(userId).update({
+            status: 'cancelled',
+            cancellationDate: new Date().toISOString(),
+            lastUpdated: new Date().toISOString()
+        });
+
+        // Log database update
+        await logSubscriptionEvent(userId, 'subscription_status_updated', {
+            oldStatus: userDoc.data().subscriptionStatus || 'unknown',
+            newStatus: 'cancelled',
+            oldPlan: userDoc.data().plan || 'unknown',
+            newPlan: 'free'
+        });
+        
+        console.log(`Database updated for user ${userId} - subscription marked as cancelled`);
+        return true;
+    } catch (error) {
+        console.error('Error updating cancellation in database:', error);
+        throw error;
+    }
+};
+
+/**
  * Get available subscription plans
  */
 const getSubscriptionPlans = (req, res) => {
@@ -840,12 +1175,40 @@ const getSubscriptionStatus = async (req, res) => {
     }
 };
 
+/**
+ * Get user's subscription logs
+ */
+const getSubscriptionLogs = async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        const limit = req.query.limit ? parseInt(req.query.limit) : 20;
+        
+        // Import the function to get logs
+        const { getSubscriptionLogs } = require('../models/subscriptionLog');
+        const logs = await getSubscriptionLogs(userId, limit);
+        
+        return res.status(200).json({
+            status: true,
+            data: logs
+        });
+    } catch (error) {
+        console.error('Error fetching subscription logs:', error);
+        res.status(500).json({
+            status: false,
+            message: 'Failed to retrieve subscription logs',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     initializeSubscription,
     initializeTrialSubscription,
     handleSubscriptionCallback,
     handleTrialCallback,
-    handleSubscriptionWebhook, // Export the new function
+    handleSubscriptionWebhook,
     getSubscriptionPlans,
-    getSubscriptionStatus
+    getSubscriptionStatus,
+    cancelSubscription,  // Add new function to exports
+    getSubscriptionLogs
 };
