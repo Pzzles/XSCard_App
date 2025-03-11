@@ -385,21 +385,24 @@ export default function ContactsScreen() {
       <View style={styles.container}>
         <Header title="Contacts" />
         
-        {/* Add the Remaining Contacts element back with proper padding */}
-        <View style={styles.contactCountContainer}>
-          <Text style={[
-            styles.contactCountText,
-            { color: remainingContacts === 0 ? COLORS.error : COLORS.black }
-          ]}>
-            {remainingContacts === 'unlimited' 
-              ? 'Premium Plan: Unlimited Contacts' 
-              : remainingContacts > 0 
-                  ? `Remaining Contacts: ${remainingContacts}` 
-                  : 'Contact limit reached. Upgrade to add more!'}
-          </Text>
-        </View>
+        {/* Only show remaining contacts for free users */}
+        {remainingContacts !== 'unlimited' && (
+          <View style={styles.contactCountContainer}>
+            <Text style={[
+              styles.contactCountText,
+              { color: remainingContacts === 0 ? COLORS.error : COLORS.black }
+            ]}>
+              {remainingContacts > 0 
+                ? `Remaining Contacts: ${remainingContacts}` 
+                : 'Contact limit reached. Upgrade to add more!'}
+            </Text>
+          </View>
+        )}
         
-        <View style={styles.contactsContainer}>
+        <View style={[
+          styles.contactsContainer, 
+          remainingContacts === 'unlimited' && styles.premiumContactsContainer
+        ]}>
           <View style={styles.searchContainer}>
             <MaterialIcons name="search" size={24} color={COLORS.gray} style={styles.searchIcon} />
             <TextInput
@@ -639,6 +642,9 @@ const styles = StyleSheet.create({
   contactsContainer: {
     flex: 1,
     backgroundColor: COLORS.white,
+  },
+  premiumContactsContainer: {
+    paddingTop: 120, // Add top padding to compensate for missing contact count container
   },
   searchContainer: {
     padding: 15,
