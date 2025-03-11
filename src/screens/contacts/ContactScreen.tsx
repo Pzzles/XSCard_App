@@ -12,6 +12,9 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useColorScheme } from '../../context/ColorSchemeContext';
 
+// Define constant for free plan contact limit
+const FREE_PLAN_CONTACT_LIMIT = 3;
+
 // Update interfaces to match Firestore structure
 interface Contact {
   name: string;
@@ -56,7 +59,7 @@ export default function ContactsScreen() {
   const [contactToDelete, setContactToDelete] = useState<number | null>(null);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [showLimitModal, setShowLimitModal] = useState(false);
-  const [remainingContacts, setRemainingContacts] = useState<number | 'unlimited'>(3);
+  const [remainingContacts, setRemainingContacts] = useState<number | 'unlimited'>(FREE_PLAN_CONTACT_LIMIT);
   const [refreshing, setRefreshing] = useState(false);
 
   const { colorScheme } = useColorScheme();
@@ -87,7 +90,7 @@ export default function ContactsScreen() {
         setContactDocId(userId);
         // Set remaining contacts based on plan
         if (userData.plan === 'free') {
-          const remaining = Math.max(0, 3 - data.contactList.length);
+          const remaining = Math.max(0, FREE_PLAN_CONTACT_LIMIT - data.contactList.length);
           setRemainingContacts(remaining);
           
           // Show limit modal if no contacts remaining
@@ -609,7 +612,7 @@ export default function ContactsScreen() {
             <View style={styles.modalContent}>
               <Text style={styles.modalTitle}>Contact Limit Reached</Text>
               <Text style={styles.modalMessage}>
-                You have reached the limit of 3 contacts for free users. 
+                You have reached the limit of {FREE_PLAN_CONTACT_LIMIT} contacts for free users. 
                 Upgrade to Premium to add unlimited contacts!
               </Text>
               <View style={styles.modalButtons}>
