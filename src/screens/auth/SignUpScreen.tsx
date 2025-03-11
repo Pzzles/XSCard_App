@@ -218,7 +218,7 @@ export default function SignUpScreen() {
       formData.append('occupation', occupation);
       formData.append('company', companyName);
       formData.append('status', 'active');
-      formData.append('colorScheme', COLORS.secondary); // Use COLORS.secondary instead of hardcoded value
+      formData.append('colorScheme', COLORS.secondary);
 
       if (profileImage) {
         const imageName = profileImage.split('/').pop() || 'profile.jpg';

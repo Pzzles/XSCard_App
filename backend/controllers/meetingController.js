@@ -1,5 +1,7 @@
 const { db } = require('../firebase.js');
 const { formatDate } = require('../utils/dateFormatter');
+const { sendMailWithStatus } = require('../public/Utils/emailService');
+const { createCalendarEvent } = require('../public/Utils/calendarService');
 
 // Helper function for error responses
 const sendError = (res, status, message, error = null) => {
@@ -254,6 +256,139 @@ exports.deleteMeeting = async (req, res) => {
                 type: error.name,
                 description: error.message
             }
+        });
+    }
+};
+
+exports.sendMeetingInvite = async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        const {
+            title,
+            description,
+            startDateTime,
+            endDateTime,
+            location,
+            attendees,
+            timezone = 'UTC'
+        } = req.body;
+        
+        // Validate required fields
+        if (!title || !startDateTime || !endDateTime || !attendees || !Array.isArray(attendees)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing required fields',
+                required: ['title', 'startDateTime', 'endDateTime', 'attendees']
+            });
+        }
+        
+        // Get user info to use as organizer
+        const userDoc = await db.collection('users').doc(userId).get();
+        if (!userDoc.exists) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+        const userData = userDoc.data();
+        
+        // Create organizer info
+        const organizer = {
+            name: `${userData.name} ${userData.surname}`,
+            email: userData.email
+        };
+        
+        // Generate the calendar event
+        const calendarEvent = await createCalendarEvent({
+            title,
+            description: description || '',
+            start: startDateTime,
+            end: endDateTime,
+            location: location || 'Online meeting',
+            attendees,
+            organizer,
+            timezone
+        });
+        
+        // Send emails to all attendees
+        const emailPromises = attendees.map(async (attendee) => {
+            const mailOptions = {
+                to: attendee.email,
+                // Override default sender to appear as coming from the user
+                from: {
+                    name: organizer.name,
+                    address: process.env.EMAIL_FROM_ADDRESS // We still use system email address for deliverability
+                },
+                replyTo: organizer.email, // Replies will go to the actual user
+                subject: `Meeting Invitation: ${title}`,
+                html: `
+                    <h2>Meeting Invitation from ${organizer.name}</h2>
+                    <p><strong>Subject:</strong> ${title}</p>
+                    <p><strong>When:</strong> ${new Date(startDateTime).toLocaleString(undefined, { 
+                        dateStyle: 'full', 
+                        timeStyle: 'short' 
+                    })}</p>
+                    <p><strong>Where:</strong> ${location || 'Online meeting'}</p>
+                    <p><strong>Organizer:</strong> ${organizer.name} (${organizer.email})</p>
+                    ${description ? `<p><strong>Description:</strong><br>${description.replace(/\n/g, '<br>')}</p>` : ''}
+                    <p>This invitation contains a calendar attachment that you can add to your calendar application.</p>
+                `,
+                attachments: [{
+                    filename: 'meeting.ics',
+                    content: calendarEvent,
+                    contentType: 'text/calendar'
+                }]
+            };
+            
+            // Use a direct call to the transporter to avoid the from address being overridden
+            return sendMailWithStatus(mailOptions);
+        });
+        
+        const emailResults = await Promise.all(emailPromises);
+        
+        // Save meeting to database
+        const meetingRef = db.collection('meetings').doc(userId);
+        const meetingDoc = await meetingRef.get();
+        
+        const newMeeting = {
+            meetingWith: title,
+            meetingWhen: new Date(startDateTime),
+            endTime: new Date(endDateTime),
+            description: description || '',
+            location: location || 'Online meeting',
+            attendees: attendees.map(a => a.email)
+        };
+        
+        if (meetingDoc.exists) {
+            await meetingRef.update({
+                bookings: [...(meetingDoc.data().bookings || []), newMeeting]
+            });
+        } else {
+            await meetingRef.set({
+                bookings: [newMeeting]
+            });
+        }
+        
+        res.status(200).json({
+            success: true,
+            message: 'Meeting invitations sent successfully',
+            data: {
+                emailResults: emailResults.map(r => ({
+                    success: r.success,
+                    recipients: r.accepted
+                })),
+                meeting: {
+                    ...newMeeting,
+                    meetingWhen: formatDate(newMeeting.meetingWhen)
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error sending meeting invites:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to send meeting invitations',
+            error: error.message
         });
     }
 };
