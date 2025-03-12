@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, TextInput, Alert, Modal, Linking, RefreshControl } from 'react-native';
+import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, TextInput, Alert, Modal, Linking, RefreshControl, ActivityIndicator } from 'react-native';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
@@ -11,6 +11,9 @@ import { RootStackParamList } from '../../types/navigation';
 import { Swipeable } from 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useColorScheme } from '../../context/ColorSchemeContext';
+
+// Define constant for free plan contact limit
+const FREE_PLAN_CONTACT_LIMIT = 3;
 
 // Update interfaces to match Firestore structure
 interface Contact {
@@ -56,8 +59,9 @@ export default function ContactsScreen() {
   const [contactToDelete, setContactToDelete] = useState<number | null>(null);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [showLimitModal, setShowLimitModal] = useState(false);
-  const [remainingContacts, setRemainingContacts] = useState<number | 'unlimited'>(3);
+  const [remainingContacts, setRemainingContacts] = useState<number | 'unlimited'>(FREE_PLAN_CONTACT_LIMIT);
   const [refreshing, setRefreshing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const { colorScheme } = useColorScheme();
 
@@ -68,6 +72,7 @@ export default function ContactsScreen() {
   );
 
   const loadContacts = async () => {
+    setIsLoading(true); // Set loading to true before fetching
     try {
       const userId = await getUserId();
       if (!userId) {
@@ -87,7 +92,7 @@ export default function ContactsScreen() {
         setContactDocId(userId);
         // Set remaining contacts based on plan
         if (userData.plan === 'free') {
-          const remaining = Math.max(0, 3 - data.contactList.length);
+          const remaining = Math.max(0, FREE_PLAN_CONTACT_LIMIT - data.contactList.length);
           setRemainingContacts(remaining);
           
           // Show limit modal if no contacts remaining
@@ -101,6 +106,8 @@ export default function ContactsScreen() {
     } catch (error) {
       console.error('Error loading contacts:', error);
       showModal('Error', 'Failed to load contacts');
+    } finally {
+      setIsLoading(false); // Set loading to false after fetching (success or error)
     }
   };
 
@@ -414,7 +421,12 @@ export default function ContactsScreen() {
             />
           </View>
 
-          {filteredContacts.length === 0 ? (
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colorScheme} />
+              <Text style={styles.loadingText}>Loading contacts...</Text>
+            </View>
+          ) : filteredContacts.length === 0 ? (
             <View style={styles.emptyStateContainer}>
               <MaterialIcons name="people" size={64} color={COLORS.gray} />
               <Text style={styles.emptyStateTitle}>No contact yet</Text>
@@ -609,7 +621,7 @@ export default function ContactsScreen() {
             <View style={styles.modalContent}>
               <Text style={styles.modalTitle}>Contact Limit Reached</Text>
               <Text style={styles.modalMessage}>
-                You have reached the limit of 3 contacts for free users. 
+                You have reached the limit of {FREE_PLAN_CONTACT_LIMIT} contacts for free users. 
                 Upgrade to Premium to add unlimited contacts!
               </Text>
               <View style={styles.modalButtons}>
@@ -904,5 +916,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     letterSpacing: 0.25,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: COLORS.gray,
   },
 });

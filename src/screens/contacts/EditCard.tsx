@@ -95,7 +95,7 @@ export default function EditCard() {
       const cardsData = await response.json();
       
       if (cardsData && cardsData.length > cardIndex) {
-        const userData = cardsData[cardIndex]; // Use passed cardIndex instead of hardcoded 0
+        const userData = cardsData[cardIndex]; 
         
         setSelectedColor(userData.colorScheme || '#1B2B5B');
         setFormData({

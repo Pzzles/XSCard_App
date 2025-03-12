@@ -11,4 +11,7 @@ router.post('/meetings', meetingController.createMeeting);
 router.patch('/meetings/:userId/:meetingIndex', meetingController.updateMeeting);
 router.delete('/meetings/:userId/:meetingIndex', meetingController.deleteMeeting);
 
+// New endpoint for sending meeting invites
+router.post('/meetings/invite', meetingController.sendMeetingInvite);
+
 module.exports = router;
