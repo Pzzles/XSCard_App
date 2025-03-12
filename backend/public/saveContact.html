@@ -213,6 +213,9 @@
                 <input type="tel" id="scannerPhone" placeholder="Your Phone Number">
             </div>
             <div class="form-group">
+                <input type="email" id="scannerEmail" placeholder="Your Email">
+            </div>
+            <div class="form-group">
                 <input type="text" id="howWeMet" placeholder="How we met">
             </div>
             <button class="submit-btn" onclick="handleSubmit()">
@@ -275,43 +278,51 @@
             const scannerName = document.getElementById('scannerName').value;
             const scannerSurname = document.getElementById('scannerSurname').value;
             const scannerPhone = document.getElementById('scannerPhone').value;
+            const scannerEmail = document.getElementById('scannerEmail').value;
             const howWeMet = document.getElementById('howWeMet').value;
 
-            if (!scannerName || !scannerSurname || !scannerPhone || !howWeMet) {
-                alert('Please fill in all your details');
+            // Only require name, surname and how we met
+            if (!scannerName || !scannerSurname || !howWeMet) {
+                alert('Please fill in all required details');
                 return false;
             }
 
+            // Use EXACTLY the same payload structure that works in Postman
+            const payload = {
+                userId: userData.id,
+                contactInfo: {
+                    name: scannerName,
+                    surname: scannerSurname,
+                    phone: scannerPhone,
+                    email: scannerEmail, // Include email exactly as in your working example
+                    howWeMet: howWeMet
+                }
+            };
+
             try {
-                const response = await fetch('/saveContact', {
+                console.log('Using the working endpoint /AddContact with payload:', payload);
+                
+                // Use EXACTLY the endpoint that works
+                const response = await fetch('/AddContact', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        userId: userData.id,
-                        contactInfo: {
-                            name: scannerName,
-                            surname: scannerSurname,
-                            phone: scannerPhone,
-                            howWeMet: howWeMet
-                        }
-                    })
+                    body: JSON.stringify(payload)
                 });
+                
+                console.log('Response status:', response.status);
+                const result = await response.json();
+                console.log('Response data:', result);
 
                 if (!response.ok) {
-                    throw new Error('Failed to save contact information');
-                }
-
-                const result = await response.json();
-                if (!result.success) {
-                    throw new Error(result.message || 'Failed to save contact');
+                    throw new Error(`Failed to save contact: ${response.status}`);
                 }
 
                 return true;
             } catch (error) {
-                console.error('Error saving contact:', error);
-                alert('Failed to save contact information');
+                console.error('Error:', error);
+                alert('Failed to save contact: ' + error.message);
                 return false;
             }
         }

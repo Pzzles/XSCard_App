@@ -3,14 +3,18 @@ const router = express.Router();
 const contactController = require('../controllers/contactController');
 const { authenticateUser } = require('../middleware/auth');
 
-// Public routes (no authentication needed)
+// Make AddContact a public route as this is the one that works
+router.post('/AddContact', contactController.addContact); 
+
+// Keep other public routes
 router.post('/saveContactInfo', contactController.saveContactInfo);
+router.post('/saveContact', contactController.saveContactInfo);
+router.post('/public/saveContact', contactController.saveContactInfo);
 
 // Protected routes
 router.use(authenticateUser);
 router.get('/Contacts', contactController.getAllContacts);
 router.get('/Contacts/:id', contactController.getContactById);
-router.post('/AddContact', contactController.addContact);
 router.patch('/Contacts/:id', contactController.updateContact);
 router.delete('/Contacts/:id', contactController.deleteContact);
 router.delete('/Contacts/:id/contact/:index', contactController.deleteContactFromList);
