@@ -270,6 +270,7 @@ exports.sendMeetingInvite = async (req, res) => {
             endDateTime,
             location,
             attendees,
+            organizer,
             timezone = 'UTC'
         } = req.body;
         
@@ -282,21 +283,24 @@ exports.sendMeetingInvite = async (req, res) => {
             });
         }
         
-        // Get user info to use as organizer
-        const userDoc = await db.collection('users').doc(userId).get();
-        if (!userDoc.exists) {
-            return res.status(404).json({
-                success: false,
-                message: 'User not found'
-            });
+        // Get user info to use as organizer if not provided
+        let organizerInfo = organizer;
+        if (!organizerInfo || !organizerInfo.name || !organizerInfo.email) {
+            const userDoc = await db.collection('users').doc(userId).get();
+            if (!userDoc.exists) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'User not found'
+                });
+            }
+            const userData = userDoc.data();
+            organizerInfo = {
+                name: `${userData.name} ${userData.surname || ''}`.trim(),
+                email: userData.email
+            };
         }
-        const userData = userDoc.data();
         
-        // Create organizer info
-        const organizer = {
-            name: `${userData.name} ${userData.surname}`,
-            email: userData.email
-        };
+        console.log('Using organizer info:', organizerInfo);
         
         // Generate the calendar event
         const calendarEvent = await createCalendarEvent({
@@ -306,7 +310,7 @@ exports.sendMeetingInvite = async (req, res) => {
             end: endDateTime,
             location: location || 'Online meeting',
             attendees,
-            organizer,
+            organizer: organizerInfo,
             timezone
         });
         
@@ -316,20 +320,20 @@ exports.sendMeetingInvite = async (req, res) => {
                 to: attendee.email,
                 // Override default sender to appear as coming from the user
                 from: {
-                    name: organizer.name,
+                    name: organizerInfo.name,
                     address: process.env.EMAIL_FROM_ADDRESS // We still use system email address for deliverability
                 },
-                replyTo: organizer.email, // Replies will go to the actual user
+                replyTo: organizerInfo.email, // Replies will go to the actual user
                 subject: `Meeting Invitation: ${title}`,
                 html: `
-                    <h2>Meeting Invitation from ${organizer.name}</h2>
+                    <h2>Meeting Invitation from ${organizerInfo.name}</h2>
                     <p><strong>Subject:</strong> ${title}</p>
                     <p><strong>When:</strong> ${new Date(startDateTime).toLocaleString(undefined, { 
                         dateStyle: 'full', 
                         timeStyle: 'short' 
                     })}</p>
                     <p><strong>Where:</strong> ${location || 'Online meeting'}</p>
-                    <p><strong>Organizer:</strong> ${organizer.name} (${organizer.email})</p>
+                    <p><strong>Organizer:</strong> ${organizerInfo.name} (${organizerInfo.email})</p>
                     ${description ? `<p><strong>Description:</strong><br>${description.replace(/\n/g, '<br>')}</p>` : ''}
                     <p>This invitation contains a calendar attachment that you can add to your calendar application.</p>
                 `,
@@ -340,7 +344,6 @@ exports.sendMeetingInvite = async (req, res) => {
                 }]
             };
             
-            // Use a direct call to the transporter to avoid the from address being overridden
             return sendMailWithStatus(mailOptions);
         });
         

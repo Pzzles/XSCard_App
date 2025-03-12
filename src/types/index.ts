@@ -12,6 +12,7 @@ export type Contact = {
   name: string;
   surname: string;
   number: string;
+  email?: string; 
   position: string;
   company: string;
   dateAdded: string;

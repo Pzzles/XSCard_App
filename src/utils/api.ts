@@ -23,7 +23,7 @@ const getBaseUrl = () => {
   console.log('Is Development Mode:', __DEV__);
 
     if (__DEV__) {
-        return 'http://192.168.2.242:8383';
+        return 'http://192.168.8.150:8383';
     }
 
     return 'https://xscard-app.onrender.com';
@@ -51,6 +51,7 @@ export const ENDPOINTS = {
     UPDATE_CARD: '/Cards/:id',
     UPDATE_CARD_COLOR: '/Cards/:id/color',
     CREATE_MEETING: '/meetings',
+    MEETING_INVITE: '/meetings/invite',
     DELETE_CARD: '/Cards/:id',  // Change this to match the working endpoint
     UPGRADE_USER: '/Users/:id/upgrade',
     INITIALIZE_PAYMENT: '/payment/initialize',

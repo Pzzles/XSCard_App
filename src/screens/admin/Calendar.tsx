@@ -198,6 +198,7 @@ export default function Calendar() {
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
   const [isCreatingMeeting, setIsCreatingMeeting] = useState(false);
   const navigation = useNavigation<CalendarScreenNavigationProp>();
+  const [userInfo, setUserInfo] = useState<{ name: string; surname: string; email: string } | null>(null);
   
   const timeSlots = [
     '09:00', '10:00', '11:00', '12:00',
@@ -280,6 +281,7 @@ const loadEvents = async () => {
 };
 
   useEffect(() => {
+    fetchUserInfo();
     loadEvents();
   }, []);
 
@@ -311,6 +313,45 @@ const loadEvents = async () => {
     checkUserPlan();
   }, [navigation]);
 
+  const fetchUserInfo = async () => {
+    try {
+      const userId = await getUserId();
+      if (!userId) {
+        console.error('No user ID found for fetching user info');
+        return;
+      }
+      
+      console.log('Fetching user card info for user ID:', userId);
+      const response = await authenticatedFetch(`${ENDPOINTS.GET_CARD}/${userId}`);
+      
+      if (!response.ok) {
+        console.error('Failed to fetch user card info');
+        return;
+      }
+      
+      const cards = await response.json();
+      console.log('User cards data:', cards);
+      
+      if (cards && cards.length > 0) {
+        // Use the default card (first card)
+        const defaultCard = cards[0];
+        setUserInfo({
+          name: defaultCard.name || '',
+          surname: defaultCard.surname || '',
+          email: defaultCard.email || 'contact@xscard.com'
+        });
+        
+        console.log('Set user info from card:', {
+          name: defaultCard.name,
+          surname: defaultCard.surname,
+          email: defaultCard.email
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching user info:', error);
+    }
+  };
+
   const handleSaveEvent = async () => {
     if (isCreatingMeeting) return; // Prevent double submission
     
@@ -323,24 +364,97 @@ const loadEvents = async () => {
       }
 
       const [hour, minute] = selectedTime.split(':');
-      const meetingDate = new Date(
+      const startDateTime = new Date(
         selectedDate + 'T' + `${hour}:${minute}:00`
       );
-
-      const newEvent = {
-        meetingWith: `${selectedContact.name} ${selectedContact.surname}`.trim(),
-        meetingWhen: meetingDate.toISOString(),
-        description: eventNote || '' // Ensure description is never undefined
+      
+      // Calculate end time (1 hour after start time)
+      const endDateTime = new Date(startDateTime);
+      endDateTime.setHours(endDateTime.getHours() + 1);
+      
+      // Create default organizer info
+      let organizerName = "XS Card User";
+      let organizerEmail = "contact@xscard.com";
+      
+      // Use user info from card if available
+      if (userInfo) {
+        organizerName = `${userInfo.name} ${userInfo.surname}`.trim();
+        if (organizerName.length === 0) organizerName = "XS Card User";
+        
+        if (userInfo.email) {
+          organizerEmail = userInfo.email;
+        }
+      }
+      
+      console.log('Using organizer info:', { name: organizerName, email: organizerEmail });
+      
+      // Create meeting invite with proper attendee format
+      const meetingData = {
+        // Use the organizer name for the title
+        title: `Meeting with ${organizerName}`,
+        description: eventNote || '', 
+        startDateTime: startDateTime.toISOString(),
+        endDateTime: endDateTime.toISOString(),
+        location: "https://zoom.us/j/123456789", // Dummy Zoom link
+        attendees: [
+          {
+            name: `${selectedContact.name} ${selectedContact.surname}`.trim(),
+            email: selectedContact.email || `${selectedContact.name.toLowerCase()}@example.com` // Fallback if email is missing
+          }
+        ],
+        // Add organizer information explicitly
+        organizer: {
+          name: organizerName,
+          email: organizerEmail
+        },
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone // Get user's timezone
       };
 
-      const response = await authenticatedFetch(ENDPOINTS.CREATE_MEETING, {
-        method: 'POST',
-        body: JSON.stringify(newEvent)
-      });
+      console.log('Sending meeting data:', meetingData);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to create meeting');
+      // First try to send invitation
+      const inviteResponse = await authenticatedFetch(ENDPOINTS.MEETING_INVITE, {
+        method: 'POST',
+        body: JSON.stringify(meetingData)
+      });
+      
+      let inviteResult;
+      try {
+        // Log the response for debugging
+        inviteResult = await inviteResponse.json();
+        console.log('Invite response:', inviteResult);
+      } catch (jsonError) {
+        console.error('Error parsing invite response:', jsonError);
+      }
+      
+      if (!inviteResponse.ok) {
+        console.warn("Failed to send invitation, falling back to regular meeting creation");
+        
+        // Fallback to regular meeting creation if invite fails
+        const fallbackMeeting = {
+          meetingWith: `${selectedContact.name} ${selectedContact.surname}`.trim(),
+          meetingWhen: startDateTime.toISOString(),
+          description: eventNote || ''
+        };
+        
+        const fallbackResponse = await authenticatedFetch(ENDPOINTS.CREATE_MEETING, {
+          method: 'POST',
+          body: JSON.stringify(fallbackMeeting)
+        });
+        
+        if (!fallbackResponse.ok) {
+          let errorMessage = 'Failed to create meeting';
+          try {
+            const errorData = await fallbackResponse.json();
+            if (errorData && errorData.message) {
+              errorMessage = errorData.message;
+            }
+          } catch (e) {
+            console.error('Error parsing error response:', e);
+          }
+          
+          throw new Error(errorMessage);
+        }
       }
 
       // Reload events to get updated list
