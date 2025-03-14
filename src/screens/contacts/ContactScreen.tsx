@@ -20,6 +20,7 @@ interface Contact {
   name: string;
   surname: string;
   phone: string; // Changed from number to phone to match DB
+  email?: string; // Add email field as optional
   howWeMet: string;
   createdAt: string; // Will now be in format "Date: February 25, 2025 at 6:25 PM"
 }
@@ -175,7 +176,7 @@ export default function ContactsScreen() {
         const userData = JSON.parse(storedUserData);
         const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
         const message = contact 
-          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.phone}\nMet at: ${contact.howWeMet}`
+          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.phone}${contact.email ? `\nEmail: ${contact.email}` : ''}\nMet at: ${contact.howWeMet}`
           : `Check out my digital business card! ${shareUrl}`;
           
         Linking.openURL(`whatsapp://send?text=${encodeURIComponent(message)}`).catch(() => {
@@ -195,7 +196,7 @@ export default function ContactsScreen() {
         const userData = JSON.parse(storedUserData);
         const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
         const message = contact 
-          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.phone}\nMet at: ${contact.howWeMet}`
+          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.phone}${contact.email ? `\nEmail: ${contact.email}` : ''}\nMet at: ${contact.howWeMet}`
           : `Check out my business card: ${shareUrl}`;
 
         Linking.openURL(`tg://msg?text=${encodeURIComponent(message)}`).catch(() => {
@@ -209,19 +210,37 @@ export default function ContactsScreen() {
       icon: 'email',
       color: '#EA4335',
       action: async (contact?: Contact) => {
-        const storedUserData = await AsyncStorage.getItem('userData');
-        if (!storedUserData) return;
-        
-        const userData = JSON.parse(storedUserData);
-        const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
-        const message = contact 
-          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.phone}\nMet at: ${contact.howWeMet}`
-          : `Check out my business card: ${shareUrl}`;
-
-        const emailUrl = `mailto:?subject=Business Card&body=${encodeURIComponent(message)}`;
-        Linking.openURL(emailUrl).catch(() => {
-          showModal('Error', 'Could not open email client');
-        });
+        try {
+          const storedUserData = await AsyncStorage.getItem('userData');
+          if (!storedUserData) {
+            showModal('Error', 'User data not available');
+            return;
+          }
+          
+          const userData = JSON.parse(storedUserData);
+          let emailUrl = '';
+          
+          if (contact) {
+            // Case: Sharing a contact's information
+            const formattedMessage = `Hello,\n\nI wanted to share this contact information with you:\n\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.phone}${contact.email ? `\nEmail: ${contact.email}` : ''}\nMet at: ${contact.howWeMet}\n\nBest regards,\n${userData.name || ''} ${userData.surname || ''}${userData.email ? `\n${userData.email}` : ''}`;
+            
+            emailUrl = `mailto:?${userData.email ? `reply-to=${encodeURIComponent(userData.email)}&cc=${encodeURIComponent(userData.email)}&` : ''}subject=${encodeURIComponent(`Contact Information - ${contact.name} ${contact.surname}`)}&body=${encodeURIComponent(formattedMessage)}`;
+          } else {
+            // Case: Sharing user's own business card (similar to CardsScreen)
+            const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
+            
+            const formattedMessage = `Hello,\n\nI'm ${userData.name || ''} ${userData.surname || ''}${userData.company ? ` from ${userData.company}` : ''}.\n\nHere's my digital business card: ${shareUrl}\n\nBest regards,\n${userData.name || ''} ${userData.surname || ''}${userData.phone ? `\n${userData.phone}` : ''}${userData.email ? `\n${userData.email}` : ''}`;
+            
+            emailUrl = `mailto:?${userData.email ? `reply-to=${encodeURIComponent(userData.email)}&cc=${encodeURIComponent(userData.email)}&` : ''}subject=${encodeURIComponent(`Digital Business Card - ${userData.name || ''} ${userData.surname || ''}${userData.company ? `, ${userData.company}` : ''}`)}&body=${encodeURIComponent(formattedMessage)}`;
+          }
+          
+          Linking.openURL(emailUrl).catch(() => {
+            showModal('Error', 'Could not open email client');
+          });
+        } catch (error) {
+          console.error('Error preparing email:', error);
+          showModal('Error', 'Failed to prepare email');
+        }
       }
     }
   ];
@@ -255,41 +274,11 @@ export default function ContactsScreen() {
 
   const handlePlatformSelect = async (platform: string) => {
     try {
-      const storedUserData = await AsyncStorage.getItem('userData');
-      if (!storedUserData) {
-        showModal('Error', 'User data not available');
-        return;
+      const selectedOption = shareOptions.find(opt => opt.id === platform);
+      if (selectedOption) {
+        await selectedOption.action(selectedContact || undefined);
       }
       
-      const userData = JSON.parse(storedUserData);
-      const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
-      
-      let message;
-      if (selectedContact) {
-        message = `Contact Information:\nName: ${selectedContact.name} ${selectedContact.surname}\nPhone: ${selectedContact.phone}\nMet at: ${selectedContact.howWeMet}`;
-      } else {
-        message = `Check out my digital business card! ${shareUrl}`;
-      }
-
-      switch (platform) {
-        case 'whatsapp':
-          Linking.openURL(`whatsapp://send?text=${encodeURIComponent(message)}`).catch(() => {
-            showModal('Error', 'WhatsApp is not installed on your device');
-          });
-          break;
-        case 'telegram':
-          Linking.openURL(`tg://msg?text=${encodeURIComponent(message)}`).catch(() => {
-            showModal('Error', 'Telegram is not installed on your device');
-          });
-          break;
-        case 'email':
-          const subject = selectedContact ? 'Contact Information' : 'Digital Business Card';
-          Linking.openURL(`mailto:?subject=${subject}&body=${encodeURIComponent(message)}`).catch(() => {
-            showModal('Error', 'Could not open email client');
-          });
-          break;
-      }
-
       setIsShareModalVisible(false);
       setSelectedPlatform(null);
       setSelectedContact(null);
@@ -474,6 +463,11 @@ export default function ContactsScreen() {
                           <Text style={styles.contactPhone}>
                             {contact.phone || 'No phone number'}
                           </Text>
+                          {contact.email && (
+                            <Text style={styles.contactEmail}>
+                              {contact.email || 'No email address'}
+                            </Text>
+                          )}
                           <Text style={styles.contactHowWeMet}>
                             Met at: {contact.howWeMet}
                           </Text>
@@ -718,6 +712,11 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   contactPhone: {
+    fontSize: 14,
+    color: COLORS.black,
+    marginBottom: 4,
+  },
+  contactEmail: {
     fontSize: 14,
     color: COLORS.black,
     marginBottom: 4,

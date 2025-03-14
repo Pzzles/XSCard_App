@@ -29,7 +29,7 @@ const initializeSubscription = async (req, res) => {
             });
         }
 
-        const baseUrl = process.env.APP_URL || 'http://192.168.2.237:8383';
+        const baseUrl = process.env.APP_URL;
 
         // Prepare Paystack request parameters
         const params = JSON.stringify({
@@ -118,7 +118,7 @@ const initializeTrialSubscription = async (req, res) => {
             });
         }
 
-        const baseUrl = process.env.APP_URL || 'http://192.168.2.237:8383';
+        const baseUrl = process.env.APP_URL;
 
         // Prepare Paystack request parameters for initial R1 verification
         const params = JSON.stringify({

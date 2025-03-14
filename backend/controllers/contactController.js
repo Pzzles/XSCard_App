@@ -67,11 +67,17 @@ exports.getContactById = async (req, res) => {
     }
 };
 
+// Make this function more permissive for public use
 exports.addContact = async (req, res) => {
     const { userId, contactInfo } = req.body;
     
+    // Detailed logging
+    console.log('Add Contact called - Public endpoint');
+    console.log('Raw request body:', JSON.stringify(req.body, null, 2));
+    
     if (!userId || !contactInfo) {
         return res.status(400).send({ 
+            success: false,
             message: 'User ID and contact info are required'
         });
     }
@@ -107,6 +113,7 @@ exports.addContact = async (req, res) => {
 
         const newContact = {
             ...contactInfo,
+            email: contactInfo.email || '', // Add email field with fallback
             createdAt: admin.firestore.Timestamp.now()
         };
 
@@ -139,8 +146,16 @@ exports.addContact = async (req, res) => {
 exports.saveContactInfo = async (req, res) => {
     const { userId, contactInfo } = req.body;
     
+    // Detailed logging
+    console.log('Save Contact Info called - Public endpoint');
+    console.log('Raw request body:', JSON.stringify(req.body, null, 2));
+    
+    // Validate required fields only
     if (!userId || !contactInfo) {
-        return res.status(400).send({ message: 'User ID and contact info are required' });
+        return res.status(400).send({ 
+            success: false,
+            message: 'User ID and contact info are required' 
+        });
     }
 
     try {
@@ -177,14 +192,29 @@ exports.saveContactInfo = async (req, res) => {
             });
         }
 
-        // Add new contact with Firestore Timestamp
-        existingContacts.push({
-            name: contactInfo.name,
-            surname: contactInfo.surname,
-            phone: contactInfo.phone, // Use phone instead of number for consistency
-            howWeMet: contactInfo.howWeMet,
+        // Force-type the email field as string to avoid any type conversions
+        const contactEmail = String(contactInfo.email || '');
+        console.log('Processed email value:', contactEmail);
+        
+        // Create contact with explicit field assignment - no object spread which could lose properties
+        const newContact = {
+            name: String(contactInfo.name || ''),
+            surname: String(contactInfo.surname || ''),
+            phone: String(contactInfo.phone || ''),
+            email: contactEmail, // Explicitly assign email
+            howWeMet: String(contactInfo.howWeMet || ''),
             createdAt: admin.firestore.Timestamp.now()
-        });
+        };
+        
+        console.log('Final contact object to save:', newContact);
+        
+        // Add to existing contacts
+        existingContacts.push(newContact);
+
+        // Log the final array before saving
+        console.log('Contact list to save (first few):', 
+            existingContacts.slice(-3).map(c => ({ ...c, createdAt: 'timestamp' }))
+        );
 
         // Use contactList consistently
         await contactsRef.set({
@@ -207,6 +237,7 @@ exports.saveContactInfo = async (req, res) => {
                             <li><strong>Name:</strong> ${contactInfo.name}</li>
                             <li><strong>Surname:</strong> ${contactInfo.surname}</li>
                             <li><strong>Phone Number:</strong> ${contactInfo.phone}</li>
+                            <li><strong>Email:</strong> ${contactInfo.email || 'Not provided'}</li>
                             <li><strong>How You Met:</strong> ${contactInfo.howWeMet}</li>
                         </ul>
                     </div>
@@ -223,8 +254,15 @@ exports.saveContactInfo = async (req, res) => {
             }
         }
 
+        // Make sure we're sending a success flag in the response for the frontend
         res.status(200).send({ 
+            success: true,
             message: 'Contact saved successfully',
+            // Return the saved contact for verification
+            savedContact: {
+                ...newContact,
+                createdAt: 'timestamp'
+            },
             contactsCount: existingContacts.length,
             remainingContacts: userData.plan === 'free' ? 
                 FREE_PLAN_CONTACT_LIMIT - existingContacts.length : 

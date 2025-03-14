@@ -227,7 +227,9 @@ export default function AddCards() {
             
             <TouchableOpacity style={styles.imageButton} onPress={handleLogoUpload}>
               {companyLogo ? (
-                <Image source={{ uri: companyLogo }} style={styles.imagePreview} />
+           
+           
+           <Image source={{ uri: companyLogo }} style={styles.imagePreview} />
               ) : (
                 <>
                   <MaterialIcons name="add" size={24} color={COLORS.black} />
@@ -250,17 +252,17 @@ export default function AddCards() {
             />
             <TextInput 
               style={styles.input}
-              placeholder="Occupation"
-              placeholderTextColor="#999"
-              value={formData.occupation}
-              onChangeText={(text) => setFormData({...formData, occupation: text})}
-            />
-            <TextInput 
-              style={styles.input}
               placeholder="Last name"
               placeholderTextColor="#999"
               value={formData.lastName}
               onChangeText={(text) => setFormData({...formData, lastName: text})}
+            />
+            <TextInput 
+              style={styles.input}
+              placeholder="Occupation"
+              placeholderTextColor="#999"
+              value={formData.occupation}
+              onChangeText={(text) => setFormData({...formData, occupation: text})}
             />
             <TextInput 
               style={styles.input}

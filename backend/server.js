@@ -51,6 +51,125 @@ app.get('/saveContact', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'saveContact.html'));
 });
 
+// Add the AddContact endpoint directly to server.js
+// This bypasses any router or authentication middleware issues
+app.post('/AddContact', async (req, res) => {
+    const { userId, contactInfo } = req.body;
+    
+    // Detailed logging
+    console.log('Add Contact called - Public endpoint in server.js');
+    console.log('Raw request body:', JSON.stringify(req.body, null, 2));
+    
+    if (!userId || !contactInfo) {
+        return res.status(400).send({ 
+            success: false,
+            message: 'User ID and contact info are required'
+        });
+    }
+
+    try {
+        // Get user's plan information
+        const userRef = db.collection('users').doc(userId);
+        const userDoc = await userRef.get();
+        const userData = userDoc.data();
+
+        if (!userData) {
+            return res.status(404).send({ message: 'User not found' });
+        }
+
+        const contactRef = db.collection('contacts').doc(userId);
+        const doc = await contactRef.get();
+
+        let currentContacts = [];
+        if (doc.exists) {
+            currentContacts = doc.data().contactList || [];
+        }
+
+        // Free plan contact limit
+        const FREE_PLAN_CONTACT_LIMIT = 3;
+
+        // Check if free user has reached contact limit
+        if (userData.plan === 'free' && currentContacts.length >= FREE_PLAN_CONTACT_LIMIT) {
+            console.log(`Contact limit reached for free user ${userId}. Current contacts: ${currentContacts.length}`);
+            return res.status(403).send({
+                message: 'Contact limit reached',
+                error: 'FREE_PLAN_LIMIT_REACHED',
+                currentContacts: currentContacts.length,
+                limit: FREE_PLAN_CONTACT_LIMIT
+            });
+        }
+
+        const newContact = {
+            ...contactInfo,
+            email: contactInfo.email || '', // Add email field with fallback
+            createdAt: admin.firestore.Timestamp.now()
+        };
+
+        currentContacts.push(newContact);
+
+        await contactRef.set({
+            userId: db.doc(`users/${userId}`),
+            contactList: currentContacts
+        }, { merge: true });
+        
+        // Send email notification if user has email
+        if (userData.email) {
+            const mailOptions = {
+                from: process.env.EMAIL_USER_XSPARK,
+                to: userData.email,
+                subject: 'Someone Saved Your Contact Information',
+                html: `
+                    <h2>New Contact Added</h2>
+                    <p><strong>${contactInfo.name} ${contactInfo.surname}</strong> recently received your XS Card and has sent you their details:</p>
+                    <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 10px 0;">
+                        <p><strong>Contact Details:</strong></p>
+                        <ul style="list-style: none; padding-left: 0;">
+                            <li><strong>Name:</strong> ${contactInfo.name}</li>
+                            <li><strong>Surname:</strong> ${contactInfo.surname}</li>
+                            <li><strong>Phone Number:</strong> ${contactInfo.phone || 'Not provided'}</li>
+                            <li><strong>Email:</strong> ${contactInfo.email || 'Not provided'}</li>
+                            <li><strong>How You Met:</strong> ${contactInfo.howWeMet || 'Not provided'}</li>
+                        </ul>
+                    </div>
+                    <p style="color: #666; font-size: 12px;">This is an automated notification from your XS Card application.</p>
+                    ${userData.plan === 'free' ? 
+                        `<p style="color: #ff4b6e;">You have ${FREE_PLAN_CONTACT_LIMIT - currentContacts.length} contacts remaining in your free plan.</p>` 
+                        : ''}
+                `
+            };
+
+            try {
+                const mailResult = await sendMailWithStatus(mailOptions);
+                if (!mailResult.success) {
+                    console.error('Failed to send email notification:', mailResult.error);
+                }
+            } catch (emailError) {
+                console.error('Email sending error:', emailError);
+                // Continue execution even if email fails
+            }
+        }
+        
+        res.status(201).send({ 
+            success: true,
+            message: 'Contact added successfully',
+            contactList: currentContacts.map(contact => ({
+                ...contact,
+                createdAt: contact.createdAt ? contact.createdAt.toDate().toISOString() : new Date().toISOString()
+            })),
+            remainingContacts: userData.plan === 'free' ? 
+                FREE_PLAN_CONTACT_LIMIT - currentContacts.length : 
+                'unlimited'
+        });
+    } catch (error) {
+        console.error('Error adding contact:', error);
+        res.status(500).send({ 
+            success: false,
+            message: 'Internal Server Error', 
+            error: error.message 
+        });
+    }
+});
+
 // Add new contact saving endpoint
 app.post('/saveContact', async (req, res) => {
     const { userId, contactInfo } = req.body;

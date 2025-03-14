@@ -278,13 +278,20 @@ export default function CardsScreen() {
       icon: 'email',
       color: '#EA4335',
       action: async () => {
-        if (!userData?.id) {
+        if (!userData?.id || !userData.cards || !userData.cards[currentPage]) {
           Alert.alert('Error', 'User data not available');
           return;
         }
+        
+        const currentCard = userData.cards[currentPage];
         const saveContactUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
-        const message = `Check out my digital business card! ${saveContactUrl}`;
-        const emailUrl = `mailto:?subject=Digital Business Card&body=${encodeURIComponent(message)}`;
+        
+        // Make it clear in the message who is sending this card
+        const message = `Hello,\n\nI'm ${currentCard.name} ${currentCard.surname} from ${currentCard.company}.\n\nHere's my digital business card: ${saveContactUrl}\n\nBest regards,\n${currentCard.name} ${currentCard.surname}\n${currentCard.phone}\n${currentCard.email}`;
+        
+        // Try to set Reply-To header with the card's email, and make subject clearer
+        const emailUrl = `mailto:?reply-to=${encodeURIComponent(currentCard.email)}&cc=${encodeURIComponent(currentCard.email)}&subject=${encodeURIComponent(`Digital Business Card - ${currentCard.name} ${currentCard.surname}, ${currentCard.company}`)}&body=${encodeURIComponent(message)}`;
+        
         Linking.openURL(emailUrl).catch(() => {
           Alert.alert('Error', 'Could not open email client');
         });
