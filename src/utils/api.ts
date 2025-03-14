@@ -23,8 +23,7 @@ const getBaseUrl = () => {
   console.log('Is Development Mode:', __DEV__);
 
     if (__DEV__) {
-      //  return 'http://192.168.2.242:8383';
-      return 'https://ac1b-41-114-75-200.ngrok-free.app';
+        return 'http://192.168.8.136:8383';
     }
 
     return 'https://xscard-app.onrender.com';

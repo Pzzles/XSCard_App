@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, ScrollView, Dimensions, Platform, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, Dimensions, Platform, ActivityIndicator, Modal, TouchableOpacity } from 'react-native';
 import { COLORS } from '../../constants/colors';
 import AdminHeader from '../../components/AdminHeader';
 import { LineChart } from 'react-native-chart-kit';
@@ -8,13 +8,20 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { AuthStackParamList } from '../../types';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 interface Contact {
   createdAt: string;  // Changed to string format
+  name: string;
+  surname: string;
+  email: string;
 }
 
 interface Card {
+  id?: string;
   createdAt: string;  // Changed to string format
+  color?: string;
+  name?: string;
 }
 
 interface MonthCounts {
@@ -22,7 +29,78 @@ interface MonthCounts {
   contacts: number;
 }
 
+interface ContactsModalProps {
+  visible: boolean;
+  onClose: () => void;
+  contacts: Contact[];
+}
+
+interface CardsModalProps {
+  visible: boolean;
+  onClose: () => void;
+  cards: Card[];
+}
+
 type AdminDashboardNavigationProp = StackNavigationProp<AuthStackParamList>;
+
+const ContactsModal = ({ visible, onClose, contacts }: ContactsModalProps) => (
+  <Modal
+    visible={visible}
+    transparent={true}
+    animationType="fade"
+    onRequestClose={onClose}
+  >
+    <View style={styles.modalContainer}>
+      <View style={styles.modalContent}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Total Contacts</Text>
+          <TouchableOpacity onPress={onClose}>
+            <MaterialCommunityIcons name="close" size={24} color={COLORS.primary} />
+          </TouchableOpacity>
+        </View>
+        <ScrollView style={styles.modalList}>
+          {contacts.map((contact, index) => (
+            <View key={index} style={styles.modalItem}>
+              <Text style={styles.modalItemTitle}>{contact.name} {contact.surname}</Text>
+              <Text style={styles.modalItemSubtitle}>{contact.email}</Text>
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+    </View>
+  </Modal>
+);
+
+const CardsModal = ({ visible, onClose, cards }: CardsModalProps) => (
+  <Modal
+    visible={visible}
+    transparent={true}
+    animationType="fade"
+    onRequestClose={onClose}
+  >
+    <View style={styles.modalContainer}>
+      <View style={styles.modalContent}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Total Cards</Text>
+          <TouchableOpacity onPress={onClose}>
+            <MaterialCommunityIcons name="close" size={24} color={COLORS.primary} />
+          </TouchableOpacity>
+        </View>
+        <ScrollView style={styles.modalList}>
+          {cards.map((card, index) => (
+            <View 
+              key={index} 
+              style={styles.modalItem}
+            >
+              <Text style={styles.modalItemTitle}>{card.name || `Card ${index + 1}`}</Text>
+              <Text style={styles.modalItemSubtitle}>{new Date(card.createdAt).toLocaleDateString()}</Text>
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+    </View>
+  </Modal>
+);
 
 export default function AdminDashboard() {
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -39,6 +117,14 @@ export default function AdminDashboard() {
   const [cardsWeeklyData, setCardsWeeklyData] = useState([0, 0, 0, 0, 0, 0, 0]);
   const [userPlan, setUserPlan] = useState<string>('free');
   const navigation = useNavigation<AdminDashboardNavigationProp>();
+  const [showContactsModal, setShowContactsModal] = useState(false);
+  const [showCardsModal, setShowCardsModal] = useState(false);
+  const [contactsList, setContactsList] = useState<Contact[]>([]);
+  const [cardsList, setCardsList] = useState<Card[]>([]);
+  const [visibleMetrics, setVisibleMetrics] = useState<{cards: boolean; contacts: boolean}>({
+    cards: true,
+    contacts: true
+  });
 
   const countByMonth = (dates: string[]) => {
     type MonthCounts = {
@@ -123,6 +209,13 @@ export default function AdminDashboard() {
       setTotalContacts(contactsData?.contactList?.length || 0);
       setTotalCards(cardsData?.length || 0);
 
+      if (contactsData?.contactList) {
+        setContactsList(contactsData.contactList);
+      }
+      if (cardsData) {
+        setCardsList(cardsData);
+      }
+
     } catch (error) {
       console.error('Error fetching data:', error);
       setIsLoading(false);
@@ -166,6 +259,46 @@ export default function AdminDashboard() {
     checkUserPlan();
   }, [navigation]);
 
+  const toggleMetric = (metric: 'cards' | 'contacts') => {
+    if (visibleMetrics.cards && visibleMetrics.contacts) {
+      // If both are visible, show only the clicked one
+      setVisibleMetrics({
+        cards: metric === 'cards',
+        contacts: metric === 'contacts'
+      });
+    } else {
+      // If one is hidden, show both
+      setVisibleMetrics({
+        cards: true,
+        contacts: true
+      });
+    }
+  };
+
+  const getFilteredChartData = () => {
+    const months = ['Dec', 'Jan', 'Feb', 'Mar', 'Apr'];
+    const datasets = [];
+    
+    if (visibleMetrics.cards) {
+      datasets.push({
+        data: weeklyData.datasets[0].data,
+        color: () => '#FF526D'
+      });
+    }
+    
+    if (visibleMetrics.contacts) {
+      datasets.push({
+        data: weeklyData.datasets[1].data,
+        color: () => '#1B2559'
+      });
+    }
+    
+    return {
+      labels: months,
+      datasets
+    };
+  };
+
   if (isLoading) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
@@ -187,15 +320,25 @@ export default function AdminDashboard() {
         
         {/* Overview Cards - Removed ellipses icon */}
         <View style={styles.overviewContainer}>
-          <View style={[styles.overviewCard, { backgroundColor: COLORS.primary }]}>
+          <TouchableOpacity 
+            style={[styles.overviewCard, { backgroundColor: COLORS.primary }]}
+            onPress={() => setShowCardsModal(true)}
+            activeOpacity={0.7}
+          >
             <Text style={styles.cardNumber}>{totalCards}</Text>
             <Text style={styles.cardLabel}>Total Cards</Text>
-          </View>
+            <MaterialCommunityIcons name="dots-horizontal" size={24} color="white" style={styles.cardIcon} />
+          </TouchableOpacity>
           
-          <View style={[styles.overviewCard, { backgroundColor: '#1B2559' }]}>
+          <TouchableOpacity 
+            style={[styles.overviewCard, { backgroundColor: '#1B2559' }]}
+            onPress={() => setShowContactsModal(true)}
+            activeOpacity={0.7}
+          >
             <Text style={styles.cardNumber}>{totalContacts}</Text>
             <Text style={styles.cardLabel}>Total Contacts</Text>
-          </View>
+            <MaterialCommunityIcons name="dots-horizontal" size={24} color="white" style={styles.cardIcon} />
+          </TouchableOpacity>
         </View>
 
         {/* Weekly Growth Section - Removed ellipses icon */}
@@ -205,7 +348,7 @@ export default function AdminDashboard() {
           </View>
           
           <LineChart
-            data={weeklyData}
+            data={getFilteredChartData()}
             width={Dimensions.get('window').width - 40}
             height={220}
             yAxisInterval={1} // Force 1 unit intervals
@@ -234,14 +377,24 @@ export default function AdminDashboard() {
           />
           
           <View style={styles.legendContainer}>
-            <View style={styles.legendItem}>
+            <TouchableOpacity 
+              style={[styles.legendItem, !visibleMetrics.cards && styles.legendItemInactive]}
+              onPress={() => toggleMetric('cards')}
+            >
               <View style={[styles.legendDot, { backgroundColor: '#FF526D' }]} />
-              <Text style={styles.legendText}>Total Cards</Text>
-            </View>
-            <View style={styles.legendItem}>
+              <Text style={[styles.legendText, !visibleMetrics.cards && styles.legendTextInactive]}>
+                Total Cards
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.legendItem, !visibleMetrics.contacts && styles.legendItemInactive]}
+              onPress={() => toggleMetric('contacts')}
+            >
               <View style={[styles.legendDot, { backgroundColor: '#1B2559' }]} />
-              <Text style={styles.legendText}>Total Contacts</Text>
-            </View>
+              <Text style={[styles.legendText, !visibleMetrics.contacts && styles.legendTextInactive]}>
+                Total Contacts
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -271,6 +424,18 @@ export default function AdminDashboard() {
         </View>
         */}
       </ScrollView>
+
+      <ContactsModal 
+        visible={showContactsModal}
+        onClose={() => setShowContactsModal(false)}
+        contacts={contactsList}
+      />
+
+      <CardsModal 
+        visible={showCardsModal}
+        onClose={() => setShowCardsModal(false)}
+        cards={cardsList}
+      />
     </View>
   );
 }
@@ -329,6 +494,7 @@ const styles = StyleSheet.create({
   chart: {
     marginVertical: 8,
     borderRadius: 16,
+    marginRight:50
   },
   legendContainer: {
     flexDirection: 'row',
@@ -405,5 +571,66 @@ const styles = StyleSheet.create({
   loadingContainer: {
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    width: '90%',
+    maxHeight: '80%',
+    borderRadius: 15,
+    padding: 20,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+  },
+  modalList: {
+    maxHeight: '90%',
+  },
+  modalItem: {
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  modalItemTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1B2559',
+    marginBottom: 4,
+  },
+  modalItemSubtitle: {
+    fontSize: 14,
+    color: '#666',
+  },
+  cardIcon: {
+    position: 'absolute',
+    right: 10,
+    top: 10,
+  },
+  legendItemInactive: {
+    opacity: 0.5,
+  },
+  legendTextInactive: {
+    color: '#999',
   },
 });

@@ -535,13 +535,6 @@ const renderEventDate = (dateStr: string) => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.yearSelector}>
-          <Text style={styles.yearText}>{selectedYear}</Text>
-          <TouchableOpacity>
-            <Text style={styles.dropdownIcon}>▼</Text>
-          </TouchableOpacity>
-        </View>
-
         <RNCalendar
           style={styles.calendar}
           theme={{
@@ -798,19 +791,6 @@ const styles = StyleSheet.create({
       ios: 20,
       android: 80,
     }),
-  },
-  yearSelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    marginBottom: 10,
-  },
-  yearText: {
-    fontSize: 18,
-    marginRight: 5,
-  },
-  dropdownIcon: {
-    fontSize: 12,
   },
   calendar: {
     borderRadius: 10,
