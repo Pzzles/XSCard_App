@@ -3,10 +3,7 @@ const router = express.Router();
 const contactController = require('../controllers/contactController');
 const { authenticateUser } = require('../middleware/auth');
 
-// Make AddContact a public route as this is the one that works
-router.post('/AddContact', contactController.addContact); 
-
-// Keep other public routes
+// Keep these public routes
 router.post('/saveContactInfo', contactController.saveContactInfo);
 router.post('/saveContact', contactController.saveContactInfo);
 router.post('/public/saveContact', contactController.saveContactInfo);

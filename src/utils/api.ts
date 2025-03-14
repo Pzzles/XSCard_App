@@ -24,7 +24,7 @@ const getBaseUrl = () => {
 
     if (__DEV__) {
       //  return 'http://192.168.2.242:8383';
-      return 'https://c019-102-38-124-94.ngrok-free.app';
+      return 'https://e2e4-41-114-75-200.ngrok-free.app';
     }
 
     return 'https://xscard-app.onrender.com';
