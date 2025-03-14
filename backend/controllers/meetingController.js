@@ -67,29 +67,14 @@ exports.getAllMeetings = async (req, res) => {
 };
 
 exports.createMeeting = async (req, res) => {
-    const { 
-        meetingWith, 
-        meetingWhen,
-        title,
-        duration = 30,
-        location = "",
-        attendees = [],
-        startDateTime,
-        description = ''
-    } = req.body;
-    
+    const { meetingWith, meetingWhen } = req.body;
+    const description = req.body.description || ''; // Make description optional
     const userId = req.user.uid;
 
-    // Support both formats (old and new)
-    const meetingTitle = title || meetingWith;
-    const meetingTime = startDateTime ? new Date(startDateTime) : 
-                       meetingWhen ? new Date(meetingWhen) : 
-                       new Date();
-
-    if (!meetingTitle) {
+    if (!meetingWith || !meetingWhen) {
         return res.status(400).send({ 
-            message: 'Missing required field: title/meetingWith',
-            required: ['title or meetingWith', 'startDateTime or meetingWhen']
+            message: 'Missing required fields',
+            required: ['meetingWith', 'meetingWhen']
         });
     }
 
@@ -97,15 +82,11 @@ exports.createMeeting = async (req, res) => {
         const meetingRef = db.collection('meetings').doc(userId);
         const doc = await meetingRef.get();
 
-        // Store with all fields the UI might need later
+        // Store as Date object in Firestore
         const newMeeting = {
-            meetingWith: meetingTitle,
-            title: meetingTitle,
-            meetingWhen: meetingTime,
-            description: description || '',
-            duration: duration || 30,
-            location: location || '',
-            attendees: Array.isArray(attendees) ? attendees : []
+            meetingWith,
+            meetingWhen: new Date(meetingWhen),
+            description
         };
 
         if (doc.exists) {
@@ -290,108 +271,78 @@ exports.sendMeetingInvite = async (req, res) => {
             location,
             attendees,
             organizer,
-            timezone = 'UTC',
-            duration = 30
+            timezone = 'UTC'
         } = req.body;
         
-        // Calculate endDateTime if not provided but duration is
-        let endTime = endDateTime ? new Date(endDateTime) : null;
-        if (!endTime && startDateTime && duration) {
-            endTime = new Date(new Date(startDateTime).getTime() + (duration * 60000));
-        }
-        
-        // Validate required fields with better error messages
-        if (!title) {
+        // Validate required fields
+        if (!title || !startDateTime || !endDateTime || !attendees || !Array.isArray(attendees)) {
             return res.status(400).json({
                 success: false,
-                message: 'Meeting title is required'
+                message: 'Missing required fields',
+                required: ['title', 'startDateTime', 'endDateTime', 'attendees']
             });
         }
         
-        if (!startDateTime) {
-            return res.status(400).json({
-                success: false,
-                message: 'Meeting start time is required'
-            });
+        // Get user info to use as organizer if not provided
+        let organizerInfo = organizer;
+        if (!organizerInfo || !organizerInfo.name || !organizerInfo.email) {
+            const userDoc = await db.collection('users').doc(userId).get();
+            if (!userDoc.exists) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'User not found'
+                });
+            }
+            const userData = userDoc.data();
+            organizerInfo = {
+                name: `${userData.name} ${userData.surname || ''}`.trim(),
+                email: userData.email
+            };
         }
         
-        if (!endTime) {
-            return res.status(400).json({
-                success: false,
-                message: 'Either meeting end time or duration is required'
-            });
-        }
+        console.log('Using organizer info:', organizerInfo);
         
-        if (!attendees || !Array.isArray(attendees) || attendees.length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'At least one attendee is required'
-            });
-        }
-
-        // Log for debugging
-        console.log('Creating meeting invite with data:', {
-            title, 
-            start: startDateTime, 
-            end: endTime,
-            attendees: attendees.map(a => ({ name: a.name, email: a.email }))
+        // Generate the calendar event
+        const calendarEvent = await createCalendarEvent({
+            title,
+            description: description || '',
+            start: startDateTime,
+            end: endDateTime,
+            location: location || 'Online meeting',
+            attendees,
+            organizer: organizerInfo,
+            timezone
         });
-        
-        // Generate the calendar event with try/catch
-        let calendarEvent;
-        try {
-            calendarEvent = await createCalendarEvent({
-                title,
-                description: description || '',
-                start: startDateTime,
-                end: endTime,
-                location: location || 'Online meeting',
-                attendees,
-                organizer,
-                timezone
-            });
-            console.log('Calendar event generated successfully');
-        } catch (calendarError) {
-            console.error('Failed to generate calendar event:', calendarError);
-            // Set to null to indicate calendar generation failed
-            calendarEvent = null;
-        }
         
         // Send emails to all attendees
         const emailPromises = attendees.map(async (attendee) => {
             const mailOptions = {
                 to: attendee.email,
+                // Override default sender to appear as coming from the user
                 from: {
-                    name: organizer?.name || 'XS Card User',
-                    address: process.env.EMAIL_FROM_ADDRESS
+                    name: organizerInfo.name,
+                    address: process.env.EMAIL_FROM_ADDRESS // We still use system email address for deliverability
                 },
-                replyTo: organizer?.email || process.env.EMAIL_FROM_ADDRESS,
+                replyTo: organizerInfo.email, // Replies will go to the actual user
                 subject: `Meeting Invitation: ${title}`,
                 html: `
-                    <h2>Meeting Invitation from ${organizer?.name || 'XS Card User'}</h2>
+                    <h2>Meeting Invitation from ${organizerInfo.name}</h2>
                     <p><strong>Subject:</strong> ${title}</p>
                     <p><strong>When:</strong> ${new Date(startDateTime).toLocaleString(undefined, { 
                         dateStyle: 'full', 
                         timeStyle: 'short' 
                     })}</p>
-                    <p><strong>Duration:</strong> ${duration} minutes</p>
                     <p><strong>Where:</strong> ${location || 'Online meeting'}</p>
-                    <p><strong>Organizer:</strong> ${organizer?.name || 'XS Card User'} ${organizer?.email ? `(${organizer.email})` : ''}</p>
+                    <p><strong>Organizer:</strong> ${organizerInfo.name} (${organizerInfo.email})</p>
                     ${description ? `<p><strong>Description:</strong><br>${description.replace(/\n/g, '<br>')}</p>` : ''}
                     <p>This invitation contains a calendar attachment that you can add to your calendar application.</p>
-                `
-            };
-            
-            // Only add attachment if calendar generation succeeded
-            if (calendarEvent) {
-                mailOptions.attachments = [{
+                `,
+                attachments: [{
                     filename: 'meeting.ics',
                     content: calendarEvent,
                     contentType: 'text/calendar'
-                }];
-            } else {
-                mailOptions.html += '<p style="color:red">Note: Calendar attachment could not be generated.</p>';
-            }
+                }]
+            };
             
             return sendMailWithStatus(mailOptions);
         });
@@ -404,13 +355,11 @@ exports.sendMeetingInvite = async (req, res) => {
         
         const newMeeting = {
             meetingWith: title,
-            title: title,
             meetingWhen: new Date(startDateTime),
-            endTime: endTime,
+            endTime: new Date(endDateTime),
             description: description || '',
-            location: location || 'Online Meeting',
-            attendees: attendees,
-            duration: duration
+            location: location || 'Online meeting',
+            attendees: attendees.map(a => a.email)
         };
         
         if (meetingDoc.exists) {
@@ -426,7 +375,6 @@ exports.sendMeetingInvite = async (req, res) => {
         res.status(200).json({
             success: true,
             message: 'Meeting invitations sent successfully',
-            calendarAttached: !!calendarEvent,
             data: {
                 emailResults: emailResults.map(r => ({
                     success: r.success,
