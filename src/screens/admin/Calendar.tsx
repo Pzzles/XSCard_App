@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Platform, Modal, Alert, TextInput, KeyboardAvoidingView, Animated, ActivityIndicator } from 'react-native';
 import { Calendar as RNCalendar, DateData } from 'react-native-calendars';
 import { COLORS } from '../../constants/colors';
@@ -10,16 +10,23 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 
 type CalendarNavigationProp = BottomTabNavigationProp<AdminTabParamList, 'Calendar'>;
 type CalendarScreenNavigationProp = StackNavigationProp<AuthStackParamList>;
 
-// Update Event type to match actual Firebase response
+// Update Event type to include all meeting details
 type Event = {
   id?: string;
   meetingWith: string;
-  meetingWhen: string;  // Change this to string to match Firebase format
+  meetingWhen: string;
   description: string;
+  title: string;
+  duration: number;
+  location: string;
+  attendees: Contact[];
+  startTime: string;
+  endTime: string;
 };
 
 interface MarkedDates {
@@ -31,16 +38,33 @@ interface MarkedDates {
   };
 }
 
+interface MeetingDetails {
+  title: string;
+  duration: number;
+  location: string;
+  attendees: Contact[];
+  startTime: string;
+  endTime: string;
+}
+
 interface NoteModalProps {
   visible: boolean;
   selectedContact: Contact | null;
   selectedTime: string;
   eventNote: string;
+  meetingDetails: MeetingDetails;
   onChangeNote: (text: string) => void;
+  onChangeMeetingDetails: (details: Partial<MeetingDetails>) => void;
   onBack: () => void;
   onSave: () => void;
   onRequestClose: () => void;
   isLoading: boolean;
+  contacts: Contact[];
+  userInfo: {
+    name: string;
+    surname: string;
+    email: string;
+  } | null;
 }
 
 interface SuccessModalProps {
@@ -54,67 +78,374 @@ interface DeleteModalProps {
   onConfirm: () => void;
 }
 
+interface ContactsModalProps {
+  visible: boolean;
+  onClose: () => void;
+  contacts: Contact[];
+  onSelectContacts: (contacts: Contact[]) => void;
+}
+
+const calculateEndTime = (startTime: string, duration: number) => {
+  const [hours, minutes] = startTime.split(':').map(Number);
+  const date = new Date();
+  date.setHours(hours, minutes);
+  date.setMinutes(date.getMinutes() + duration);
+  return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+};
+
+const LocationInput = ({ value, onChange }: { 
+  value: string; 
+  onChange: (location: string) => void;
+}) => {
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  
+  // Common meeting locations
+  const commonLocations = [
+    "Virtual Meeting",
+    "Phone Call",
+    "Office - My Desk",
+    "Office - Meeting Room",
+    "Office - Boardroom",
+    "Office - Break Room",
+    "Office - Reception Area",
+    "Office - Private Office",
+    "Office - Open Workspace",
+    "Office - Rooftop Lounge",
+    "Office - Garden Area",
+    "Office - Canteen",
+    "Client’s Office",
+    "Co-working Space",
+    "Conference Center",
+    "Coffee Shop",
+    "Restaurant",
+    "Library",
+    "University Campus",
+    "Community Center",
+    "Airport Lounge",
+  ];
+
+  const getSuggestions = (text: string) => {
+    if (!text) return [];
+    const filtered = commonLocations.filter(location => 
+      location.toLowerCase().includes(text.toLowerCase())
+    );
+    return filtered;
+  };
+
+  return (
+    <View style={styles.locationInputContainer}>
+      <TextInput
+        style={styles.textInput}
+        placeholder="Add meeting location..."
+        value={value}
+        onChangeText={(text) => {
+          onChange(text);
+          setSuggestions(getSuggestions(text));
+        }}
+      />
+      {suggestions.length > 0 && (
+        <View style={styles.suggestionsContainer}>
+          <ScrollView 
+            nestedScrollEnabled={true}
+            keyboardShouldPersistTaps="handled"
+          >
+            {suggestions.map((suggestion, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.suggestionItem}
+                onPress={() => {
+                  onChange(suggestion);
+                  setSuggestions([]);
+                }}
+              >
+                <Text style={styles.suggestionText}>{suggestion}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+    </View>
+  );
+};
+
 const NoteModal = ({ 
   visible, 
   selectedContact, 
   selectedTime, 
   eventNote, 
-  onChangeNote, 
+  meetingDetails,
+  onChangeNote,
+  onChangeMeetingDetails,
   onBack, 
   onSave,
   onRequestClose,
-  isLoading
-}: NoteModalProps) => (
-  <Modal
-    visible={visible}
-    transparent={true}
-    animationType="none"
-    onRequestClose={onRequestClose}
-  >
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={{ flex: 1 }}
+  isLoading,
+  contacts,
+  userInfo
+}: NoteModalProps) => {
+  const scrollViewRef = useRef<ScrollView>(null);
+  const [selectedAttendees, setSelectedAttendees] = useState<Contact[]>(meetingDetails.attendees || []);
+  const [showAttendeePicker, setShowAttendeePicker] = useState(false);
+
+  // Calculate end time based on duration
+  const calculateEndTime = (startTime: string, duration: number) => {
+    const [hours, minutes] = startTime.split(':').map(Number);
+    const date = new Date();
+    date.setHours(hours, minutes);
+    date.setMinutes(date.getMinutes() + duration);
+    return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+  };
+
+  useEffect(() => {
+    if (selectedContact && !selectedAttendees.some(a => a.id === selectedContact.id)) {
+      setSelectedAttendees([selectedContact]);
+    }
+  }, [selectedContact]);
+
+  useEffect(() => {
+    setSelectedAttendees(meetingDetails.attendees || []);
+  }, [meetingDetails.attendees]);
+
+  return (
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="none"
+      onRequestClose={onRequestClose}
     >
-      <View style={styles.modalContainer}>
-        <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Add Note (Optional)</Text>
-          <Text style={styles.selectedInfo}>
-            Meeting with {selectedContact?.name} at {selectedTime}
-          </Text>
-          <TextInput
-            style={styles.noteInput}
-            placeholder="Add meeting notes (optional)..."
-            multiline
-            value={eventNote}
-            onChangeText={onChangeNote}
-            autoCapitalize="sentences"
-            textAlignVertical="top"
-          />
-          <View style={styles.noteButtonsContainer}>
-            <TouchableOpacity 
-              style={[styles.noteButton, styles.backButton]}
-              onPress={onBack}
-              disabled={isLoading}
-            >
-              <Text style={styles.backButtonText}>Back</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.noteButton, styles.saveButton]}
-              onPress={onSave}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <ActivityIndicator size="small" color="white" />
-              ) : (
-                <Text style={styles.saveButtonText}>Create Meeting</Text>
-              )}
-            </TouchableOpacity>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.modalWrapper}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
+      >
+        <View style={styles.modalContainer}>
+          <ScrollView 
+            ref={scrollViewRef}
+            style={styles.modalScrollView}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            onContentSizeChange={() => {
+              scrollViewRef.current?.scrollToEnd({ animated: true });
+            }}
+          >
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Meeting Details</Text>
+              
+              {/* Meeting Title */}
+              <Text style={styles.inputLabel}>Meeting Title</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Enter meeting title..."
+                value={meetingDetails.title}
+                onChangeText={(text) => onChangeMeetingDetails({ title: text })}
+              />
+
+              {/* Update Meeting Organizer Section */}
+              <View style={styles.contactInfoContainer}>
+                <Text style={styles.contactInfoLabel}>Meeting Organizer:</Text>
+                <Text style={styles.contactInfoText}>
+                  {userInfo ? `${userInfo.name} ${userInfo.surname}` : 'You'}
+                </Text>
+                <Text style={styles.contactEmail}>{userInfo?.email}</Text>
+              </View>
+
+              {/* Attendees Section */}
+              <Text style={styles.inputLabel}>Attendees</Text>
+              <View style={styles.attendeesContainer}>
+                {selectedAttendees.length > 0 ? (
+                  selectedAttendees.map((attendee, index) => (
+                    <View key={index} style={styles.attendeeChip}>
+                      <View style={styles.attendeeInfo}>
+                        <Text style={styles.attendeeName}>
+                          {attendee.name} {attendee.surname}
+                        </Text>
+                        <Text style={styles.attendeeEmail}>{attendee.email}</Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.removeAttendeeButton}
+                        onPress={() => {
+                          setSelectedAttendees(selectedAttendees.filter(a => a.id !== attendee.id));
+                        }}
+                      >
+                        <MaterialCommunityIcons name="close-circle" size={20} color="#666" />
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.noAttendeesText}>No attendees added yet</Text>
+                )}
+              </View>
+              
+              <TouchableOpacity
+                style={styles.addAttendeeButton}
+                onPress={() => setShowAttendeePicker(true)}
+              >
+                <Text style={styles.addAttendeeText}>+ Add Attendee</Text>
+              </TouchableOpacity>
+
+              {/* Time Section with Start and End Time */}
+              <View style={styles.timeContainer}>
+                <View style={styles.timeRow}>
+                  <View style={styles.timeColumn}>
+                    <Text style={styles.timeLabel}>Start Time</Text>
+                    <Text style={styles.timeValue}>{selectedTime}</Text>
+                  </View>
+                  <View style={styles.timeColumn}>
+                    <Text style={styles.timeLabel}>End Time</Text>
+                    <Text style={styles.timeValue}>
+                      {calculateEndTime(selectedTime, meetingDetails.duration)}
+                    </Text>
+                  </View>
+                </View>
+                
+                {/* Duration Selector */}
+                <View style={styles.durationSelector}>
+                  <Text style={styles.timeLabel}>Duration:</Text>
+                  <View style={styles.durationButtonsContainer}>
+                    {[30, 45, 60, 90].map((mins) => (
+                      <TouchableOpacity
+                        key={mins}
+                        style={[
+                          styles.durationButton,
+                          meetingDetails.duration === mins && styles.durationButtonActive
+                        ]}
+                        onPress={() => onChangeMeetingDetails({ duration: mins })}
+                      >
+                        <Text style={[
+                          styles.durationButtonText,
+                          meetingDetails.duration === mins && styles.durationButtonTextActive
+                        ]}>
+                          {mins} min
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              </View>
+
+              {/* Location with Autocomplete */}
+              <Text style={styles.inputLabel}>Location (optional)</Text>
+              <LocationInput
+                value={meetingDetails.location}
+                onChange={(location) => onChangeMeetingDetails({ location })}
+              />
+
+              {/* Notes */}
+              <Text style={styles.inputLabel}>Notes (optional)</Text>
+              <TextInput
+                style={styles.noteInput}
+                placeholder="Add meeting notes..."
+                multiline
+                value={eventNote}
+                onChangeText={onChangeNote}
+                textAlignVertical="top"
+              />
+
+              {/* Buttons */}
+              <View style={styles.noteButtonsContainer}>
+                <TouchableOpacity 
+                  style={[styles.noteButton, styles.backButton]}
+                  onPress={() => {
+                    setSelectedAttendees([]);
+                    onBack();
+                  }}
+                  disabled={isLoading}
+                >
+                  <Text style={styles.backButtonText}>Back</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.noteButton, styles.saveButton]}
+                  onPress={onSave}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <Text style={styles.saveButtonText}>Create Meeting</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+
+      {/* Update Attendee Picker Modal */}
+      <Modal
+        visible={showAttendeePicker}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowAttendeePicker(false)}
+      >
+        <View style={styles.modalWrapper}>
+          <View style={[styles.modalContent, { maxHeight: '80%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Attendees</Text>
+              <TouchableOpacity onPress={() => setShowAttendeePicker(false)}>
+                <MaterialCommunityIcons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.contactsList}>
+              {contacts.map((contact, index) => {
+                const isSelected = selectedAttendees.some(a => a.id === contact.id);
+                return (
+                  <TouchableOpacity
+                    key={`contact-${index}`}
+                    style={[
+                      styles.contactItem,
+                      isSelected && styles.contactItemSelected
+                    ]}
+                    onPress={() => {
+                      setSelectedAttendees(prev => {
+                        const isAlreadySelected = prev.some(a => a.id === contact.id);
+                        if (isAlreadySelected) {
+                          return prev.filter(a => a.id !== contact.id);
+                        }
+                        return [...prev, contact];
+                      });
+                    }}
+                  >
+                    <View style={styles.contactInfo}>
+                      <Text style={styles.contactName}>
+                        {contact.name} {contact.surname}
+                      </Text>
+                      <Text style={styles.contactEmail}>{contact.email}</Text>
+                    </View>
+                    {isSelected && (
+                      <MaterialCommunityIcons 
+                        name="check-circle" 
+                        size={24} 
+                        color={COLORS.primary} 
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => setShowAttendeePicker(false)}
+              >
+                <Text style={styles.modalButtonTextCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonConfirm]}
+                onPress={() => setShowAttendeePicker(false)}
+              >
+                <Text style={styles.modalButtonText}>
+                  Add {selectedAttendees.length > 0 ? `(${selectedAttendees.length})` : ''}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </View>
-    </KeyboardAvoidingView>
-  </Modal>
-);
+      </Modal>
+    </Modal>
+  );
+};
 
 const SuccessModal = ({ visible, onClose }: SuccessModalProps) => (
   <Modal
@@ -163,6 +494,133 @@ const DeleteConfirmationModal = ({ visible, onClose, onConfirm }: DeleteModalPro
   </Modal>
 );
 
+const ErrorModal = ({ visible, message, onClose }: { 
+  visible: boolean; 
+  message: string; 
+  onClose: () => void;
+}) => (
+  <Modal
+    visible={visible}
+    transparent={true}
+    animationType="fade"
+  >
+    <View style={styles.modalContainer}>
+      <View style={styles.errorModalContent}>
+        <MaterialCommunityIcons name="alert-circle" size={50} color={COLORS.error} />
+        <Text style={styles.errorTitle}>Error</Text>
+        <Text style={styles.errorMessage}>{message}</Text>
+        <TouchableOpacity 
+          style={styles.errorButton}
+          onPress={onClose}
+        >
+          <Text style={styles.errorButtonText}>OK</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </Modal>
+);
+
+const ContactsModal = ({ visible, onClose, contacts, onSelectContacts }: ContactsModalProps) => {
+  const [selectedContacts, setSelectedContacts] = useState<Contact[]>([]);
+  const [showError, setShowError] = useState(false);
+
+  const handleContactPress = (contact: Contact) => {
+    setSelectedContacts(prev => {
+      const isSelected = prev.some(c => c.id === contact.id);
+      if (isSelected) {
+        return prev.filter(c => c.id !== contact.id);
+      }
+      return [...prev, contact];
+    });
+  };
+
+  return (
+    <>
+      <Modal
+        visible={visible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={onClose}
+      >
+        <View style={styles.modalContainer}>
+          <View style={[styles.modalContent, { maxHeight: '80%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Contacts</Text>
+              <TouchableOpacity onPress={onClose}>
+                <MaterialCommunityIcons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.contactsList}>
+              {contacts.map((contact, index) => {
+                const isSelected = selectedContacts.some(c => c.id === contact.id);
+                return (
+                  <TouchableOpacity
+                    key={`contact-${index}`}
+                    style={[
+                      styles.contactItem,
+                      isSelected && styles.contactItemSelected
+                    ]}
+                    onPress={() => handleContactPress(contact)}
+                  >
+                    <View style={styles.contactInfo}>
+                      <Text style={styles.contactName}>
+                        {contact.name} {contact.surname}
+                      </Text>
+                      <Text style={styles.contactEmail}>{contact.email}</Text>
+                    </View>
+                    {isSelected && (
+                      <MaterialCommunityIcons 
+                        name="check-circle" 
+                        size={24} 
+                        color={COLORS.primary} 
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => {
+                  setSelectedContacts([]);
+                  onClose();
+                }}
+              >
+                <Text style={styles.modalButtonTextCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonConfirm]}
+                onPress={() => {
+                  if (selectedContacts.length === 0) {
+                    setShowError(true);
+                    return;
+                  }
+                  onSelectContacts(selectedContacts);
+                  setSelectedContacts([]);
+                  onClose();
+                }}
+              >
+                <Text style={styles.modalButtonText}>
+                  Add {selectedContacts.length > 0 ? `(${selectedContacts.length})` : ''}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <ErrorModal
+        visible={showError}
+        message="Please select at least one contact"
+        onClose={() => setShowError(false)}
+      />
+    </>
+  );
+};
+
 const MONTH_MAP: { [key: string]: string } = {
   'January': '01',
   'February': '02',
@@ -199,6 +657,14 @@ export default function Calendar() {
   const [isCreatingMeeting, setIsCreatingMeeting] = useState(false);
   const navigation = useNavigation<CalendarScreenNavigationProp>();
   const [userInfo, setUserInfo] = useState<{ name: string; surname: string; email: string } | null>(null);
+  const [meetingDetails, setMeetingDetails] = useState<MeetingDetails>({
+    title: '',
+    duration: 30,
+    location: '',
+    attendees: [],
+    startTime: '',
+    endTime: '',
+  });
   
   const timeSlots = [
     '09:00', '10:00', '11:00', '12:00',
@@ -210,75 +676,87 @@ export default function Calendar() {
     try {
       const userId = await getUserId();
       if (!userId) {
-        console.error('No user ID found');
+        console.log('No userId found');
         return;
       }
 
-      // Fetch contacts from server
+      console.log('Fetching contacts with userId:', userId);
       const response = await authenticatedFetch(ENDPOINTS.GET_CONTACTS + `/${userId}`);
       const data = await response.json();
-      
-      console.log('Loaded contacts data:', data); // Debug log
+      console.log('Raw contacts data:', data);
 
       if (data && Array.isArray(data.contactList)) {
-        setContacts(data.contactList);
+        const contactsWithIds = data.contactList.map((contact: Contact, index: number) => ({
+          ...contact,
+          id: contact.id || `contact-${index}`
+        }));
+        console.log('Setting contacts:', contactsWithIds.length, 'contacts found');
+        setContacts(contactsWithIds);
       } else {
-        console.log('No contacts found or invalid format:', data);
+        console.log('Invalid contacts data format:', data);
         setContacts([]);
       }
     } catch (error) {
-      console.error('Error loading contacts:', error);
-      Alert.alert('Error', 'Failed to load contacts');
+      console.error('Error in loadContacts:', error);
     }
   };
 
-  // Update loadEvents function to debug date handling
-const loadEvents = async () => {
-  try {
-    setIsLoadingEvents(true);
-    const userId = await getUserId();
-    if (!userId) {
-      throw new Error('No user ID found');
+  useEffect(() => {
+    loadContacts();
+  }, []);
+
+  useEffect(() => {
+    if (isContactsModalVisible) {
+      loadContacts();
     }
+  }, [isContactsModalVisible]);
 
-    const response = await authenticatedFetch(`/meetings/${userId}`);
-    const data = await response.json();
-    
-    console.log('Meetings response:', JSON.stringify(data, null, 2));
+  const loadEvents = async () => {
+    try {
+      setIsLoadingEvents(true);
+      const userId = await getUserId();
+      if (!userId) {
+        throw new Error('No user ID found');
+      }
 
-    if (data.success && data.data.meetings) {
-      setEvents(data.data.meetings);
+      const response = await authenticatedFetch(`/meetings/${userId}`);
+      const data = await response.json();
       
-      const marks: MarkedDates = {};
-      data.data.meetings.forEach((event: Event) => {
-        try {
-          const dateStr = event.meetingWhen.replace(' at at ', ' at ');
-          console.log('Processing fixed date:', dateStr);
-          
-          // Parse the date parts
-          const [monthStr, day, year] = dateStr.split(' at ')[0].split(' ');
-          
-          // Get month number from our mapping
-          const month = MONTH_MAP[monthStr];
-          
-          // Format the date in YYYY-MM-DD format
-          const formattedDate = `${year}-${month}-${day.padStart(2, '0')}`;
-          console.log('Formatted date:', formattedDate);
-          
-          marks[formattedDate] = { marked: true, dotColor: '#FF69B4' };
-        } catch (error) {
-          console.error('Error parsing date:', error, event.meetingWhen);
-        }
-      });
-      setMarkedDates(marks);
+      console.log('Meetings response:', JSON.stringify(data, null, 2));
+
+      if (data.success && data.data.meetings) {
+        setEvents(data.data.meetings);
+        
+        const marks: MarkedDates = {};
+        data.data.meetings.forEach((event: Event) => {
+          try {
+            const dateStr = event.meetingWhen.replace(' at at ', ' at ');
+            console.log('Processing fixed date:', dateStr);
+            
+            // Parse the date parts
+            const [monthStr, day, year] = dateStr.split(' at ')[0].split(' ');
+            
+            // Get month number from our mapping
+            const month = MONTH_MAP[monthStr];
+            
+            // Format the date in YYYY-MM-DD format
+            const formattedDate = `${year}-${month}-${day.padStart(2, '0')}`;
+            console.log('Formatted date:', formattedDate);
+            
+            marks[formattedDate] = { marked: true, dotColor: '#FF69B4' };
+          } catch (error) {
+            console.error('Error parsing date:', error, event.meetingWhen);
+          }
+        });
+        setMarkedDates(marks);
+      }
+    } catch (error) {
+      console.error('Error loading events:', error);
+      Alert.alert('Error', 'Failed to load meetings');
+    } finally {
+      setIsLoadingEvents(false);
     }
-  } catch (error) {
-    console.error('Error loading events:', error);
-    Alert.alert('Error', 'Failed to load meetings');
-  } finally {
-    setIsLoadingEvents(false);
-  }
-};
+  };
 
   useEffect(() => {
     fetchUserInfo();
@@ -353,61 +831,38 @@ const loadEvents = async () => {
   };
 
   const handleSaveEvent = async () => {
-    if (isCreatingMeeting) return; // Prevent double submission
+    if (isCreatingMeeting) return;
     
     try {
       setIsCreatingMeeting(true);
 
-      if (!selectedDate || !selectedTime || !selectedContact) {
-        Alert.alert('Error', 'Please select date, time and contact');
+      if (!selectedDate || !selectedTime || meetingDetails.attendees.length === 0) {
+        Alert.alert('Error', 'Please select date, time and at least one attendee');
         return;
       }
 
       const [hour, minute] = selectedTime.split(':');
-      const startDateTime = new Date(
-        selectedDate + 'T' + `${hour}:${minute}:00`
-      );
+      const startDateTime = new Date(selectedDate + 'T' + `${hour}:${minute}:00`);
       
-      // Calculate end time (1 hour after start time)
+      // Calculate end time based on duration
       const endDateTime = new Date(startDateTime);
-      endDateTime.setHours(endDateTime.getHours() + 1);
-      
-      // Create default organizer info
-      let organizerName = "XS Card User";
-      let organizerEmail = "contact@xscard.com";
-      
-      // Use user info from card if available
-      if (userInfo) {
-        organizerName = `${userInfo.name} ${userInfo.surname}`.trim();
-        if (organizerName.length === 0) organizerName = "XS Card User";
-        
-        if (userInfo.email) {
-          organizerEmail = userInfo.email;
-        }
-      }
-      
-      console.log('Using organizer info:', { name: organizerName, email: organizerEmail });
-      
-      // Create meeting invite with proper attendee format
+      endDateTime.setMinutes(endDateTime.getMinutes() + meetingDetails.duration);
+
       const meetingData = {
-        // Use the organizer name for the title
-        title: `Meeting with ${organizerName}`,
-        description: eventNote || '', 
+        title: meetingDetails.title || `Meeting with ${meetingDetails.attendees[0].name}`,
+        description: eventNote,
         startDateTime: startDateTime.toISOString(),
         endDateTime: endDateTime.toISOString(),
-        location: "https://zoom.us/j/123456789", // Dummy Zoom link
-        attendees: [
-          {
-            name: `${selectedContact.name} ${selectedContact.surname}`.trim(),
-            email: selectedContact.email || `${selectedContact.name.toLowerCase()}@example.com` // Fallback if email is missing
-          }
-        ],
-        // Add organizer information explicitly
+        location: meetingDetails.location || "Virtual Meeting",
+        attendees: meetingDetails.attendees.map(attendee => ({
+          name: `${attendee.name} ${attendee.surname}`.trim(),
+          email: attendee.email
+        })),
         organizer: {
-          name: organizerName,
-          email: organizerEmail
+          name: userInfo?.name ? `${userInfo.name} ${userInfo.surname}`.trim() : "XS Card User",
+          email: userInfo?.email || "contact@xscard.com"
         },
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone // Get user's timezone
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
       };
 
       console.log('Sending meeting data:', meetingData);
@@ -432,7 +887,7 @@ const loadEvents = async () => {
         
         // Fallback to regular meeting creation if invite fails
         const fallbackMeeting = {
-          meetingWith: `${selectedContact.name} ${selectedContact.surname}`.trim(),
+          meetingWith: selectedContact ? `${selectedContact.name} ${selectedContact.surname}`.trim() : '',
           meetingWhen: startDateTime.toISOString(),
           description: eventNote || ''
         };
@@ -527,6 +982,145 @@ const renderEventDate = (dateStr: string) => {
     }
   };
 
+  const handleContactSelect = (selectedContacts: Contact[]) => {
+    if (selectedContacts.length === 0) {
+      return; // Don't proceed if no contacts selected
+    }
+    
+    // Update both selectedContact and meetingDetails.attendees
+    setSelectedContact(selectedContacts[0]);
+    setMeetingDetails(prev => ({
+      ...prev,
+      attendees: selectedContacts // Store all selected contacts as attendees
+    }));
+    setIsContactsModalVisible(false);
+    setIsNoteModalVisible(true);
+  };
+
+  const renderEventCard = (event: Event, index: number) => (
+    <TouchableOpacity 
+      key={event.id ? `event-${event.id}-${index}` : `event-${index}`}
+      style={styles.eventCard}
+      onPress={() => setSelectedEventIndex(selectedEventIndex === index ? null : index)}
+    >
+      {selectedEventIndex === index && (
+        <TouchableOpacity 
+          style={styles.deleteIcon}
+          onPress={() => {
+            setMeetingToDelete(index);
+            setIsDeleteModalVisible(true);
+          }}
+        >
+          <Ionicons name="close-circle" size={32} color={COLORS.error} />
+        </TouchableOpacity>
+      )}
+      
+      {/* Title and Date */}
+      <Text style={styles.eventTitle}>{event.title || `Meeting with ${event.meetingWith}`}</Text>
+      <Text style={styles.eventDate}>{renderEventDate(event.meetingWhen)}</Text>
+
+      {/* Time Details */}
+      <View style={styles.eventDetailSection}>
+        <View style={styles.eventDetailHeader}>
+          <MaterialCommunityIcons name="clock-outline" size={14} color="#666" />
+          <Text style={styles.eventDetailTitle}>Time</Text>
+        </View>
+        <Text style={styles.eventDetailText}>
+          {renderEventTime(event.meetingWhen)} - {calculateEndTime(renderEventTime(event.meetingWhen), event.duration)}
+        </Text>
+        <Text style={styles.eventDuration}>Duration: {event.duration} minutes</Text>
+      </View>
+
+      {/* Organizer */}
+      <View style={styles.eventDetailSection}>
+        <View style={styles.eventDetailHeader}>
+          <MaterialCommunityIcons name="account" size={14} color="#666" />
+          <Text style={styles.eventDetailTitle}>Organizer</Text>
+        </View>
+        <Text style={styles.eventDetailText}>{event.meetingWith}</Text>
+      </View>
+
+      {/* Location */}
+      {event.location && (
+        <View style={styles.eventDetailSection}>
+          <View style={styles.eventDetailHeader}>
+            <MaterialCommunityIcons name="map-marker" size={14} color="#666" />
+            <Text style={styles.eventDetailTitle}>Location</Text>
+          </View>
+          <Text style={styles.eventDetailText}>{event.location}</Text>
+        </View>
+      )}
+
+      {/* Attendees */}
+      {event.attendees && event.attendees.length > 0 && (
+        <View style={styles.eventDetailSection}>
+          <View style={styles.eventDetailHeader}>
+            <MaterialCommunityIcons name="account-group" size={14} color="#666" />
+            <Text style={styles.eventDetailTitle}>
+              Attendees ({event.attendees.length})
+            </Text>
+          </View>
+          {event.attendees.map((attendee, idx) => (
+            <Text key={idx} style={styles.eventAttendeeItem}>
+              • {attendee.name} {attendee.surname}
+            </Text>
+          ))}
+        </View>
+      )}
+
+      {/* Notes */}
+      {event.description && (
+        <View style={styles.eventDetailSection}>
+          <View style={styles.eventDetailHeader}>
+            <MaterialCommunityIcons name="text" size={14} color="#666" />
+            <Text style={styles.eventDetailTitle}>Notes</Text>
+          </View>
+          <Text style={styles.eventNote}>{event.description}</Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+
+  const renderAndroidEventCard = (event: Event, index: number) => (
+    <TouchableOpacity 
+      key={event.id ? `event-${event.id}-${index}` : `event-${index}`}
+      style={styles.androidEventCard}
+      onPress={() => setSelectedEventIndex(selectedEventIndex === index ? null : index)}
+    >
+      {selectedEventIndex === index && (
+        <TouchableOpacity 
+          style={styles.deleteIcon}
+          onPress={() => {
+            setMeetingToDelete(index);
+            setIsDeleteModalVisible(true);
+          }}
+        >
+          <Ionicons name="close-circle" size={32} color={COLORS.error} />
+        </TouchableOpacity>
+      )}
+      <Text style={styles.eventTitle}>{event.title || `Meeting with ${event.meetingWith}`}</Text>
+      <Text style={styles.eventDate}>{renderEventDate(event.meetingWhen)}</Text>
+      <Text style={styles.eventTime}>
+        {renderEventTime(event.meetingWhen)} ({event.duration} mins)
+      </Text>
+      {event.location && (
+        <View style={styles.eventLocationContainer}>
+          <MaterialCommunityIcons name="map-marker" size={14} color="#666" />
+          <Text style={styles.eventLocation}>{event.location}</Text>
+        </View>
+      )}
+      {event.attendees && event.attendees.length > 0 && (
+        <View style={styles.eventAttendeesContainer}>
+          <MaterialCommunityIcons name="account-group" size={14} color="#666" />
+          <Text style={styles.eventAttendees}>
+            {event.attendees.length} {event.attendees.length === 1 ? 'attendee' : 'attendees'}
+          </Text>
+        </View>
+      )}
+      {event.description && <Text style={styles.eventNote}>{event.description}</Text>}
+    </TouchableOpacity>
+  );
+
   return (
     <View style={styles.container}>
       <AdminHeader title="Calendar" />
@@ -535,13 +1129,6 @@ const renderEventDate = (dateStr: string) => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.yearSelector}>
-          <Text style={styles.yearText}>{selectedYear}</Text>
-          <TouchableOpacity>
-            <Text style={styles.dropdownIcon}>▼</Text>
-          </TouchableOpacity>
-        </View>
-
         <RNCalendar
           style={styles.calendar}
           theme={{
@@ -575,33 +1162,7 @@ const renderEventDate = (dateStr: string) => {
                   style={styles.eventsScrollContainer}
                   nestedScrollEnabled={true}
                 >
-                  {events.map((event, index) => (
-                    <TouchableOpacity 
-                      key={event.id ? `event-${event.id}-${index}` : `event-${index}`} 
-                      style={styles.eventCard}
-                      onPress={() => setSelectedEventIndex(selectedEventIndex === index ? null : index)}
-                    >
-                      {selectedEventIndex === index && (
-                        <TouchableOpacity 
-                          style={styles.deleteIcon}
-                          onPress={() => {
-                            setMeetingToDelete(index);
-                            setIsDeleteModalVisible(true);
-                          }}
-                        >
-                          <Ionicons name="close-circle" size={24} color="red" />
-                        </TouchableOpacity>
-                      )}
-                      <Text style={styles.eventDate}>
-                        {renderEventDate(event.meetingWhen)}
-                      </Text>
-                      <Text style={styles.eventTitle}>Meeting with {event.meetingWith}</Text>
-                      <Text style={styles.eventTime}>
-                        {renderEventTime(event.meetingWhen)}
-                      </Text>
-                      {event.description && <Text style={styles.eventNote}>{event.description}</Text>}
-                    </TouchableOpacity>
-                  ))}
+                  {events.map((event, index) => renderEventCard(event, index))}
                 </ScrollView>
               </View>
             ) : (
@@ -614,29 +1175,7 @@ const renderEventDate = (dateStr: string) => {
                   nestedScrollEnabled={true}
                 >
                   <View style={styles.androidEventsGrid}>
-                    {events.map((event, index) => (
-                      <TouchableOpacity 
-                        key={event.id ? `event-${event.id}-${index}` : `event-${index}`} 
-                        style={styles.androidEventCard}
-                        onPress={() => setSelectedEventIndex(selectedEventIndex === index ? null : index)}
-                      >
-                        {selectedEventIndex === index && (
-                          <TouchableOpacity 
-                            style={styles.deleteIcon}
-                            onPress={() => {
-                              setMeetingToDelete(index);
-                              setIsDeleteModalVisible(true);
-                            }}
-                          >
-                            <Ionicons name="close-circle" size={24} color="red" />
-                          </TouchableOpacity>
-                        )}
-                        <Text style={styles.eventDate}>{renderEventDate(event.meetingWhen)}</Text>
-                        <Text style={styles.eventTitle}>Meeting with {event.meetingWith}</Text>
-                        <Text style={styles.eventTime}>{renderEventTime(event.meetingWhen)}</Text>
-                        {event.description && <Text style={styles.eventNote}>{event.description}</Text>}
-                      </TouchableOpacity>
-                    ))}
+                    {events.map((event, index) => renderAndroidEventCard(event, index))}
                   </View>
                 </ScrollView>
               </View>
@@ -665,42 +1204,12 @@ const renderEventDate = (dateStr: string) => {
         </View>
       </ScrollView>
 
-      <Modal
+      <ContactsModal
         visible={isContactsModalVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setIsContactsModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Select Contacts</Text>
-            <ScrollView style={styles.contactsList}>
-              {contacts.map((contact, index) => (
-                <TouchableOpacity 
-                  key={`contact-${contact.id || index}`}
-                  style={styles.contactItem}
-                  onPress={() => {
-                    setSelectedContact(contact);
-                    setIsContactsModalVisible(false);
-                    setIsNoteModalVisible(true);
-                  }}
-                >
-                  <Text style={styles.contactName}>
-                    {contact.name} {contact.surname}
-                  </Text>
-                  <Text style={styles.contactDetails}>{contact.number}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-            <TouchableOpacity 
-              style={styles.closeButton}
-              onPress={() => setIsContactsModalVisible(false)}
-            >
-              <Text style={styles.closeButtonText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setIsContactsModalVisible(false)}
+        contacts={contacts}
+        onSelectContacts={handleContactSelect}
+      />
 
       <Modal
         visible={isTimeModalVisible}
@@ -750,16 +1259,30 @@ const renderEventDate = (dateStr: string) => {
         selectedContact={selectedContact}
         selectedTime={selectedTime}
         eventNote={eventNote}
+        meetingDetails={meetingDetails}
         onChangeNote={setEventNote}
+        onChangeMeetingDetails={(details) => 
+          setMeetingDetails(prev => ({ ...prev, ...details }))
+        }
         onBack={() => {
           setIsNoteModalVisible(false);
           setSelectedContact(null);
           setEventNote('');
+          setMeetingDetails({
+            title: '',
+            duration: 30,
+            location: '',
+            attendees: [],
+            startTime: '',
+            endTime: '',
+          });
           setIsContactsModalVisible(true);
         }}
         onSave={handleSaveEvent}
         onRequestClose={() => setIsNoteModalVisible(false)}
         isLoading={isCreatingMeeting}
+        contacts={contacts}
+        userInfo={userInfo}
       />
 
       <SuccessModal 
@@ -799,19 +1322,6 @@ const styles = StyleSheet.create({
       android: 80,
     }),
   },
-  yearSelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    marginBottom: 10,
-  },
-  yearText: {
-    fontSize: 18,
-    marginRight: 5,
-  },
-  dropdownIcon: {
-    fontSize: 12,
-  },
   calendar: {
     borderRadius: 10,
     elevation: 4,
@@ -834,15 +1344,13 @@ const styles = StyleSheet.create({
     padding: 15,
     borderRadius: 10,
     marginRight: 15,
-    elevation: 2,
+    width: 350, // Increased width to accommodate more content
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.22,
-    shadowRadius: 2.22,
-    minWidth: 200, // Increase minimum width
-    maxWidth: 250, // Add maximum width
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
     position: 'relative',
-    marginVertical: 5, // Add vertical margin
   },
   eventsScrollView: {
     paddingLeft: 20, // Add left padding
@@ -897,12 +1405,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  modalScrollView: {
+    width: '100%',
+    paddingTop: Platform.OS === 'ios' ? 50 : 20, // Add padding for iOS status bar
+  },
   modalContent: {
     backgroundColor: 'white',
     width: '90%',
     borderRadius: 20,
     padding: 20,
     marginHorizontal: 20,
+    marginBottom: Platform.OS === 'ios' ? 40 : 30, // Increased Android bottom margin
   },
   modalTitle: {
     fontSize: 20,
@@ -988,6 +1501,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
     marginTop: 10,
+    marginBottom: Platform.select({
+      ios: 20,
+      android: 25, // Increased Android bottom margin
+    }),
   },
   noteButton: {
     flex: 1,
@@ -1050,8 +1567,10 @@ const styles = StyleSheet.create({
   },
   deleteIcon: {
     position: 'absolute',
-    top: 10,
-    right: 10,
+    top: 8,
+    right: 8,
+    padding: 8,
+    zIndex: 1,
   },
   modalMessage: {
     fontSize: 16,
@@ -1072,18 +1591,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalButtonCancel: {
-    backgroundColor: '#F0F0F0',
+    backgroundColor: '#f5f5f5',
   },
   modalButtonConfirm: {
-    backgroundColor: COLORS.error,
+    backgroundColor: COLORS.primary,
   },
   modalButtonText: {
+    color: 'white',
     fontSize: 16,
     fontWeight: '500',
-    color: COLORS.white,
   },
   modalButtonTextCancel: {
-    color: COLORS.black,
+    color: '#666',
+    fontSize: 16,
+    fontWeight: '500',
   },
   eventsWrapper: {
     flex: 1,
@@ -1102,10 +1623,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   androidEventsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
     paddingVertical: 10,
+    paddingHorizontal: 15,
   },
   androidEventCard: {
     backgroundColor: 'white',
@@ -1116,8 +1635,298 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.22,
     shadowRadius: 2.22,
-    width: '48%',
+    width: '100%', // Changed to full width for better readability
     marginBottom: 12,
     position: 'relative',
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
+    marginBottom: 5,
+    marginTop: 15,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+  },
+  contactInfoContainer: {
+    marginVertical: 15,
+    padding: 10,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+  },
+  contactInfoLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 5,
+  },
+  contactInfoText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#333',
+  },
+  contactEmail: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 2,
+  },
+  timeContainer: {
+    marginVertical: 15,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  timeColumn: {
+    flexDirection: 'column',
+  },
+  timeLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 5,
+  },
+  timeValue: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#333',
+  },
+  durationSelector: {
+    marginVertical: 15,
+  },
+  durationButtonsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 10,
+  },
+  durationButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    minWidth: 80,
+  },
+  durationButtonActive: {
+    backgroundColor: COLORS.primary,
+  },
+  durationButtonText: {
+    color: COLORS.primary,
+    fontSize: 14,
+  },
+  durationButtonTextActive: {
+    color: 'white',
+  },
+  suggestionsContainer: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    maxHeight: 200,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    zIndex: 2,
+  },
+  suggestionItem: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  suggestionText: {
+    fontSize: 14,
+    color: '#333',
+  },
+  attendeesContainer: {
+    marginTop: 10,
+    gap: 10,
+  },
+  attendeeChip: {
+    backgroundColor: '#f5f5f5',
+    padding: 10,
+    borderRadius: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  attendeeInfo: {
+    flex: 1,
+  },
+  attendeeName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#333',
+  },
+  attendeeEmail: {
+    fontSize: 12,
+    color: '#666',
+  },
+  removeAttendeeButton: {
+    padding: 5,
+  },
+  noAttendeesText: {
+    color: '#666',
+    fontStyle: 'italic',
+    marginBottom: 10,
+  },
+  addAttendeeButton: {
+    backgroundColor: COLORS.primary,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  addAttendeeText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    marginBottom: 10,
+  },
+  locationInputContainer: {
+    zIndex: 1,
+    marginBottom: 15,
+    position: 'relative',
+  },
+  modalWrapper: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  noContactsContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  noContactsText: {
+    color: '#666',
+    fontSize: 16,
+    fontStyle: 'italic',
+  },
+  contactItemSelected: {
+    backgroundColor: `${COLORS.primary}15`,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+    gap: 10,
+  },
+  contactInfo: {
+    flex: 1,
+  },
+  errorModalContent: {
+    backgroundColor: 'white',
+    padding: 30,
+    borderRadius: 20,
+    alignItems: 'center',
+    width: '80%',
+    maxWidth: 300,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.error,
+    marginVertical: 10,
+  },
+  errorMessage: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  errorButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 10,
+    minWidth: 120,
+    alignItems: 'center',
+  },
+  errorButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  eventLocationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 5,
+    gap: 4,
+  },
+  eventLocation: {
+    color: '#666',
+    fontSize: 12,
+    flex: 1,
+  },
+  eventAttendeesContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 5,
+    gap: 4,
+  },
+  eventAttendees: {
+    color: '#666',
+    fontSize: 12,
+  },
+  eventDetailSection: {
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+  },
+  eventDetailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 5,
+    gap: 4,
+  },
+  eventDetailTitle: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
+  },
+  eventDetailText: {
+    fontSize: 14,
+    color: '#333',
+    marginLeft: 18,
+  },
+  eventDuration: {
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 18,
+    marginTop: 2,
+  },
+  eventAttendeeItem: {
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 18,
+    marginBottom: 2,
   },
 });

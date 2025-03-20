@@ -180,17 +180,20 @@ exports.verifyEmail = async (req, res) => {
         const userDoc = await userRef.get();
 
         if (!userDoc.exists) {
-            return res.status(404).send({ message: 'User not found' });
+            // Redirect to the HTML page with user-not-found status
+            return res.redirect('/templates/emailVerified.html?status=user-not-found');
         }
 
         const userData = userDoc.data();
 
         if (userData.verificationToken !== token) {
-            return res.status(400).send({ message: 'Invalid verification token' });
+            // Redirect to the HTML page with error status
+            return res.redirect('/templates/emailVerified.html?status=error');
         }
 
         if (userData.isEmailVerified) {
-            return res.status(400).send({ message: 'Email already verified' });
+            // Redirect to the HTML page with already-verified status
+            return res.redirect('/templates/emailVerified.html?status=already-verified');
         }
 
         // Update Firestore
@@ -204,13 +207,12 @@ exports.verifyEmail = async (req, res) => {
             emailVerified: true
         });
 
-        res.status(200).send({ message: 'Email verified successfully' });
+        // Redirect to the HTML page with success status
+        res.redirect('/templates/emailVerified.html?status=success');
     } catch (error) {
         console.error('Verification error:', error);
-        res.status(500).send({ 
-            message: 'Failed to verify email',
-            error: error.message 
-        });
+        // Redirect to the HTML page with error status and message
+        res.redirect(`/templates/emailVerified.html?status=error&message=${encodeURIComponent(error.message)}`);
     }
 };
 
