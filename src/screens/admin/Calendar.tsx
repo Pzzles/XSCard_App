@@ -101,18 +101,27 @@ const LocationInput = ({ value, onChange }: {
   
   // Common meeting locations
   const commonLocations = [
-    "Zoom Meeting",
-    "Google Meet",
-    "Microsoft Teams",
-    "Office - Meeting Room 1",
-    "Office - Meeting Room 2",
-    "Office - Conference Room A",
-    "Office - Conference Room B",
     "Virtual Meeting",
     "Phone Call",
-    "Starbucks",
+    "Office - My Desk",
+    "Office - Meeting Room",
     "Office - Boardroom",
-    "Office - Break Room"
+    "Office - Break Room",
+    "Office - Reception Area",
+    "Office - Private Office",
+    "Office - Open Workspace",
+    "Office - Rooftop Lounge",
+    "Office - Garden Area",
+    "Office - Canteen",
+    "Client’s Office",
+    "Co-working Space",
+    "Conference Center",
+    "Coffee Shop",
+    "Restaurant",
+    "Library",
+    "University Campus",
+    "Community Center",
+    "Airport Lounge",
   ];
 
   const getSuggestions = (text: string) => {
@@ -827,8 +836,8 @@ export default function Calendar() {
     try {
       setIsCreatingMeeting(true);
 
-      if (!selectedDate || !selectedTime || !selectedContact) {
-        Alert.alert('Error', 'Please select date, time and contact');
+      if (!selectedDate || !selectedTime || meetingDetails.attendees.length === 0) {
+        Alert.alert('Error', 'Please select date, time and at least one attendee');
         return;
       }
 
@@ -840,15 +849,15 @@ export default function Calendar() {
       endDateTime.setMinutes(endDateTime.getMinutes() + meetingDetails.duration);
 
       const meetingData = {
-        title: meetingDetails.title || `Meeting with ${selectedContact.name}`,
+        title: meetingDetails.title || `Meeting with ${meetingDetails.attendees[0].name}`,
         description: eventNote,
         startDateTime: startDateTime.toISOString(),
         endDateTime: endDateTime.toISOString(),
         location: meetingDetails.location || "Virtual Meeting",
-        attendees: [{
-          name: `${selectedContact.name} ${selectedContact.surname}`.trim(),
-          email: selectedContact.email
-        }],
+        attendees: meetingDetails.attendees.map(attendee => ({
+          name: `${attendee.name} ${attendee.surname}`.trim(),
+          email: attendee.email
+        })),
         organizer: {
           name: userInfo?.name ? `${userInfo.name} ${userInfo.surname}`.trim() : "XS Card User",
           email: userInfo?.email || "contact@xscard.com"
@@ -878,7 +887,7 @@ export default function Calendar() {
         
         // Fallback to regular meeting creation if invite fails
         const fallbackMeeting = {
-          meetingWith: `${selectedContact.name} ${selectedContact.surname}`.trim(),
+          meetingWith: selectedContact ? `${selectedContact.name} ${selectedContact.surname}`.trim() : '',
           meetingWhen: startDateTime.toISOString(),
           description: eventNote || ''
         };
