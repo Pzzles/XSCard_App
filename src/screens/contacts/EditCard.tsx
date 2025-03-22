@@ -71,6 +71,7 @@ export default function EditCard() {
   const [selectedSocials, setSelectedSocials] = useState<string[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
   const [isConfirmModalVisible, setIsConfirmModalVisible] = useState(false);
+  const [isSocialRemoveModalVisible, setIsSocialRemoveModalVisible] = useState(false);
   const [isImageSourceModalVisible, setIsImageSourceModalVisible] = useState(false);
   const [isSuccessModalVisible, setIsSuccessModalVisible] = useState(false);
   const [currentSocialToRemove, setCurrentSocialToRemove] = useState<string | null>(null);
@@ -232,7 +233,7 @@ export default function EditCard() {
   const handleSocialSelect = (socialId: string) => {
     if (selectedSocials.includes(socialId)) {
       setCurrentSocialToRemove(socialId);
-      setIsConfirmModalVisible(true);
+      setIsSocialRemoveModalVisible(true);
     } else {
       setSelectedSocials([...selectedSocials, socialId]);
       setTimeout(() => {
@@ -242,6 +243,12 @@ export default function EditCard() {
         });
       }, 100);
     }
+  };
+
+  const handleRemoveSocial = (socialId: string) => {
+    setSelectedSocials(selectedSocials.filter(id => id !== socialId));
+    setFormData({...formData, [socialId]: ''});
+    setIsSocialRemoveModalVisible(false);
   };
 
   const handleProfileImageEdit = () => {
@@ -300,7 +307,8 @@ const pickImage = async (source: 'camera' | 'gallery') => {
       } as any);
       formData.append('imageType', 'profileImage');
 
-      const response = await fetch(buildUrl(ENDPOINTS.UPDATE_CARD.replace(':id', userId)) + '?cardIndex=0', {
+      // Use cardIndex from route params instead of hardcoded 0
+      const response = await fetch(buildUrl(ENDPOINTS.UPDATE_CARD.replace(':id', userId)) + `?cardIndex=${cardIndex}`, {
         method: 'PATCH',
         body: formData,
         headers: {
@@ -414,7 +422,8 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
       } as any);
       formData.append('imageType', 'companyLogo');
 
-      const response = await fetch(buildUrl(ENDPOINTS.UPDATE_CARD.replace(':id', userId)) + '?cardIndex=0', {
+      // Use cardIndex from route params instead of hardcoded 0
+      const response = await fetch(buildUrl(ENDPOINTS.UPDATE_CARD.replace(':id', userId)) + `?cardIndex=${cardIndex}`, {
         method: 'PATCH',
         body: formData,
         headers: {
@@ -480,6 +489,13 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
   );
 
   const handleDelete = () => {
+    // Prevent deletion of the default card (index 0)
+    if (cardIndex === 0) {
+      setModalMessage('The default card cannot be deleted. This ensures you always have at least one card available.');
+      setIsSuccessModalVisible(true);
+      return;
+    }
+    
     setModalMessage('Are you sure you want to delete this card? This action cannot be undone.');
     setIsConfirmModalVisible(true);
   };
@@ -691,14 +707,42 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
           {/* Delete Button */}
           {userPlan !== 'free' && (
             <TouchableOpacity 
-              style={styles.deleteButton}
+              style={[
+                styles.deleteButton,
+                cardIndex === 0 ? styles.deleteButtonDisabled : null
+              ]}
               onPress={handleDelete}
             >
-              <Text style={styles.deleteButtonText}>Delete Card</Text>
+              <Text style={styles.deleteButtonText}>
+                {cardIndex === 0 ? "Default Card (Cannot Delete)" : "Delete Card"}
+              </Text>
             </TouchableOpacity>
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <CustomModal
+        isVisible={isSocialRemoveModalVisible}
+        onClose={() => setIsSocialRemoveModalVisible(false)}
+        title="Remove Social Media"
+        message="Are you sure you want to remove this social media link?"
+        buttons={[
+          {
+            text: 'Cancel',
+            type: 'cancel',
+            onPress: () => setIsSocialRemoveModalVisible(false)
+          },
+          {
+            text: 'Remove',
+            type: 'confirm',
+            onPress: () => {
+              if (currentSocialToRemove) {
+                handleRemoveSocial(currentSocialToRemove);
+              }
+            }
+          }
+        ]}
+      />
 
       <CustomModal
         isVisible={isConfirmModalVisible}
@@ -1074,6 +1118,10 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: 16,
     fontWeight: '500',
+  },
+  deleteButtonDisabled: {
+    backgroundColor: '#ccc',
+    opacity: 0.7,
   },
 });
 

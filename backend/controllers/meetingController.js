@@ -69,6 +69,7 @@ exports.getAllMeetings = async (req, res) => {
 exports.createMeeting = async (req, res) => {
     const { meetingWith, meetingWhen } = req.body;
     const description = req.body.description || ''; // Make description optional
+    const duration = req.body.duration || 30; // Default to 30 minutes if not specified
     const userId = req.user.uid;
 
     if (!meetingWith || !meetingWhen) {
@@ -82,11 +83,12 @@ exports.createMeeting = async (req, res) => {
         const meetingRef = db.collection('meetings').doc(userId);
         const doc = await meetingRef.get();
 
-        // Store as Date object in Firestore
+        // Store as Date object in Firestore with duration in minutes
         const newMeeting = {
             meetingWith,
             meetingWhen: new Date(meetingWhen),
-            description
+            description,
+            duration // Store duration in minutes
         };
 
         if (doc.exists) {
@@ -271,7 +273,8 @@ exports.sendMeetingInvite = async (req, res) => {
             location,
             attendees,
             organizer,
-            timezone = 'UTC'
+            timezone = 'UTC',
+            duration = 30 // Default to 30 minutes if not provided
         } = req.body;
         
         // Validate required fields
@@ -332,6 +335,7 @@ exports.sendMeetingInvite = async (req, res) => {
                         dateStyle: 'full', 
                         timeStyle: 'short' 
                     })}</p>
+                    <p><strong>Duration:</strong> ${duration} minutes</p>
                     <p><strong>Where:</strong> ${location || 'Online meeting'}</p>
                     <p><strong>Organizer:</strong> ${organizerInfo.name} (${organizerInfo.email})</p>
                     ${description ? `<p><strong>Description:</strong><br>${description.replace(/\n/g, '<br>')}</p>` : ''}
@@ -349,17 +353,19 @@ exports.sendMeetingInvite = async (req, res) => {
         
         const emailResults = await Promise.all(emailPromises);
         
-        // Save meeting to database
+        // Save meeting to database with duration in minutes
         const meetingRef = db.collection('meetings').doc(userId);
         const meetingDoc = await meetingRef.get();
         
         const newMeeting = {
+            title,
             meetingWith: title,
             meetingWhen: new Date(startDateTime),
             endTime: new Date(endDateTime),
             description: description || '',
             location: location || 'Online meeting',
-            attendees: attendees.map(a => a.email)
+            attendees: attendees,
+            duration: duration // Store duration in minutes
         };
         
         if (meetingDoc.exists) {

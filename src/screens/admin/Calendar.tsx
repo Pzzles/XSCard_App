@@ -98,21 +98,43 @@ const LocationInput = ({ value, onChange }: {
   onChange: (location: string) => void;
 }) => {
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const scrollViewRef = useRef<ScrollView>(null);
   
   // Common meeting locations
   const commonLocations = [
-    "Zoom Meeting",
-    "Google Meet",
-    "Microsoft Teams",
+    "Virtual Meeting",
+    "Phone Call",
     "Office - Meeting Room 1",
     "Office - Meeting Room 2",
     "Office - Conference Room A",
     "Office - Conference Room B",
-    "Virtual Meeting",
-    "Phone Call",
-    "Starbucks",
     "Office - Boardroom",
-    "Office - Break Room"
+    "Office - Break Room",
+    "Office - Executive Suite",
+    "Office - Open Area",
+    "Office - Huddle Space",
+    "Office - Quiet Room",
+    "Office - Innovation Lab",
+    "Office - Client Meeting Room",
+    "Office - Presentation Room",
+    "Office - Training Room",
+    "Office - Cafeteria",
+    "Office - Lobby",
+    "Office - Rooftop Terrace",
+    "Office - Workshop Area",
+    "Coffee Shop",
+    "Restaurant",
+    "Hotel Lobby",
+    "Client Office",
+    "Co-working Space",
+    "Business Center",
+    "Conference Center",
+    "Airport Lounge",
+    "Library",
+    "Outdoor - Park",
+    "Outdoor - Patio",
+    "Exhibition Hall",
+    "Training Center"
   ];
 
   const getSuggestions = (text: string) => {
@@ -137,8 +159,14 @@ const LocationInput = ({ value, onChange }: {
       {suggestions.length > 0 && (
         <View style={styles.suggestionsContainer}>
           <ScrollView 
+            ref={scrollViewRef}
             nestedScrollEnabled={true}
             keyboardShouldPersistTaps="handled"
+            style={styles.suggestionsScrollView}
+            contentContainerStyle={styles.suggestionsContentContainer}
+            showsVerticalScrollIndicator={true}
+            bounces={false}
+            overScrollMode="never"
           >
             {suggestions.map((suggestion, index) => (
               <TouchableOpacity
@@ -148,6 +176,7 @@ const LocationInput = ({ value, onChange }: {
                   onChange(suggestion);
                   setSuggestions([]);
                 }}
+                activeOpacity={0.7}
               >
                 <Text style={styles.suggestionText}>{suggestion}</Text>
               </TouchableOpacity>
@@ -845,6 +874,7 @@ export default function Calendar() {
         startDateTime: startDateTime.toISOString(),
         endDateTime: endDateTime.toISOString(),
         location: meetingDetails.location || "Virtual Meeting",
+        duration: meetingDetails.duration, // Explicitly pass duration in minutes
         attendees: [{
           name: `${selectedContact.name} ${selectedContact.surname}`.trim(),
           email: selectedContact.email
@@ -1719,21 +1749,30 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: 'white',
-    maxHeight: 200,
+    height: 200, // Fixed height instead of maxHeight
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#ddd',
-    elevation: 3,
+    elevation: 5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    zIndex: 2,
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    zIndex: 1000,
+    overflow: 'hidden',
+  },
+  suggestionsScrollView: {
+    flex: 1,
+    width: '100%',
+  },
+  suggestionsContentContainer: {
+    flexGrow: 1,
   },
   suggestionItem: {
-    padding: 12,
+    padding: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+    backgroundColor: '#fff',
   },
   suggestionText: {
     fontSize: 14,
@@ -1793,7 +1832,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   locationInputContainer: {
-    zIndex: 1,
+    zIndex: 100,
     marginBottom: 15,
     position: 'relative',
   },
