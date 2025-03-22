@@ -310,19 +310,78 @@ export default function CardsScreen() {
 
   const handleAddToWallet = async () => {
     try {
-      setIsWalletLoading(true);
+      // First check if any images are missing
+      const currentCard = userData?.cards?.[currentPage];
+      if (!currentCard) {
+        Alert.alert('Error', 'Card data not available');
+        return;
+      }
+
+      const missingImages = [];
+      if (!currentCard.profileImage) missingImages.push('Profile image');
+      if (!currentCard.companyLogo) missingImages.push('Company logo');
+
+      // If images are missing, show warning and confirmation
+      if (missingImages.length > 0) {
+        Alert.alert(
+          'Missing Images',
+          `Your wallet pass will be created without the following: ${missingImages.join(', ')}. This may reduce the visual appeal of your digital card in the wallet. Would you like to continue?`,
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel'
+            },
+            {
+              text: 'Continue anyway',
+              onPress: () => createWalletPass(true)
+            }
+          ]
+        );
+        return;
+      }
+
+      // If all images are present, check if we're in a local environment
+      const isLocalEnvironment = API_BASE_URL.match(/localhost|127\.0\.0\.1|192\.168\.|10\./);
+      if (isLocalEnvironment) {
+        Alert.alert(
+          'Development Environment',
+          'You are in a development environment. Images may not be accessible to the wallet service. Continue?',
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel'
+            },
+            {
+              text: 'Continue',
+              onPress: () => createWalletPass(false)
+            }
+          ]
+        );
+        return;
+      }
       
-      // Get userId using the shared utility function
+      // No issues detected, proceed normally
+      await createWalletPass(false);
+    } catch (error) {
+      console.error('Error preparing wallet pass:', error);
+      Alert.alert('Error', 'Failed to prepare wallet pass');
+    }
+  };
+
+  const createWalletPass = async (skipImages: boolean) => {
+    setIsWalletLoading(true);
+    try {
       const userId = await getUserId();
       if (!userId) {
         Alert.alert('Error', 'User ID not found');
         return;
       }
 
-      // Build the endpoint with userId and current card index
+      // Build the endpoint with userId, card index, and skipImages flag
       const endpoint = ENDPOINTS.ADD_TO_WALLET
         .replace(':userId', userId)
-        .replace(':cardIndex', currentPage.toString());
+        .replace(':cardIndex', currentPage.toString()) + 
+        (skipImages ? '?skipImages=true' : '');
 
       console.log('Making wallet request to:', endpoint);
 
@@ -331,13 +390,18 @@ export default function CardsScreen() {
         method: 'POST'
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText);
+        throw new Error(data.message || 'Failed to add to wallet');
       }
 
-      const data = await response.json();
       console.log('Wallet pass created:', data);
+
+      // Check if there's a warning about images
+      if (data.warning) {
+        console.log('Wallet warning:', data.warning);
+      }
 
       if (data.passPageUrl) {
         await Linking.openURL(data.passPageUrl);
@@ -347,9 +411,15 @@ export default function CardsScreen() {
 
     } catch (error) {
       console.error('Wallet error:', error);
+      
+      // Extract the error message
+      const errorMessage = error instanceof Error ? error.message : 
+        `Failed to add to ${Platform.OS === 'ios' ? 'Apple' : 'Google'} Wallet`;
+      
       Alert.alert(
-        'Error', 
-        `Failed to add to ${Platform.OS === 'ios' ? 'Apple' : 'Google'} Wallet`
+        'Wallet Pass Error', 
+        errorMessage,
+        [{ text: 'OK' }]
       );
     } finally {
       setIsWalletLoading(false);

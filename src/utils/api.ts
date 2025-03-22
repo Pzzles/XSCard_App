@@ -23,7 +23,7 @@ const getBaseUrl = () => {
   console.log('Is Development Mode:', __DEV__);
 
     if (__DEV__) {
-        return 'http://192.168.68.103:8383';
+        return 'http://192.168.25.148:8383';
     }
 
     return 'https://xscard-app.onrender.com';

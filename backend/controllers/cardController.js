@@ -434,6 +434,7 @@ exports.updateCardColor = async (req, res) => {
 
 exports.createWalletPass = async (req, res) => {
     const { userId, cardIndex = 0 } = req.params;
+    const { skipImages } = req.query;
 
     try {
         // Log configuration before making the request
@@ -464,32 +465,31 @@ exports.createWalletPass = async (req, res) => {
 
         const card = cardsData.cards[cardIndex];
         
-        // Log image URLs
-        const thumbnailUrl = card.profileImage ? `${config.PASSCREATOR_PUBLIC_URL}${card.profileImage}` : null;
-        const logoUrl = card.companyLogo ? `${config.PASSCREATOR_PUBLIC_URL}${card.companyLogo}` : null;
+        // Check if we should skip images
+        const isLocalIp = /^(localhost|127\.0\.0\.1|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/.test(config.PASSCREATOR_PUBLIC_URL);
+        const shouldSkipImages = skipImages === 'true' || isLocalIp;
         
-        console.log('Image URLs:', {
-            thumbnailUrl,
-            logoUrl
-        });
-
+        // Prepare pass data
         const passData = {
             name: `${card.name} ${card.surname}`,
             company: card.company,
             jobTitle: card.occupation,
-            urlToThumbnail: thumbnailUrl,
-            urlToLogo: logoUrl,
             barcodeValue: `${config.PASSCREATOR_PUBLIC_URL}/queries.html?userId=${userId}&cardIndex=${cardIndex}`
         };
 
-        console.log('Pass Data being sent:', passData);
+        // Add images only if we shouldn't skip them
+        if (!shouldSkipImages) {
+            if (card.profileImage) {
+                passData.urlToThumbnail = `${config.PASSCREATOR_PUBLIC_URL}${card.profileImage}`;
+            }
+            if (card.companyLogo) {
+                passData.urlToLogo = `${config.PASSCREATOR_PUBLIC_URL}${card.companyLogo}`;
+            }
+        }
 
-        // Log request details
-        const requestUrl = `${process.env.PASSCREATOR_BASE_URL}/api/pass?passtemplate=${process.env.PASSCREATOR_TEMPLATE_ID}&zapierStyle=true`;
-        console.log('Making request to:', requestUrl);
-
+        // Make a single API call with the correct data
         const response = await axios.post(
-            requestUrl,
+            `${process.env.PASSCREATOR_BASE_URL}/api/pass?passtemplate=${process.env.PASSCREATOR_TEMPLATE_ID}&zapierStyle=true`,
             passData,
             {
                 headers: {
@@ -512,7 +512,9 @@ exports.createWalletPass = async (req, res) => {
             passFileUrl: response.data.linkToPassFile,
             passPageUrl: response.data.linkToPassPage,
             identifier: response.data.identifier,
-            cardIndex: cardIndex
+            cardIndex: cardIndex,
+            imagesIncluded: !shouldSkipImages,
+            warning: shouldSkipImages ? 'Images were skipped due to local development environment or query parameter.' : null
         });
 
     } catch (error) {
@@ -522,11 +524,71 @@ exports.createWalletPass = async (req, res) => {
             config: error.config
         });
 
-        // Send a more detailed error response
+        // Check if error is due to image access issue
+        if (error.response?.data?.ErrorMessage === 'Thumbnail could not be imported from given URL') {
+            try {
+                // Try again without images
+                console.log('Retrying without images...');
+                
+                const card = (await db.collection('cards').doc(userId).get()).data().cards[cardIndex];
+                
+                const passData = {
+                    name: `${card.name} ${card.surname}`,
+                    company: card.company,
+                    jobTitle: card.occupation,
+                    barcodeValue: `${config.PASSCREATOR_PUBLIC_URL}/queries.html?userId=${userId}&cardIndex=${cardIndex}`
+                };
+                
+                const response = await axios.post(
+                    `${process.env.PASSCREATOR_BASE_URL}/api/pass?passtemplate=${process.env.PASSCREATOR_TEMPLATE_ID}&zapierStyle=true`,
+                    passData,
+                    {
+                        headers: {
+                            'Authorization': process.env.PASSCREATOR_API_KEY,
+                            'Content-Type': 'application/json'
+                        }
+                    }
+                );
+                
+                return res.status(200).send({
+                    message: 'Wallet pass created successfully without images',
+                    passUri: response.data.uri,
+                    passFileUrl: response.data.linkToPassFile,
+                    passPageUrl: response.data.linkToPassPage,
+                    identifier: response.data.identifier,
+                    cardIndex: cardIndex,
+                    imagesIncluded: false,
+                    warning: 'Images could not be accessed by the wallet service and were omitted.'
+                });
+                
+            } catch (retryError) {
+                console.error('Error retrying without images:', retryError);
+                return res.status(500).send({
+                    message: 'Failed to create wallet pass after retrying without images',
+                    error: retryError.message,
+                    details: 'Please try again later or contact support.'
+                });
+            }
+        }
+
+        // Extract specific error message if available
+        let errorMessage = 'Failed to create wallet pass';
+        let detailedError = 'No additional details available';
+        
+        if (error.response?.data) {
+            if (error.response.data.ErrorMessage) {
+                errorMessage = error.response.data.ErrorMessage;
+                detailedError = 'Please try again or contact support.';
+            } else {
+                detailedError = JSON.stringify(error.response.data);
+            }
+        }
+
+        // Send a more user-friendly error response
         res.status(500).send({
-            message: 'Failed to create wallet pass',
+            message: errorMessage,
             error: error.message,
-            details: error.response?.data || 'No additional details available'
+            details: detailedError
         });
     }
 };
