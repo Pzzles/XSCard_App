@@ -856,8 +856,8 @@ export default function Calendar() {
     try {
       setIsCreatingMeeting(true);
 
-      if (!selectedDate || !selectedTime || !selectedContact) {
-        Alert.alert('Error', 'Please select date, time and contact');
+      if (!selectedDate || !selectedTime || meetingDetails.attendees.length === 0) {
+        Alert.alert('Error', 'Please select date, time and at least one attendee');
         return;
       }
 
@@ -869,15 +869,15 @@ export default function Calendar() {
       endDateTime.setMinutes(endDateTime.getMinutes() + meetingDetails.duration);
 
       const meetingData = {
-        title: meetingDetails.title || `Meeting with ${selectedContact.name}`,
+        title: meetingDetails.title || `Meeting with ${meetingDetails.attendees[0].name}`,
         description: eventNote,
         startDateTime: startDateTime.toISOString(),
         endDateTime: endDateTime.toISOString(),
         location: meetingDetails.location || "Virtual Meeting",
         duration: meetingDetails.duration, // Explicitly pass duration in minutes
         attendees: [{
-          name: `${selectedContact.name} ${selectedContact.surname}`.trim(),
-          email: selectedContact.email
+          name: selectedContact ? `${selectedContact.name} ${selectedContact.surname}`.trim() : 'Unknown',
+          email: selectedContact?.email || 'no-email@example.com'
         }],
         organizer: {
           name: userInfo?.name ? `${userInfo.name} ${userInfo.surname}`.trim() : "XS Card User",
@@ -908,7 +908,7 @@ export default function Calendar() {
         
         // Fallback to regular meeting creation if invite fails
         const fallbackMeeting = {
-          meetingWith: `${selectedContact.name} ${selectedContact.surname}`.trim(),
+          meetingWith: selectedContact ? `${selectedContact.name} ${selectedContact.surname}`.trim() : '',
           meetingWhen: startDateTime.toISOString(),
           description: eventNote || ''
         };
