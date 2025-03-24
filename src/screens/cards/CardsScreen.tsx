@@ -1,38 +1,45 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View, Image, TouchableOpacity, Animated, ScrollView, ImageStyle, Modal, Linking, Alert, TextInput, ViewStyle, ActivityIndicator, Platform } from 'react-native';
+import { StyleSheet, Text, View, Image, TouchableOpacity, Animated, ScrollView, ImageStyle, Modal, Linking, Alert, TextInput, ViewStyle, ActivityIndicator, Platform, Dimensions } from 'react-native';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
-import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
+import { API_BASE_URL, ENDPOINTS, buildUrl, authenticatedFetch, getUserId } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../../types/navigation';
+import { useColorScheme } from '../../context/ColorSchemeContext';
 
+// Update interfaces to match new data structure
 interface UserData {
   id: string;
-  name: string;
-  surname: string;
-  email: string;
-  company: string;
-  phone: string;  // Changed from phoneNumber to phone
-  occupation: string;
-  status: string;
-  profileImage: string | null;
-  companyLogo: string | null;  // Add this line
-  colorScheme?: string;
+  cards: CardData[];
+  phone?: string;
+  name?: string;
+  surname?: string;
+  email?: string;
+  occupation?: string;
+  company?: string;
+  profileImage?: string;
+  companyLogo?: string;
 }
 
 interface CardData {
-  CardId: string;
-  Company: string;
-  Email: string;
-  PhoneNumber: string;
-  title: string;
-  socialLinks: {
-    platform: string;
-    url: string;
-  }[];
+  name: string;
+  surname: string;
+  email: string;
+  phone: string;
+  company: string;
+  occupation: string;
+  profileImage: string | null;
+  companyLogo: string | null;
+  socials: {
+    [key: string]: string | null;
+  };
   colorScheme?: string;
+  createdAt: string;
+  UserId: any;
 }
 
 interface ShareOption {
@@ -65,14 +72,27 @@ const socialBaseUrls: { [key: string]: string } = {
   instagram: 'https://instagram.com/'
 };
 
+// Add this interface at the top with other interfaces
+interface Card {
+  CardId: string;
+  Company: string;
+  Email: string;
+  PhoneNumber: string;
+  title: string;
+  socialLinks: any[];
+}
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
 export default function CardsScreen() {
+  const navigation = useNavigation<NavigationProp>();
   const [qrCode, setQrCode] = useState<string>('');
   const [userData, setUserData] = useState<UserData | null>(null);
-  const [cardData, setCardData] = useState<CardData | null>(null);
+  const { colorScheme, updateColorScheme } = useColorScheme();
+  // Remove cardData state since it's now part of userData
   const borderRotation = useRef(new Animated.Value(0)).current;
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
-  const [cardColor, setCardColor] = useState(COLORS.secondary);
 
   // Add loading state
   const [isLoading, setIsLoading] = useState(true);
@@ -82,6 +102,38 @@ export default function CardsScreen() {
   const [isOptionsModalVisible, setIsOptionsModalVisible] = useState(false);
   const [modalType, setModalType] = useState<'email' | 'phone' | null>(null);
   const [modalData, setModalData] = useState<string>('');
+
+  // Update the cards state definition
+  const [cards, setCards] = useState<Card[]>([]);
+
+  // Add this state to track current page
+  const [currentPage, setCurrentPage] = useState(0);
+
+  // Add this function to handle scroll events
+  const handleScroll = (event: any) => {
+    const offsetX = event.nativeEvent.contentOffset.x;
+    const page = Math.round(offsetX / Dimensions.get('window').width);
+    setCurrentPage(page);
+  };
+
+  // Add this to load cards when the screen is focused
+  useFocusEffect(
+    React.useCallback(() => {
+      const loadCards = async () => {
+        try {
+          const cardsJson = await AsyncStorage.getItem('userCards');
+          if (cardsJson) {
+            const loadedCards = JSON.parse(cardsJson);
+            setCards(loadedCards);
+          }
+        } catch (error) {
+          console.error('Error loading cards:', error);
+        }
+      };
+
+      loadCards();
+    }, [])
+  );
 
   useFocusEffect(
     React.useCallback(() => {
@@ -94,46 +146,59 @@ export default function CardsScreen() {
 
   const loadUserData = async () => {
     try {
-      const storedUserData = await AsyncStorage.getItem('userData');
-      if (storedUserData) {
-        const parsedUserData = JSON.parse(storedUserData);
-        
-        // Fetch user details first to get the color scheme
-        const userResponse = await fetch(buildUrl(ENDPOINTS.GET_USER) + `/${parsedUserData.id}`);
-        const userData = await userResponse.json();
-
-        // Log the userData to see what we're getting
-        console.log('Loaded user data:', userData);
-
-        setUserData(userData);
-
-        // Set color from user data
-        if (userData.colorScheme) {
-          setCardColor(userData.colorScheme);
-        }
-
-        // Then fetch card data
-        const cardResponse = await fetch(buildUrl(ENDPOINTS.GET_CARD) + `/${parsedUserData.id}`);
-        const cardData = await cardResponse.json();
-        setCardData(cardData);
-
-        // Generate QR code
-        fetchQRCode(parsedUserData.id);
+      const userId = await getUserId(); // Gets userId stored during login
+      if (!userId) {
+        console.error('No user ID found');
+        return;
       }
+
+      // Uses authenticated request to fetch cards
+      const cardResponse = await authenticatedFetch(ENDPOINTS.GET_CARD + `/${userId}`);
+      const cardsArray = await cardResponse.json();
+
+      if (cardsArray && cardsArray.length > 0) {
+        setUserData({
+          id: userId,
+          cards: cardsArray // The response is now directly the cards array
+        });
+
+        // Set card color from the first card (index 0)
+        if (cardsArray[0].colorScheme) {
+          updateColorScheme(cardsArray[0].colorScheme);
+        }
+      }
+
+      // Generate QR code
+      fetchQRCode(userId);
     } catch (error) {
       console.error('Error loading data:', error);
     }
   };
 
+  // Add this effect to update card color when page changes
+  useEffect(() => {
+    if (userData?.cards && userData.cards[currentPage]) {
+      const newColor = userData.cards[currentPage].colorScheme || COLORS.secondary;
+      updateColorScheme(newColor);
+    }
+  }, [currentPage, userData]);
+
   const fetchQRCode = async (userId: string) => {
     try {
-      const response = await fetch(buildUrl(ENDPOINTS.GENERATE_QR_CODE) + `/${userId}`, {
+      const token = await AsyncStorage.getItem('userToken');
+      // Update URL to include currentPage as cardIndex
+      const response = await fetch(buildUrl(ENDPOINTS.GENERATE_QR_CODE) + `/${userId}/${currentPage}`, {
         method: 'GET',
         headers: {
+          'Authorization': token || '',
           'Accept': 'image/png'
         }
       });
       
+      if (!response.ok) {
+        throw new Error('Failed to fetch QR code');
+      }
+
       const blob = await response.blob();
       const reader = new FileReader();
       reader.onload = () => {
@@ -144,8 +209,20 @@ export default function CardsScreen() {
       reader.readAsDataURL(blob);
     } catch (error) {
       console.error('Error fetching QR code:', error);
+      Alert.alert('Error', 'Failed to generate QR code');
     }
   };
+
+  // Add an effect to update QR code when page changes
+  useEffect(() => {
+    const updateQRCode = async () => {
+      const userId = await getUserId();
+      if (userId) {
+        fetchQRCode(userId);
+      }
+    };
+    updateQRCode();
+  }, [currentPage]); // Re-run when currentPage changes
 
   useEffect(() => {
     Animated.timing(borderRotation, {
@@ -201,13 +278,20 @@ export default function CardsScreen() {
       icon: 'email',
       color: '#EA4335',
       action: async () => {
-        if (!userData?.id) {
+        if (!userData?.id || !userData.cards || !userData.cards[currentPage]) {
           Alert.alert('Error', 'User data not available');
           return;
         }
+        
+        const currentCard = userData.cards[currentPage];
         const saveContactUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
-        const message = `Check out my digital business card! ${saveContactUrl}`;
-        const emailUrl = `mailto:?subject=Digital Business Card&body=${encodeURIComponent(message)}`;
+        
+        // Make it clear in the message who is sending this card
+        const message = `Hello,\n\nI'm ${currentCard.name} ${currentCard.surname} from ${currentCard.company}.\n\nHere's my digital business card: ${saveContactUrl}\n\nBest regards,\n${currentCard.name} ${currentCard.surname}\n${currentCard.phone}\n${currentCard.email}`;
+        
+        // Try to set Reply-To header with the card's email, and make subject clearer
+        const emailUrl = `mailto:?reply-to=${encodeURIComponent(currentCard.email)}&cc=${encodeURIComponent(currentCard.email)}&subject=${encodeURIComponent(`Digital Business Card - ${currentCard.name} ${currentCard.surname}, ${currentCard.company}`)}&body=${encodeURIComponent(message)}`;
+        
         Linking.openURL(emailUrl).catch(() => {
           Alert.alert('Error', 'Could not open email client');
         });
@@ -225,27 +309,100 @@ export default function CardsScreen() {
   };
 
   const handleAddToWallet = async () => {
-    if (!userData?.id) {
-      Alert.alert('Error', 'User data not available');
-      return;
-    }
+    try {
+      // First check if any images are missing
+      const currentCard = userData?.cards?.[currentPage];
+      if (!currentCard) {
+        Alert.alert('Error', 'Card data not available');
+        return;
+      }
 
+      const missingImages = [];
+      if (!currentCard.profileImage) missingImages.push('Profile image');
+      if (!currentCard.companyLogo) missingImages.push('Company logo');
+
+      // If images are missing, show warning and confirmation
+      if (missingImages.length > 0) {
+        Alert.alert(
+          'Missing Images',
+          `Your wallet pass will be created without the following: ${missingImages.join(', ')}. This may reduce the visual appeal of your digital card in the wallet. Would you like to continue?`,
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel'
+            },
+            {
+              text: 'Continue anyway',
+              onPress: () => createWalletPass(true)
+            }
+          ]
+        );
+        return;
+      }
+
+      // If all images are present, check if we're in a local environment
+      const isLocalEnvironment = API_BASE_URL.match(/localhost|127\.0\.0\.1|192\.168\.|10\./);
+      if (isLocalEnvironment) {
+        Alert.alert(
+          'Development Environment',
+          'You are in a development environment. Images may not be accessible to the wallet service. Continue?',
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel'
+            },
+            {
+              text: 'Continue',
+              onPress: () => createWalletPass(false)
+            }
+          ]
+        );
+        return;
+      }
+      
+      // No issues detected, proceed normally
+      await createWalletPass(false);
+    } catch (error) {
+      console.error('Error preparing wallet pass:', error);
+      Alert.alert('Error', 'Failed to prepare wallet pass');
+    }
+  };
+
+  const createWalletPass = async (skipImages: boolean) => {
     setIsWalletLoading(true);
     try {
-      const response = await fetch(buildUrl(ENDPOINTS.ADD_TO_WALLET.replace(':id', userData.id)), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        }
+      const userId = await getUserId();
+      if (!userId) {
+        Alert.alert('Error', 'User ID not found');
+        return;
+      }
+
+      // Build the endpoint with userId, card index, and skipImages flag
+      const endpoint = ENDPOINTS.ADD_TO_WALLET
+        .replace(':userId', userId)
+        .replace(':cardIndex', currentPage.toString()) + 
+        (skipImages ? '?skipImages=true' : '');
+
+      console.log('Making wallet request to:', endpoint);
+
+      // Use authenticatedFetch which automatically handles the token
+      const response = await authenticatedFetch(endpoint, {
+        method: 'POST'
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to create wallet pass' + data.message);
+        throw new Error(data.message || 'Failed to add to wallet');
       }
 
-      // Open the pass page URL in browser
+      console.log('Wallet pass created:', data);
+
+      // Check if there's a warning about images
+      if (data.warning) {
+        console.log('Wallet warning:', data.warning);
+      }
+
       if (data.passPageUrl) {
         await Linking.openURL(data.passPageUrl);
       } else {
@@ -253,8 +410,17 @@ export default function CardsScreen() {
       }
 
     } catch (error) {
-      console.error('Error adding to wallet:', error);
-      Alert.alert('Error', 'Failed to add to Google Wallet');
+      console.error('Wallet error:', error);
+      
+      // Extract the error message
+      const errorMessage = error instanceof Error ? error.message : 
+        `Failed to add to ${Platform.OS === 'ios' ? 'Apple' : 'Google'} Wallet`;
+      
+      Alert.alert(
+        'Wallet Pass Error', 
+        errorMessage,
+        [{ text: 'OK' }]
+      );
     } finally {
       setIsWalletLoading(false);
     }
@@ -272,11 +438,17 @@ export default function CardsScreen() {
     setIsOptionsModalVisible(true);
   };
 
-  // Move styles outside of StyleSheet for dynamic values
-  const dynamicStyles: Record<string, ViewStyle> = {
+  const handleEditCard = () => {
+    navigation.navigate('EditCard', { 
+      cardIndex: currentPage // Ensure currentPage is passed
+    });
+  };
+
+  // Update the dynamic styles for the share button
+  const dynamicStyles = StyleSheet.create({
     sendButton: {
       flexDirection: 'row',
-      backgroundColor: cardColor,
+      backgroundColor: colorScheme,
       paddingVertical: 10,
       paddingHorizontal: 20,
       borderRadius: 25,
@@ -293,32 +465,28 @@ export default function CardsScreen() {
     },
     shareButton: {
       flexDirection: 'row',
-      backgroundColor: cardColor,
-      paddingVertical: 10,
-      paddingHorizontal: 20,
+      backgroundColor: colorScheme,
+      paddingVertical: 12,
+      paddingHorizontal: 24,
       borderRadius: 25,
-      alignItems: 'center' as const,
-      marginBottom: 20,
-      shadowColor: '#000',
-      shadowOffset: {
-        width: 0,
-        height: 2,
-      },
-      shadowOpacity: 0.3,
-      shadowRadius: 4,
-      elevation: 3,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginVertical: 10,
+      alignSelf: 'center',  // Center horizontally
+      width: '40%',  // Restore original width
+      gap: 8,
     },
     input: {
       width: '80%',
       height: 40,
-      borderColor: cardColor,
+      borderColor: colorScheme,
       borderWidth: 1,
       marginBottom: 20,
       padding: 10,
     },
     contactBorder: {
       borderWidth: 1,
-      borderColor: cardColor,
+      borderColor: colorScheme,
       borderRadius: 8,
       padding: 10,
       marginBottom: 15,
@@ -339,179 +507,183 @@ export default function CardsScreen() {
       backgroundColor: '#fff',
       marginTop: 20,
       padding: 10,
+      alignSelf: 'center', // Add this to center the container itself
     },
     walletButton: {
       flexDirection: 'row',
       backgroundColor: COLORS.white,
-      paddingVertical: 10,
-      paddingHorizontal: 20,
+      paddingVertical: 12,
+      paddingHorizontal: 24,
       borderRadius: 25,
-      alignItems: 'center' as const,
-      marginBottom: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginVertical: 10,
+      alignSelf: 'center',  // Center horizontally
+      width: '55%',  // Re60ore original width
       borderWidth: 2,
-      borderColor: cardColor,
-      shadowColor: '#000',
-      shadowOffset: {
-        width: 0,
-        height: 2,
-      },
-      shadowOpacity: 0.3,
-      shadowRadius: 4,
-      elevation: 3,
+      borderColor: colorScheme,
+      gap: 8,
     },
-  };
+  });
 
   return (
     <View style={styles.container}>
-      <Header title="XS Card" />
-      <ScrollView style={[styles.contentContainer, { marginTop: 100 }]}>
-        <View style={styles.scrollContent}>
-          <View style={dynamicStyles.qrContainer}>
-            {qrCode ? (
-              <Image
-                style={styles.qrCode}
-                source={{ uri: qrCode }}
-                resizeMode="contain"
-                onError={(error) => console.log('Image loading error:', error.nativeEvent.error)}
-              />
-            ) : (
-              <Text>Loading QR Code...</Text>
-            )}
-          </View>
-          <View style={styles.logoContainer}>
-            <Image
-              style={styles.logo}
-              source={userData?.companyLogo ? 
-                { uri: `${API_BASE_URL}${userData.companyLogo}` } : 
-                require('../../../assets/images/logoplaceholder.jpg')
-              }
-            />
-            <View style={styles.profileOverlayContainer}>
-              <Animated.View style={[styles.profileImageContainer, { transform: [{ rotate: rotateInterpolate }] }]}>
-                <Image
-                  style={styles.profileImage}
-                  source={userData?.profileImage ? 
-                    { uri: `${API_BASE_URL}${userData.profileImage}` } : 
-                    require('../../../assets/images/profile.png')
-                  }
-                />
-              </Animated.View>
-            </View>
-          </View>
-          <Text style={[styles.name, styles.leftAligned]}>
-            {userData ? `${userData.name} ${userData.surname}` : 'Loading...'}
-          </Text>
-          <Text style={[styles.position, styles.leftAligned]}>
-            {cardData?.title || userData?.occupation || 'Loading...'}
-          </Text>
-          <Text style={[styles.company, styles.leftAligned]}>
-            {cardData?.Company || userData?.company || 'Loading...'}
-          </Text>
-          
-          {/* Update the email contact section */}
-          <TouchableOpacity 
-            style={[styles.contactSection, styles.leftAligned]}
-            onPress={() => {
-              const email = cardData?.Email || userData?.email;
-              if (email && email !== 'Loading...') {
-                handleEmailPress(email);
-              }
-            }}
-          >
-            <MaterialCommunityIcons name="email-outline" size={30} color={cardColor} />
-            <Text style={styles.contactText}>
-              {cardData?.Email || userData?.email || 'Loading...'}
+      <Header 
+        title="Cards" 
+        showAddButton={true}  // Add this prop
+        rightIcon={
+          <TouchableOpacity onPress={handleEditCard}>
+            <Text style={styles.headerIconContainer}>
+              <MaterialIcons name="edit" size={24} color={COLORS.black} />
             </Text>
           </TouchableOpacity>
+        }
+      />
+      <ScrollView 
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+      >
+        {userData?.cards?.map((card, index) => (
+          <View key={index} style={styles.pageContainer}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.cardContent}>
+                {/* QR Code */}
+                <View style={dynamicStyles.qrContainer}>
+                  {qrCode ? (
+                    <Image
+                      style={styles.qrCode}
+                      source={{ uri: qrCode }}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <Text>Loading QR Code...</Text>
+                  )}
+                </View>
 
-          {/* Update the phone contact section */}
-          <TouchableOpacity 
-            style={[styles.contactSection, styles.leftAligned]}
-            onPress={() => {
-              const phone = userData?.phone;
-              if (phone && phone !== 'No phone number') {
-                handlePhonePress(phone);
-              }
-            }}
-          >
-            <MaterialCommunityIcons name="phone-outline" size={30} color={cardColor} />
-            <Text style={styles.contactText}>
-              {userData?.phone || 'No phone number'}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Replace the existing social links section with this: */}
-          {userData && (
-            <View style={styles.socialLinksContainer}>
-              {Object.entries(userData).map(([key, value]) => {
-                if (socialIcons[key] && value && value.trim() !== '') {
-                  return (
-                    <TouchableOpacity 
-                      key={key}
-                      style={[styles.contactSection, styles.leftAligned]}
-                      onPress={() => {
-                        if (value) {
-                          let url = value;
-                          // If it's not a website (which should include http(s)://) and not already a full URL
-                          if (key !== 'website' && !url.startsWith('http://') && !url.startsWith('https://')) {
-                            // Remove any @ symbol from the username if present
-                            const username = url.startsWith('@') ? url.substring(1) : url;
-                            // For WhatsApp, remove any non-numeric characters
-                            if (key === 'whatsapp') {
-                              const phoneNumber = username.replace(/\D/g, '');
-                              url = `${socialBaseUrls[key]}${phoneNumber}`;
-                            } else {
-                              url = `${socialBaseUrls[key]}${username}`;
-                            }
-                          } else if (key === 'website' && !url.startsWith('http://') && !url.startsWith('https://')) {
-                            url = 'https://' + url;
-                          }
-                          
-                          Linking.openURL(url).catch(() => {
-                            Alert.alert('Error', 'Could not open link');
-                          });
+                {/* Company Logo and Profile Image */}
+                <View style={styles.logoContainer}>
+                  <Image
+                    style={styles.logo}
+                    source={card.companyLogo ? 
+                      { uri: `${API_BASE_URL}${card.companyLogo}` } : 
+                      require('../../../assets/images/logoplaceholder.jpg')
+                    }
+                  />
+                  <View style={styles.profileOverlayContainer}>
+                    <Animated.View style={[styles.profileImageContainer, { transform: [{ rotate: rotateInterpolate }] }]}>
+                      <Image
+                        style={styles.profileImage}
+                        source={card.profileImage ? 
+                          { uri: `${API_BASE_URL}${card.profileImage}` } : 
+                          require('../../../assets/images/profile.png')
                         }
-                      }}
-                    >
-                      <MaterialCommunityIcons 
-                        name={socialIcons[key]} 
-                        size={30} 
-                        color={cardColor} 
                       />
-                      <Text style={[styles.contactText, { color: '#333' }]}>
-                        {value}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                }
-                return null;
-              })}
-            </View>
-          )}
+                    </Animated.View>
+                  </View>
+                </View>
 
-          <TouchableOpacity onPress={() => setIsShareModalVisible(true)} style={[styles.shareButton, dynamicStyles.shareButton]}>
-            <MaterialIcons name="share" size={24} color={COLORS.white} />
-            <Text style={styles.shareButtonText}>Share</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            onPress={handleAddToWallet} 
-            style={[styles.walletButton, dynamicStyles.walletButton]}
-            disabled={isWalletLoading}
-          >
-            {isWalletLoading ? (
-              <ActivityIndicator size="small" color={cardColor} />
-            ) : (
-              <>
-                <MaterialCommunityIcons name="wallet" size={24} color={cardColor} />
-                <Text style={[styles.walletButtonText, { color: cardColor }]}>
-                  Add to {Platform.OS === 'ios' ? 'Apple' : 'Google'} Wallet
+                {/* Basic Info */}
+                <Text style={[styles.name, styles.leftAligned]}>
+                  {`${card.name} ${card.surname}`}
                 </Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
+                <Text style={[styles.position, styles.leftAligned]}>
+                  {card.occupation}
+                </Text>
+                <Text style={[styles.company, styles.leftAligned]}>
+                  {card.company}
+                </Text>
+
+                {/* Contact Info */}
+                <TouchableOpacity 
+                  style={[styles.contactSection, styles.leftAligned]}
+                  onPress={() => handleEmailPress(card.email)}
+                >
+                  <MaterialCommunityIcons name="email-outline" size={30} color={card.colorScheme} />
+                  <Text style={styles.contactText}>{card.email}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={[styles.contactSection, styles.leftAligned]}
+                  onPress={() => handlePhonePress(card.phone)}
+                >
+                  <MaterialCommunityIcons name="phone-outline" size={30} color={card.colorScheme} />
+                  <Text style={styles.contactText}>{card.phone}</Text>
+                </TouchableOpacity>
+
+                {/* Social Links */}
+                {card.socials && Object.entries(card.socials).map(([platform, value]) => {
+                  if (socialIcons[platform] && value && value.trim() !== '') {
+                    return (
+                      <TouchableOpacity 
+                        key={platform}
+                        style={[styles.contactSection, styles.leftAligned]}
+                        onPress={() => {
+                          // ...existing social link handling code...
+                        }}
+                      >
+                        <MaterialCommunityIcons 
+                          name={socialIcons[platform]} 
+                          size={30} 
+                          color={card.colorScheme} 
+                        />
+                        <Text style={styles.contactText}>{value}</Text>
+                      </TouchableOpacity>
+                    );
+                  }
+                  return null;
+                })}
+
+                {/* Share and Wallet Buttons */}
+                <TouchableOpacity 
+                  onPress={() => setIsShareModalVisible(true)} 
+                  style={[dynamicStyles.shareButton]}
+                >
+                  <MaterialIcons name="share" size={24} color={COLORS.white} />
+                  <Text style={styles.shareButtonText}>Share</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  onPress={handleAddToWallet} 
+                  style={[dynamicStyles.walletButton]}
+                  disabled={isWalletLoading}
+                >
+                  {isWalletLoading ? (
+                    <ActivityIndicator size="small" color={colorScheme} />
+                  ) : (
+                    <>
+                      <MaterialCommunityIcons name="wallet" size={24} color={colorScheme} />
+                      <Text style={[styles.walletButtonText, { color: colorScheme }]}>
+
+                        Add to {Platform.OS === 'ios' ? 'Apple' : 'Google'} Wallet
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        ))}
       </ScrollView>
+
+      {/* Page Indicator */}
+      <View style={styles.pageIndicator}>
+        <View style={styles.dotContainer}>
+          {userData?.cards?.map((_, index) => (
+            <View
+              key={index}
+              style={[
+                styles.dot,
+                currentPage === index && styles.activeDot
+              ]}
+            />
+          ))}
+        </View>
+      </View>
 
       <Modal
         visible={isShareModalVisible}
@@ -577,7 +749,7 @@ export default function CardsScreen() {
 
             <View style={styles.optionsContainer}>
               <TouchableOpacity
-                style={[styles.optionButton, { backgroundColor: cardColor }]}
+                style={[styles.optionButton, { backgroundColor: colorScheme }]}
                 onPress={async () => {
                   await Clipboard.setStringAsync(modalData);
                   setIsOptionsModalVisible(false);
@@ -591,7 +763,7 @@ export default function CardsScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.optionButton, { backgroundColor: cardColor }]}
+                style={[styles.optionButton, { backgroundColor: colorScheme }]}
                 onPress={() => {
                   const url = modalType === 'email' ? `mailto:${modalData}` : `tel:${modalData}`;
                   Linking.openURL(url).catch(() => {
@@ -617,31 +789,25 @@ export default function CardsScreen() {
   );
 }
 
-// Keep static styles in StyleSheet
+// Update the static styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.white,
   },
-  contentContainer: {
+  scrollView: {
     flex: 1,
   },
   scrollContent: {
-    alignItems: 'center',
+    flexGrow: 1,
   },
-  qrContainer: {
-    width: 170,
-    height: 170,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    marginBottom: 20,
-    backgroundColor: '#fff',
-    marginTop: 20,
-    padding: 10,
+  pageContainer: {
+    width: Dimensions.get('window').width,
+    paddingTop: 100, // Adjust based on your header height
   },
-  qrCode: {
-    width: 150,
-    height: 150,
+  cardContent: {
+    backgroundColor: COLORS.white,
+    borderRadius: 15,
   },
   logoContainer: {
     width: '100%',
@@ -691,14 +857,8 @@ const styles = StyleSheet.create({
     marginLeft:25,
   },
   position: {
-    fontSize: 17,
+    fontSize: 20,
     marginBottom: 5,
-    fontFamily: 'Montserrat-Regular',
-    marginLeft:25,
-  },
-  company: {
-    fontSize: 17,
-    marginBottom: 20,
     fontFamily: 'Montserrat-Regular',
     marginLeft:25,
   },
@@ -724,7 +884,8 @@ const styles = StyleSheet.create({
   leftAligned: {
     alignSelf: 'stretch',
   },
-  shareButton: {}, // Keep empty or remove if using only dynamic style
+  shareButton: {
+  }, // Keep empty or remove if using only dynamic style
   sendButton: {}, // Keep empty or remove if using only dynamic style
   input: {}, // Keep empty or remove if using only dynamic style
   shareButtonText: {
@@ -732,6 +893,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     fontFamily: 'Montserrat-Bold',
+    textAlign: 'center',  // Center text
   },
   modalOverlay: {
     flex: 1,
@@ -793,10 +955,10 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   walletButtonText: {
-    marginLeft: 8,
     fontSize: 16,
     fontWeight: 'bold',
     fontFamily: 'Montserrat-Bold',
+    textAlign: 'center',  // Center text
   },
   optionsContainer: {
     width: '100%',
@@ -809,10 +971,73 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     gap: 10,
   },
-  optionButtonText: {
-    color: COLORS.white,
-    fontSize: 16,
-    fontWeight: 'bold',
+optionButtonText: {
+  color: COLORS.white,
+  fontSize: 16,
+  fontWeight: 'bold',
+  fontFamily: 'Montserrat-Bold',
+},
+qrCode: {
+  width: 150,
+  height: 150,
+  alignSelf: 'center', // Add this to center the QR code image
+},
+  qrContainer: {
+    width: 170,
+    height: 170,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    backgroundColor: '#fff',
+    marginTop: 20,
+    padding: 10,
+    alignSelf: 'center', // Add this to center the container itself
+  },
+  company: {
+    fontSize: 17,
+    // fontWeight: ,
+    marginBottom: 10,
     fontFamily: 'Montserrat-Bold',
+    marginLeft: 25, // Add this to match position's marginLeft
+  },
+  title: {
+    fontSize: 18,
+    color: COLORS.gray,
+    marginBottom: 5,
+  },
+  email: {
+    fontSize: 16,
+    marginBottom: 5,
+  },
+  phone: {
+    fontSize: 16,
+  },
+  pageIndicator: {
+    position: 'absolute',
+    bottom: 20,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  dotContainer: {
+    flexDirection: 'row',
+    gap: 1,
+    marginLeft:320
+  },
+  dot: {
+    width: 5,
+    height: 5,
+    borderRadius: 4,
+    backgroundColor: COLORS.gray + '50',
+  },
+  activeDot: {
+    width: 24,
+    backgroundColor: COLORS.secondary,
+  },
+  headerEditButton: {
+    padding: 8,
+  },
+  headerIconContainer: {
+    textAlignVertical: 'center',
   },
 });

@@ -1,26 +1,33 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, TextInput, Alert, Modal, Linking } from 'react-native';
+import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, TextInput, Alert, Modal, Linking, RefreshControl, ActivityIndicator } from 'react-native';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
-import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
+import { API_BASE_URL, ENDPOINTS, buildUrl, authenticatedFetch, getUserId } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../../types/navigation';
 import { Swipeable } from 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useColorScheme } from '../../context/ColorSchemeContext';
 
+// Define constant for free plan contact limit
+const FREE_PLAN_CONTACT_LIMIT = 3;
+
+// Update interfaces to match Firestore structure
 interface Contact {
   name: string;
   surname: string;
-  number: string;
-  howWeMet: string; // Add howWeMet field
-  createdAt: string;
+  phone: string; // Changed from number to phone to match DB
+  email?: string; // Add email field as optional
+  howWeMet: string;
+  createdAt: string; // Will now be in format "Date: February 25, 2025 at 6:25 PM"
 }
 
 interface ContactData {
   id: string;
-  userId: string;
-  contactsList: Contact[];
+  contactList: Contact[];  // Changed from contactsList to contactList to match DB
 }
 
 interface ShareOption {
@@ -37,19 +44,27 @@ interface UserData {
 }
 
 export default function ContactsScreen() {
+  // Add navigation prop
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactDocId, setContactDocId] = useState<string>('');
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [cardColor, setCardColor] = useState(COLORS.secondary);
   const [isOptionsModalVisible, setIsOptionsModalVisible] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
   const [modalTitle, setModalTitle] = useState('');
   const [confirmModalVisible, setConfirmModalVisible] = useState(false);
   const [contactToDelete, setContactToDelete] = useState<number | null>(null);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [remainingContacts, setRemainingContacts] = useState<number | 'unlimited'>(FREE_PLAN_CONTACT_LIMIT);
+  const [refreshing, setRefreshing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const { colorScheme } = useColorScheme();
 
   useFocusEffect(
     React.useCallback(() => {
@@ -58,95 +73,89 @@ export default function ContactsScreen() {
   );
 
   const loadContacts = async () => {
+    setIsLoading(true); // Set loading to true before fetching
     try {
-      const storedUserData = await AsyncStorage.getItem('userData');
-      if (storedUserData) {
-        const parsedUserData = JSON.parse(storedUserData);
-        
-        // Fetch user details to get the color scheme
-        const response = await fetch(buildUrl(ENDPOINTS.GET_USER) + `/${parsedUserData.id}`);
-        const userData: UserData = await response.json();
-        
-        // Set color from user data
-        if (userData.colorScheme) {
-          setCardColor(userData.colorScheme);
-        }
+      const userId = await getUserId();
+      if (!userId) {
+        console.error('No user ID found');
+        return;
+      }
 
-        // Continue with existing contacts loading logic
-        const contactResponse = await fetch(buildUrl(ENDPOINTS.GET_CONTACTS) + `/${parsedUserData.id}`);
-        const contactData: ContactData = await contactResponse.json();
-        if (contactData) {
-          setContacts(contactData.contactsList || []);
-          setContactDocId(contactData.id); // Store the contact document ID
+      const contactResponse = await authenticatedFetch(ENDPOINTS.GET_CONTACTS + `/${userId}`);
+      const data = await contactResponse.json();
+
+      // Get user data to check plan
+      const userResponse = await authenticatedFetch(ENDPOINTS.GET_USER + `/${userId}`);
+      const userData = await userResponse.json();
+      
+      if (data && Array.isArray(data.contactList)) {
+        setContacts(data.contactList);
+        setContactDocId(userId);
+        // Set remaining contacts based on plan
+        if (userData.plan === 'free') {
+          const remaining = Math.max(0, FREE_PLAN_CONTACT_LIMIT - data.contactList.length);
+          setRemainingContacts(remaining);
+          
+          // Show limit modal if no contacts remaining
+          if (remaining === 0) {
+            setShowLimitModal(true);
+          }
+        } else {
+          setRemainingContacts('unlimited');
         }
       }
     } catch (error) {
       console.error('Error loading contacts:', error);
       showModal('Error', 'Failed to load contacts');
+    } finally {
+      setIsLoading(false); // Set loading to false after fetching (success or error)
     }
   };
 
   const deleteContact = async (index: number) => {
     try {
-      if (!contactDocId) {
-        throw new Error('Contact document ID not found');
+      const userId = await getUserId();
+      if (!userId) {
+        throw new Error('User ID not found');
       }
 
-      const response = await fetch(`${API_BASE_URL}/Contacts/${contactDocId}/contact/${index}`, {
-        method: 'DELETE',
-      });
+      console.log('Attempting to delete contact:', { userId, index });
+
+      const response = await authenticatedFetch(
+        `${ENDPOINTS.DELETE_CONTACT}/${userId}/contact/${index}`,
+        { 
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      const responseData = await response.json();
+      console.log('Delete response:', responseData);
 
       if (!response.ok) {
-        throw new Error('Failed to delete contact');
+        throw new Error(responseData.message || 'Failed to delete contact');
       }
 
-      // Refresh contacts list after successful deletion
-      loadContacts();
-      showModal('Success', 'Contact deleted successfully');
+      // Update local state correctly - Important change here
+      const updatedContacts = [...contacts];
+      updatedContacts.splice(index, 1);
+      setContacts(updatedContacts);
+      
+      // Also update remaining contacts count after successful deletion
+      if (typeof remainingContacts === 'number') {
+        setRemainingContacts(remainingContacts + 1);
+      }
+      
+      showModal('Success', responseData.message || 'Contact deleted successfully');
+      
+      // After successful deletion, refresh the contacts list to get updated indices
+      await loadContacts();
+      
     } catch (error) {
       console.error('Error deleting contact:', error);
-      showModal('Error', 'Failed to delete contact');
-    }
-  };
-
-  const formatDate = (dateString: any) => {
-    try {
-      let date;
-      
-      // Handle Firestore timestamp
-      if (dateString && dateString._seconds) {
-        // Convert Firestore timestamp to Date
-        date = new Date(dateString._seconds * 1000);
-      } else if (typeof dateString === 'string') {
-        // Handle ISO string
-        date = new Date(dateString);
-      } else if (dateString instanceof Date) {
-        date = dateString;
-      } else {
-        console.error('Unsupported date format:', dateString);
-        return 'Recently';
-      }
-  
-      // Check if the date is valid
-      if (!date || isNaN(date.getTime())) {
-        console.error('Invalid date value:', dateString);
-        return 'Recently';
-      }
-  
-      // Format the date
-      const options: Intl.DateTimeFormatOptions = {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      };
-  
-      return new Intl.DateTimeFormat('en-US', options).format(date);
-    } catch (error) {
-      console.error('Error formatting date:', error, dateString);
-      return 'Recently';
+      showModal('Error', error instanceof Error ? error.message : 'Failed to delete contact');
     }
   };
 
@@ -167,7 +176,7 @@ export default function ContactsScreen() {
         const userData = JSON.parse(storedUserData);
         const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
         const message = contact 
-          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.number}\nMet at: ${contact.howWeMet}`
+          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.phone}${contact.email ? `\nEmail: ${contact.email}` : ''}\nMet at: ${contact.howWeMet}`
           : `Check out my digital business card! ${shareUrl}`;
           
         Linking.openURL(`whatsapp://send?text=${encodeURIComponent(message)}`).catch(() => {
@@ -187,7 +196,7 @@ export default function ContactsScreen() {
         const userData = JSON.parse(storedUserData);
         const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
         const message = contact 
-          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.number}\nMet at: ${contact.howWeMet}`
+          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.phone}${contact.email ? `\nEmail: ${contact.email}` : ''}\nMet at: ${contact.howWeMet}`
           : `Check out my business card: ${shareUrl}`;
 
         Linking.openURL(`tg://msg?text=${encodeURIComponent(message)}`).catch(() => {
@@ -201,25 +210,49 @@ export default function ContactsScreen() {
       icon: 'email',
       color: '#EA4335',
       action: async (contact?: Contact) => {
-        const storedUserData = await AsyncStorage.getItem('userData');
-        if (!storedUserData) return;
-        
-        const userData = JSON.parse(storedUserData);
-        const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
-        const message = contact 
-          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.number}\nMet at: ${contact.howWeMet}`
-          : `Check out my business card: ${shareUrl}`;
-
-        const emailUrl = `mailto:?subject=Business Card&body=${encodeURIComponent(message)}`;
-        Linking.openURL(emailUrl).catch(() => {
-          showModal('Error', 'Could not open email client');
-        });
+        try {
+          const storedUserData = await AsyncStorage.getItem('userData');
+          if (!storedUserData) {
+            showModal('Error', 'User data not available');
+            return;
+          }
+          
+          const userData = JSON.parse(storedUserData);
+          let emailUrl = '';
+          
+          if (contact) {
+            // Case: Sharing a contact's information
+            const formattedMessage = `Hello,\n\nI wanted to share this contact information with you:\n\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.phone}${contact.email ? `\nEmail: ${contact.email}` : ''}\nMet at: ${contact.howWeMet}\n\nBest regards,\n${userData.name || ''} ${userData.surname || ''}${userData.email ? `\n${userData.email}` : ''}`;
+            
+            emailUrl = `mailto:?${userData.email ? `reply-to=${encodeURIComponent(userData.email)}&cc=${encodeURIComponent(userData.email)}&` : ''}subject=${encodeURIComponent(`Contact Information - ${contact.name} ${contact.surname}`)}&body=${encodeURIComponent(formattedMessage)}`;
+          } else {
+            // Case: Sharing user's own business card (similar to CardsScreen)
+            const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
+            
+            const formattedMessage = `Hello,\n\nI'm ${userData.name || ''} ${userData.surname || ''}${userData.company ? ` from ${userData.company}` : ''}.\n\nHere's my digital business card: ${shareUrl}\n\nBest regards,\n${userData.name || ''} ${userData.surname || ''}${userData.phone ? `\n${userData.phone}` : ''}${userData.email ? `\n${userData.email}` : ''}`;
+            
+            emailUrl = `mailto:?${userData.email ? `reply-to=${encodeURIComponent(userData.email)}&cc=${encodeURIComponent(userData.email)}&` : ''}subject=${encodeURIComponent(`Digital Business Card - ${userData.name || ''} ${userData.surname || ''}${userData.company ? `, ${userData.company}` : ''}`)}&body=${encodeURIComponent(formattedMessage)}`;
+          }
+          
+          Linking.openURL(emailUrl).catch(() => {
+            showModal('Error', 'Could not open email client');
+          });
+        } catch (error) {
+          console.error('Error preparing email:', error);
+          showModal('Error', 'Failed to prepare email');
+        }
       }
     }
   ];
 
   const handleShare = async (contact?: Contact) => {
     try {
+      // If sharing a new contact and limit is reached, show upgrade modal
+      if (!contact && remainingContacts === 0) {
+        setShowLimitModal(true);
+        return;
+      }
+      
       const storedUserData = await AsyncStorage.getItem('userData');
       if (!storedUserData) {
         showModal('Error', 'User data not available');
@@ -241,41 +274,11 @@ export default function ContactsScreen() {
 
   const handlePlatformSelect = async (platform: string) => {
     try {
-      const storedUserData = await AsyncStorage.getItem('userData');
-      if (!storedUserData) {
-        showModal('Error', 'User data not available');
-        return;
+      const selectedOption = shareOptions.find(opt => opt.id === platform);
+      if (selectedOption) {
+        await selectedOption.action(selectedContact || undefined);
       }
       
-      const userData = JSON.parse(storedUserData);
-      const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
-      
-      let message;
-      if (selectedContact) {
-        message = `Contact Information:\nName: ${selectedContact.name} ${selectedContact.surname}\nPhone: ${selectedContact.number}\nMet at: ${selectedContact.howWeMet}`;
-      } else {
-        message = `Check out my digital business card! ${shareUrl}`;
-      }
-
-      switch (platform) {
-        case 'whatsapp':
-          Linking.openURL(`whatsapp://send?text=${encodeURIComponent(message)}`).catch(() => {
-            showModal('Error', 'WhatsApp is not installed on your device');
-          });
-          break;
-        case 'telegram':
-          Linking.openURL(`tg://msg?text=${encodeURIComponent(message)}`).catch(() => {
-            showModal('Error', 'Telegram is not installed on your device');
-          });
-          break;
-        case 'email':
-          const subject = selectedContact ? 'Contact Information' : 'Digital Business Card';
-          Linking.openURL(`mailto:?subject=${subject}&body=${encodeURIComponent(message)}`).catch(() => {
-            showModal('Error', 'Could not open email client');
-          });
-          break;
-      }
-
       setIsShareModalVisible(false);
       setSelectedPlatform(null);
       setSelectedContact(null);
@@ -294,19 +297,28 @@ export default function ContactsScreen() {
     if (contactToDelete !== null) {
       try {
         await deleteContact(contactToDelete);
-      } finally {
+        setConfirmModalVisible(false);
+        setContactToDelete(null);
+      } catch (error) {
+        console.error('Error in confirmDelete:', error);
+        // Still close the modal even if there's an error
         setConfirmModalVisible(false);
         setContactToDelete(null);
       }
     }
   };
 
+  const onRefresh = React.useCallback(() => {
+    setRefreshing(true);
+    loadContacts().finally(() => setRefreshing(false));
+  }, []);
+
   // Add dynamic styles
   const dynamicStyles = {
     shareCardButton: {
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
-      backgroundColor: cardColor,
+      backgroundColor: colorScheme,
       paddingVertical: 12,
       paddingHorizontal: 24,
       borderRadius: 25,
@@ -321,7 +333,7 @@ export default function ContactsScreen() {
       elevation: 5,
     },
     shareAction: {
-      backgroundColor: cardColor,
+      backgroundColor: colorScheme,
       justifyContent: 'center' as const,
       alignItems: 'center' as const,
       width: 80,
@@ -358,11 +370,35 @@ export default function ContactsScreen() {
     setIsOptionsModalVisible(true);
   };
 
+  // Add function to navigate to UnlockPremium
+  const navigateToUpgrade = () => {
+    setShowLimitModal(false);
+    navigation.navigate('UnlockPremium');
+  };
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={styles.container}>
         <Header title="Contacts" />
-        <View style={[styles.contactsContainer, { marginTop: 120 }]}>
+        
+        {/* Only show remaining contacts for free users */}
+        {remainingContacts !== 'unlimited' && (
+          <View style={styles.contactCountContainer}>
+            <Text style={[
+              styles.contactCountText,
+              { color: remainingContacts === 0 ? COLORS.error : COLORS.black }
+            ]}>
+              {remainingContacts > 0 
+                ? `Remaining Contacts: ${remainingContacts}` 
+                : 'Contact limit reached. Upgrade to add more!'}
+            </Text>
+          </View>
+        )}
+        
+        <View style={[
+          styles.contactsContainer, 
+          remainingContacts === 'unlimited' && styles.premiumContactsContainer
+        ]}>
           <View style={styles.searchContainer}>
             <MaterialIcons name="search" size={24} color={COLORS.gray} style={styles.searchIcon} />
             <TextInput
@@ -374,7 +410,12 @@ export default function ContactsScreen() {
             />
           </View>
 
-          {filteredContacts.length === 0 ? (
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colorScheme} />
+              <Text style={styles.loadingText}>Loading contacts...</Text>
+            </View>
+          ) : filteredContacts.length === 0 ? (
             <View style={styles.emptyStateContainer}>
               <MaterialIcons name="people" size={64} color={COLORS.gray} />
               <Text style={styles.emptyStateTitle}>No contact yet</Text>
@@ -387,7 +428,17 @@ export default function ContactsScreen() {
               </TouchableOpacity>
             </View>
           ) : (
-            <ScrollView style={styles.contactsList}>
+            <ScrollView 
+              style={styles.contactsList}
+              refreshControl={
+                <RefreshControl 
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  colors={[colorScheme]} // Uses your app's theme color
+                  tintColor={colorScheme}
+                />
+              }
+            >
               {filteredContacts.map((contact, index) => (
                 <Swipeable
                   key={index}
@@ -409,11 +460,20 @@ export default function ContactsScreen() {
                           {contact.name} {contact.surname}
                         </Text>
                         <View style={styles.contactSubInfo}>
-                          <Text style={styles.contactPosition}>{contact.number}</Text>
-                          <View style={styles.metContainer}>
-                            <Text style={styles.contactHowWeMet}>Met at: {contact.howWeMet}</Text>
-                            <Text style={styles.contactDate}>Date: {formatDate(contact.createdAt)}</Text>
-                          </View>
+                          <Text style={styles.contactPhone}>
+                            {contact.phone || 'No phone number'}
+                          </Text>
+                          {contact.email && (
+                            <Text style={styles.contactEmail}>
+                              {contact.email || 'No email address'}
+                            </Text>
+                          )}
+                          <Text style={styles.contactHowWeMet}>
+                            Met at: {contact.howWeMet}
+                          </Text>
+                          <Text style={styles.contactDate}>
+                            {contact.createdAt || 'Recently'}
+                          </Text>
                         </View>
                       </View>
                     </View>
@@ -544,6 +604,37 @@ export default function ContactsScreen() {
             </View>
           </View>
         </Modal>
+
+        <Modal
+          visible={showLimitModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowLimitModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Contact Limit Reached</Text>
+              <Text style={styles.modalMessage}>
+                You have reached the limit of {FREE_PLAN_CONTACT_LIMIT} contacts for free users. 
+                Upgrade to Premium to add unlimited contacts!
+              </Text>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => setShowLimitModal(false)}
+                >
+                  <Text style={styles.cancelButtonText}>Maybe Later</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, { backgroundColor: colorScheme }]}
+                  onPress={navigateToUpgrade}  // Updated to use the new function
+                >
+                  <Text style={styles.deleteButtonText}>Upgrade Now</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     </GestureHandlerRootView>
   );
@@ -557,6 +648,9 @@ const styles = StyleSheet.create({
   contactsContainer: {
     flex: 1,
     backgroundColor: COLORS.white,
+  },
+  premiumContactsContainer: {
+    paddingTop: 120, // Add top padding to compensate for missing contact count container
   },
   searchContainer: {
     padding: 15,
@@ -614,9 +708,18 @@ const styles = StyleSheet.create({
     color: COLORS.black,
   },
   contactSubInfo: {
-    flexDirection: 'column',
     marginTop: 4,
     gap: 2,
+  },
+  contactPhone: {
+    fontSize: 14,
+    color: COLORS.black,
+    marginBottom: 4,
+  },
+  contactEmail: {
+    fontSize: 14,
+    color: COLORS.black,
+    marginBottom: 4,
   },
   contactPosition: {
     fontSize: 14,
@@ -743,17 +846,17 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   contactHowWeMet: {
-    fontSize: 12,
+    fontSize: 13,
     color: COLORS.gray,
-    fontStyle: 'italic',
+    marginBottom: 2,
   },
   metContainer: {
     marginTop: 2,
   },
   contactDate: {
-    fontSize: 11,
+    fontSize: 12,
     color: COLORS.gray,
-    marginTop: 2,
+    fontStyle: 'italic',
   },
   deleteAction: {
     backgroundColor: COLORS.error,
@@ -789,5 +892,38 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     color: COLORS.white,
     fontWeight: 'bold',
+  },
+  contactCountContainer: {
+    padding: 12,
+    backgroundColor: '#f7f7f7',
+    borderRadius: 8,
+    marginHorizontal: 15,
+    marginTop: 120,  // Add top margin for breathing room from header
+    marginBottom: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+    borderWidth: 1,
+    borderColor: '#e5e5e5',
+  },
+  contactCountText: {
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
+    letterSpacing: 0.25,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: COLORS.gray,
   },
 });

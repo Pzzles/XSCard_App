@@ -4,11 +4,13 @@ import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Animated } from 'react-native';
 import { COLORS, CARD_COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
-import { useNavigation, CommonActions } from '@react-navigation/native';
-import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { authenticatedFetch, getUserId, API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import Modal from 'react-native-modal';
+import { EditCardScreenRouteProp, RootStackParamList } from '../../types/navigation';
+import { RouteProp } from '@react-navigation/native';
 
 // Add this interface for the form data type
 interface FormData {
@@ -43,6 +45,8 @@ interface CustomModalProps {
 }
 
 export default function EditCard() {
+  const route = useRoute<EditCardScreenRouteProp>();
+  const cardIndex = route.params?.cardIndex ?? 0; // Provide default value of 0
   const navigation = useNavigation();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -67,29 +71,34 @@ export default function EditCard() {
   const [selectedSocials, setSelectedSocials] = useState<string[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
   const [isConfirmModalVisible, setIsConfirmModalVisible] = useState(false);
+  const [isSocialRemoveModalVisible, setIsSocialRemoveModalVisible] = useState(false);
   const [isImageSourceModalVisible, setIsImageSourceModalVisible] = useState(false);
   const [isSuccessModalVisible, setIsSuccessModalVisible] = useState(false);
   const [currentSocialToRemove, setCurrentSocialToRemove] = useState<string | null>(null);
   const [modalType, setModalType] = useState<'profile' | 'logo' | null>(null);
   const [modalMessage, setModalMessage] = useState('');
+  const [userPlan, setUserPlan] = useState<string>('free');
 
   useEffect(() => {
     loadUserData();
+    getUserPlan();
   }, []);
 
   const loadUserData = async () => {
     try {
-      const storedUserData = await AsyncStorage.getItem('userData');
-      if (storedUserData) {
-        const parsedUserData = JSON.parse(storedUserData);
+      const userId = await getUserId();
+      if (!userId) {
+        setError('User ID not found');
+        return;
+      }
+
+      const response = await authenticatedFetch(ENDPOINTS.GET_CARD + `/${userId}`);
+      const cardsData = await response.json();
+      
+      if (cardsData && cardsData.length > cardIndex) {
+        const userData = cardsData[cardIndex]; 
         
-        const response = await fetch(buildUrl(ENDPOINTS.GET_USER) + `/${parsedUserData.id}`);
-        const userData = await response.json();
-
-        // Set the selected color from userData
         setSelectedColor(userData.colorScheme || '#1B2B5B');
-
-        // Set form data
         setFormData({
           firstName: userData.name || '',
           lastName: userData.surname || '',
@@ -97,33 +106,37 @@ export default function EditCard() {
           company: userData.company || '',
           email: userData.email || '',
           phoneNumber: userData.phone || '',
-          // Only set social media values if they exist and aren't null
-          ...(userData.whatsapp && { whatsapp: userData.whatsapp }),
-          ...(userData.x && { x: userData.x }),
-          ...(userData.facebook && { facebook: userData.facebook }),
-          ...(userData.linkedin && { linkedin: userData.linkedin }),
-          ...(userData.website && { website: userData.website }),
-          ...(userData.tiktok && { tiktok: userData.tiktok }),
-          ...(userData.instagram && { instagram: userData.instagram }),
+          ...Object.keys(userData.socials || {}).reduce((acc, key) => ({
+            ...acc,
+            [key]: userData.socials[key]
+          }), {}),
           profileImage: userData.profileImage || '',
           companyLogo: userData.companyLogo || '',
         });
 
-        // Only select socials that have non-null values
-        const existingSocials = Object.entries(userData)
-          .filter(([key, value]) => {
-            return ['whatsapp', 'x', 'facebook', 'linkedin', 'website', 'tiktok', 'instagram']
-              .includes(key) && typeof value === 'string' && value.trim() !== '';
-          })
+        const existingSocials = Object.entries(userData.socials || {})
+          .filter(([_, value]) => typeof value === 'string' && value.trim() !== '')
           .map(([key]) => key);
 
         setSelectedSocials(existingSocials);
-        setLoading(false);
       }
     } catch (error) {
       console.error('Error loading user data:', error);
       setError('Failed to load user data');
+    } finally {
       setLoading(false);
+    }
+  };
+
+  const getUserPlan = async () => {
+    try {
+      const userData = await AsyncStorage.getItem('userData');
+      if (userData) {
+        const { plan } = JSON.parse(userData);
+        setUserPlan(plan);
+      }
+    } catch (error) {
+      console.error('Error fetching user plan:', error);
     }
   };
 
@@ -165,63 +178,49 @@ export default function EditCard() {
         return;
       }
 
-      const storedUserData = await AsyncStorage.getItem('userData');
-      if (!storedUserData) {
-        setError('User data not found');
+      const userId = await getUserId();
+      if (!userId) {
+        setError('User ID not found');
         return;
       }
 
-      const { id } = JSON.parse(storedUserData);
-
-      // Create an object with all social fields explicitly set to null
-      const socialFields: Record<string, string | null> = {
-        whatsapp: null,
-        x: null,
-        facebook: null,
-        linkedin: null,
-        website: null,
-        tiktok: null,
-        instagram: null
-      };
-
-      // Update only the selected socials with their values
+      // Create socials object with selected socials
+      const socialFields: { [key: string]: string } = {};
       selectedSocials.forEach(socialId => {
         if (formData[socialId]) {
           socialFields[socialId] = formData[socialId];
         }
       });
 
-      // Combine the social fields with other user data
-      const updateData = {
-        ...(formData.firstName && { name: formData.firstName }),
-        ...(formData.lastName && { surname: formData.lastName }),
-        ...(formData.occupation && { occupation: formData.occupation }),
-        ...(formData.company && { company: formData.company }),
-        ...(formData.email && { email: formData.email }),
-        ...(formData.phoneNumber && { phone: formData.phoneNumber }),
-        ...socialFields,  // Include all social fields, including nulls
-        colorScheme: selectedColor
+      // Create card data object
+      const cardData = {
+        name: formData.firstName,
+        surname: formData.lastName,
+        occupation: formData.occupation,
+        company: formData.company,
+        email: formData.email,
+        phone: formData.phoneNumber,
+        socials: socialFields,
+        colorScheme: selectedColor,
+        profileImage: formData.profileImage,
+        companyLogo: formData.companyLogo
       };
 
-      const response = await fetch(buildUrl(ENDPOINTS.UPDATE_USER) + `/${id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updateData),
-      });
+      // Send update request
+      const response = await authenticatedFetch(
+        `${ENDPOINTS.UPDATE_CARD.replace(':id', userId)}?cardIndex=${cardIndex}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify(cardData),
+        }
+      );
 
       if (!response.ok) {
-        throw new Error('Failed to update user');
+        throw new Error('Failed to update card');
       }
 
-      // Get fresh user data
-      const updatedUserResponse = await fetch(buildUrl(ENDPOINTS.GET_USER) + `/${id}`);
-      const updatedUserData = await updatedUserResponse.json();
-
-      // Update AsyncStorage with fresh data
-      await AsyncStorage.setItem('userData', JSON.stringify(updatedUserData));
-
+      const result = await response.json();
+      
       setModalMessage('Card updated successfully');
       setIsSuccessModalVisible(true);
 
@@ -234,7 +233,7 @@ export default function EditCard() {
   const handleSocialSelect = (socialId: string) => {
     if (selectedSocials.includes(socialId)) {
       setCurrentSocialToRemove(socialId);
-      setIsConfirmModalVisible(true);
+      setIsSocialRemoveModalVisible(true);
     } else {
       setSelectedSocials([...selectedSocials, socialId]);
       setTimeout(() => {
@@ -244,6 +243,12 @@ export default function EditCard() {
         });
       }, 100);
     }
+  };
+
+  const handleRemoveSocial = (socialId: string) => {
+    setSelectedSocials(selectedSocials.filter(id => id !== socialId));
+    setFormData({...formData, [socialId]: ''});
+    setIsSocialRemoveModalVisible(false);
   };
 
   const handleProfileImageEdit = () => {
@@ -256,200 +261,196 @@ export default function EditCard() {
     setIsImageSourceModalVisible(true);
   };
 
-  const pickImage = async (source: 'camera' | 'gallery') => {
-    try {
-      let result;
-      
-      if (source === 'camera') {
-        const { status } = await ImagePicker.requestCameraPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert('Sorry, we need camera permissions to make this work!');
-          return;
-        }
-        result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true,
-          aspect: [1, 1],
-          quality: 1,
-        });
-      } else {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert('Sorry, we need gallery permissions to make this work!');
-          return;
-        }
-        result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true,
-          aspect: [1, 1],
-          quality: 1,
-        });
+  // Update pickImage function
+const pickImage = async (source: 'camera' | 'gallery') => {
+  try {
+    let result;
+    
+    if (source === 'camera') {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Sorry, we need camera permissions to make this work!');
+        return;
       }
-
-      if (!result.canceled) {
-        const storedUserData = await AsyncStorage.getItem('userData');
-        if (!storedUserData) {
-          setError('User data not found');
-          return;
-        }
-
-        const { id } = JSON.parse(storedUserData);
-
-        // Create form data
-        const formData = new FormData();
-        formData.append('profileImage', {
-          uri: result.assets[0].uri,
-          type: 'image/jpeg',
-          name: 'profile-image.jpg',
-        } as any);
-
-        // Use separate profile image endpoint
-        const response = await fetch(buildUrl(ENDPOINTS.UPDATE_PROFILE_IMAGE).replace(':id', id), {
-          method: 'PATCH',
-          body: formData,
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to update profile image');
-        }
-
-        const updatedUserData = await response.json();
-        
-        // Update the local state
-        setFormData(prev => ({
-          ...prev,
-          profileImage: updatedUserData.profileImage // Data comes directly, not nested
-        }));
-
-        // Update AsyncStorage
-        await AsyncStorage.setItem('userData', JSON.stringify(updatedUserData));
-
-        setModalMessage(`${modalType === 'profile' ? 'Profile picture' : 'Logo'} updated successfully`);
-        setIsSuccessModalVisible(true);
-      }
-    } catch (error) {
-      console.error('Error updating profile image:', error);
-      Alert.alert('Error', 'Failed to update profile image');
-    }
-  };
-
-  const pickLogo = async (source: 'camera' | 'gallery') => {
-    try {
-      let result;
-      
-      // Define size constraints (in pixels)
-      const MIN_WIDTH = 800;
-      const MAX_WIDTH = 3000;
-      const MIN_HEIGHT = 450;  // For 16:9 ratio with MIN_WIDTH
-      const MAX_HEIGHT = 1688; // For 16:9 ratio with MAX_WIDTH
-      
-      const options: ImagePicker.ImagePickerOptions = {
+      result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        aspect: [16, 9],
+        aspect: [1, 1],
         quality: 1,
-        // Add size constraints
-        exif: true // To get image dimensions
-      };
-
-      if (source === 'camera') {
-        const { status } = await ImagePicker.requestCameraPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert('Sorry, we need camera permissions to make this work!');
-          return;
-        }
-        result = await ImagePicker.launchCameraAsync(options);
-      } else {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert('Sorry, we need gallery permissions to make this work!');
-          return;
-        }
-        result = await ImagePicker.launchImageLibraryAsync(options);
+      });
+    } else {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Sorry, we need gallery permissions to make this work!');
+        return;
       }
-
-      if (!result.canceled && result.assets[0]) {
-        const selectedImage = result.assets[0];
-        
-        // Get image dimensions
-        const { width, height } = await new Promise<{ width: number; height: number }>((resolve) => {
-          Image.getSize(selectedImage.uri, (width, height) => {
-            resolve({ width, height });
-          });
-        });
-
-        // Validate image dimensions
-        if (width < MIN_WIDTH || height < MIN_HEIGHT) {
-          setModalMessage(`Image is too small. Minimum dimensions are ${MIN_WIDTH}x${MIN_HEIGHT} pixels.`);
-          setIsSuccessModalVisible(true);
-          return;
-        }
-
-        if (width > MAX_WIDTH || height > MAX_HEIGHT) {
-          setModalMessage(`Image is too large. Maximum dimensions are ${MAX_WIDTH}x${MAX_HEIGHT} pixels.`);
-          setIsSuccessModalVisible(true);
-          return;
-        }
-
-        // Check aspect ratio
-        const aspectRatio = width / height;
-        const targetRatio = 16 / 9;
-        const RATIO_TOLERANCE = 0.1; // 10% tolerance
-
-        if (Math.abs(aspectRatio - targetRatio) > RATIO_TOLERANCE) {
-          setModalMessage('Please select an image closer to 16:9 aspect ratio for optimal display.');
-          setIsSuccessModalVisible(true);
-          return;
-        }
-
-        // Continue with upload if image meets requirements
-        const storedUserData = await AsyncStorage.getItem('userData');
-        if (!storedUserData) {
-          setError('User data not found');
-          return;
-        }
-
-        const { id } = JSON.parse(storedUserData);
-
-        const formData = new FormData();
-        formData.append('companyLogo', {
-          uri: selectedImage.uri,
-          type: 'image/jpeg',
-          name: 'company-logo.jpg',
-        } as any);
-
-        const response = await fetch(buildUrl(ENDPOINTS.UPDATE_COMPANY_LOGO).replace(':id', id), {
-          method: 'PATCH',
-          body: formData,
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to update company logo');
-        }
-
-        const updatedUserData = await response.json();
-        
-        setFormData(prev => ({
-          ...prev,
-          companyLogo: updatedUserData.companyLogo
-        }));
-
-        await AsyncStorage.setItem('userData', JSON.stringify(updatedUserData));
-
-        setModalMessage('Logo updated successfully');
-        setIsSuccessModalVisible(true);
-      }
-    } catch (error) {
-      console.error('Error updating company logo:', error);
-      Alert.alert('Error', 'Failed to update company logo');
+      result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+      });
     }
-  };
+
+    if (!result.canceled && result.assets[0]) {
+      const userId = await getUserId();
+      if (!userId) {
+        setError('User ID not found');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('image', {
+        uri: result.assets[0].uri,
+        type: 'image/jpeg',
+        name: 'profile-image.jpg',
+      } as any);
+      formData.append('imageType', 'profileImage');
+
+      // Use cardIndex from route params instead of hardcoded 0
+      const response = await fetch(buildUrl(ENDPOINTS.UPDATE_CARD.replace(':id', userId)) + `?cardIndex=${cardIndex}`, {
+        method: 'PATCH',
+        body: formData,
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'Authorization': await AsyncStorage.getItem('userToken') || '',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update profile image');
+      }
+
+      const updatedData = await response.json();
+      
+      setFormData(prev => ({
+        ...prev,
+        profileImage: updatedData.updatedCard.profileImage
+      }));
+
+      setModalMessage('Profile picture updated successfully');
+      setIsSuccessModalVisible(true);
+    }
+  } catch (error) {
+    console.error('Error updating profile image:', error);
+    Alert.alert('Error', 'Failed to update profile image');
+  }
+};
+
+// Update pickLogo function similarly
+const pickLogo = async (source: 'camera' | 'gallery') => {
+  try {
+    let result;
+    
+    // Define size constraints (in pixels)
+    const MIN_WIDTH = 800;
+    const MAX_WIDTH = 3000;
+    const MIN_HEIGHT = 450;  // For 16:9 ratio with MIN_WIDTH
+    const MAX_HEIGHT = 1688; // For 16:9 ratio with MAX_WIDTH
+    
+    const options: ImagePicker.ImagePickerOptions = {
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 1,
+      // Add size constraints
+      exif: true // To get image dimensions
+    };
+
+    if (source === 'camera') {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Sorry, we need camera permissions to make this work!');
+        return;
+      }
+      result = await ImagePicker.launchCameraAsync(options);
+    } else {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Sorry, we need gallery permissions to make this work!');
+        return;
+      }
+      result = await ImagePicker.launchImageLibraryAsync(options);
+    }
+
+    if (!result.canceled && result.assets[0]) {
+      const selectedImage = result.assets[0];
+      
+      // Get image dimensions
+      const { width, height } = await new Promise<{ width: number; height: number }>((resolve) => {
+        Image.getSize(selectedImage.uri, (width, height) => {
+          resolve({ width, height });
+        });
+      });
+
+      // Validate image dimensions
+      if (width < MIN_WIDTH || height < MIN_HEIGHT) {
+        setModalMessage(`Image is too small. Minimum dimensions are ${MIN_WIDTH}x${MIN_HEIGHT} pixels.`);
+        setIsSuccessModalVisible(true);
+        return;
+      }
+
+      if (width > MAX_WIDTH || height > MAX_HEIGHT) {
+        setModalMessage(`Image is too large. Maximum dimensions are ${MAX_WIDTH}x${MAX_HEIGHT} pixels.`);
+        setIsSuccessModalVisible(true);
+        return;
+      }
+
+      // Check aspect ratio
+      const aspectRatio = width / height;
+      const targetRatio = 16 / 9;
+      const RATIO_TOLERANCE = 0.1; // 10% tolerance
+
+      if (Math.abs(aspectRatio - targetRatio) > RATIO_TOLERANCE) {
+        setModalMessage('Please select an image closer to 16:9 aspect ratio for optimal display.');
+        setIsSuccessModalVisible(true);
+        return;
+      }
+
+      // Continue with upload if image meets requirements
+      const userId = await getUserId();
+      if (!userId) {
+        setError('User ID not found');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('image', {
+        uri: selectedImage.uri,
+        type: 'image/jpeg',
+        name: 'company-logo.jpg',
+      } as any);
+      formData.append('imageType', 'companyLogo');
+
+      // Use cardIndex from route params instead of hardcoded 0
+      const response = await fetch(buildUrl(ENDPOINTS.UPDATE_CARD.replace(':id', userId)) + `?cardIndex=${cardIndex}`, {
+        method: 'PATCH',
+        body: formData,
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'Authorization': await AsyncStorage.getItem('userToken') || '',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update company logo');
+      }
+
+      const updatedData = await response.json();
+      
+      setFormData(prev => ({
+        ...prev,
+        companyLogo: updatedData.updatedCard.companyLogo
+      }));
+
+      setModalMessage('Logo updated successfully');
+      setIsSuccessModalVisible(true);
+    }
+  } catch (error) {
+    console.error('Error updating company logo:', error);
+    Alert.alert('Error', 'Failed to update company logo');
+  }
+};
 
   const CustomModal = ({ isVisible, onClose, title, message, buttons }: CustomModalProps) => (
     <Modal
@@ -487,6 +488,18 @@ export default function EditCard() {
     </Modal>
   );
 
+  const handleDelete = () => {
+    // Prevent deletion of the default card (index 0)
+    if (cardIndex === 0) {
+      setModalMessage('The default card cannot be deleted. This ensures you always have at least one card available.');
+      setIsSuccessModalVisible(true);
+      return;
+    }
+    
+    setModalMessage('Are you sure you want to delete this card? This action cannot be undone.');
+    setIsConfirmModalVisible(true);
+  };
+
   return (
     <View style={styles.container}>
       <Header title="Edit Card" />
@@ -509,7 +522,10 @@ export default function EditCard() {
         <ScrollView 
           ref={scrollViewRef}
           style={styles.content}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: 100 } // Add extra padding for delete button
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -687,14 +703,52 @@ export default function EditCard() {
               </Animated.View>
             ))}
           </View>
+
+          {/* Delete Button */}
+          {userPlan !== 'free' && (
+            <TouchableOpacity 
+              style={[
+                styles.deleteButton,
+                cardIndex === 0 ? styles.deleteButtonDisabled : null
+              ]}
+              onPress={handleDelete}
+            >
+              <Text style={styles.deleteButtonText}>
+                {cardIndex === 0 ? "Default Card (Cannot Delete)" : "Delete Card"}
+              </Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
 
       <CustomModal
+        isVisible={isSocialRemoveModalVisible}
+        onClose={() => setIsSocialRemoveModalVisible(false)}
+        title="Remove Social Media"
+        message="Are you sure you want to remove this social media link?"
+        buttons={[
+          {
+            text: 'Cancel',
+            type: 'cancel',
+            onPress: () => setIsSocialRemoveModalVisible(false)
+          },
+          {
+            text: 'Remove',
+            type: 'confirm',
+            onPress: () => {
+              if (currentSocialToRemove) {
+                handleRemoveSocial(currentSocialToRemove);
+              }
+            }
+          }
+        ]}
+      />
+
+      <CustomModal
         isVisible={isConfirmModalVisible}
         onClose={() => setIsConfirmModalVisible(false)}
-        title="Remove Social Link"
-        message="Are you sure you want to remove this social link? Any entered data will be lost."
+        title="Delete Card"
+        message={modalMessage}
         buttons={[
           {
             text: 'Cancel',
@@ -702,17 +756,40 @@ export default function EditCard() {
             onPress: () => setIsConfirmModalVisible(false)
           },
           {
-            text: 'Remove',
+            text: 'Delete',
             type: 'confirm',
-            onPress: () => {
-              if (currentSocialToRemove) {
-                setSelectedSocials(selectedSocials.filter(id => id !== currentSocialToRemove));
-                setFormData({
-                  ...formData,
-                  [currentSocialToRemove]: undefined
-                });
+            onPress: async () => {
+              try {
+                const userId = await getUserId();
+                if (!userId) {
+                  setError('User ID not found');
+                  return;
+                }
+
+                const response = await authenticatedFetch(
+                  `${ENDPOINTS.DELETE_CARD.replace(':id', userId)}?cardIndex=${cardIndex}`,
+                  {
+                    method: 'DELETE'
+                  }
+                );
+
+                if (!response.ok) {
+                  throw new Error('Failed to delete card');
+                }
+
+                // Get updated cards list from response
+                const updatedData = await response.json();
+                
+                // Update local storage with new cards list
+                await AsyncStorage.setItem('userCards', JSON.stringify(updatedData.cards));
+
+                setIsConfirmModalVisible(false);
+                setModalMessage('Card deleted successfully');
+                setIsSuccessModalVisible(true);
+              } catch (error) {
+                console.error('Error deleting card:', error);
+                setError('Failed to delete card');
               }
-              setIsConfirmModalVisible(false);
             }
           }
         ]}
@@ -759,9 +836,7 @@ export default function EditCard() {
             type: 'confirm',
             onPress: () => {
               setIsSuccessModalVisible(false);
-              if (modalMessage.includes('Card updated')) {
-                navigation.goBack();
-              }
+              navigation.goBack();
             }
           }
         ]}
@@ -1029,6 +1104,24 @@ const styles = StyleSheet.create({
   },
   modalButtonTextCancel: {
     color: COLORS.black,
+  },
+  deleteButton: {
+    backgroundColor: COLORS.error, // or '#FF0000' for red
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 20,
+    marginHorizontal: 16,
+    marginBottom: 20,
+  },
+  deleteButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  deleteButtonDisabled: {
+    backgroundColor: '#ccc',
+    opacity: 0.7,
   },
 });
 

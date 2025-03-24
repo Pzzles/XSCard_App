@@ -1,7 +1,36 @@
-const { db } = require('../firebase.js');
+const { db, admin } = require('../firebase.js');
 const axios = require('axios');
 const config = require('../config/config');
+const { sendMailWithStatus } = require('../public/Utils/emailService');
 require('dotenv').config();
+const { AUTH_ENDPOINTS, EMAIL_TEMPLATES, AUTH_CONSTANTS } = require('../constants/auth');
+const { formatDate } = require('../utils/dateFormatter');
+
+const sendVerificationEmail = async (userData, req) => {
+    const now = Date.now();
+    const lastSent = userData.lastVerificationEmailSent || 0;
+    
+    if (now - lastSent < AUTH_CONSTANTS.VERIFICATION_EMAIL_COOLDOWN) {
+        const minutesLeft = Math.ceil((AUTH_CONSTANTS.VERIFICATION_EMAIL_COOLDOWN - (now - lastSent)) / 60000);
+        throw new Error(`Please wait ${minutesLeft} minutes before requesting another verification email`);
+    }
+
+    const verificationToken = Math.random().toString(36).substring(2) + Date.now().toString(36);
+    const verificationLink = `${req.protocol}://${req.get('host')}/verify-email?token=${verificationToken}&uid=${userData.uid}`;
+    
+    await userData.ref.update({ 
+        verificationToken,
+        lastVerificationEmailSent: now
+    });
+
+    await sendMailWithStatus({
+        to: userData.email,
+        subject: EMAIL_TEMPLATES.verification.subject,
+        html: EMAIL_TEMPLATES.verification.getHtml(userData.name, verificationLink)
+    });
+
+    return verificationToken;
+};
 
 exports.getAllUsers = async (req, res) => {
     try {
@@ -40,7 +69,7 @@ exports.getUserById = async (req, res) => {
         const userDoc = await userRef.get();
         
         if (!userDoc.exists) {
-            return res.status(404).send({ message: 'User is not found' });
+            return res.status(404).send({ message: 'User is not found'});
         }
 
         const userData = {
@@ -59,43 +88,163 @@ exports.getUserById = async (req, res) => {
 };
 
 exports.addUser = async (req, res) => {
-    const { name, surname, email, password, occupation, company, status, phone } = req.body;
+    const { 
+        name, surname, email, password, occupation, company, 
+        status, phone, plan = 'free', socials = {} 
+    } = req.body;
     
-    const requiredFields = ['name', 'surname', 'email', 'password', 'occupation', 'company', 'status', 'phone'];
-    const missingFields = requiredFields.filter(field => !req.body[field]);
-    
-    if (missingFields.length > 0) {
-        return res.status(400).send({ 
-            message: 'Missing required fields', 
-            missingFields 
-        });
-    }
-
     try {
+        // Create user in Firebase Auth
+        const userRecord = await admin.auth().createUser({
+            email: email,
+            password: password,
+            emailVerified: false
+        });
+
+        const verificationToken = Math.random().toString(36).substring(2) + Date.now().toString(36);
+        
+        // Data for users collection - using Firestore Timestamp
         const userData = {
-            name, 
-            surname, 
-            email, 
-            password,
-            occupation, 
-            company, 
-            status, 
-            phone,
-            profileImage: req.files?.profileImage ? `/profiles/${req.files.profileImage[0].filename}` : null,
-            companyLogo: req.files?.companyLogo ? `/profiles/${req.files.companyLogo[0].filename}` : null,
-            createdAt: new Date().toISOString()
+            uid: userRecord.uid,
+            email,
+            status,
+            plan,
+            createdAt: admin.firestore.Timestamp.now(), // Changed to Firestore Timestamp
+            isEmailVerified: false,
+            verificationToken
         };
 
-        const docRef = await db.collection('users').add(userData);
+        const responseData = {
+            ...userData,
+            createdAt: formatDate(userData.createdAt) // Format for display
+        };
+
+        // Data for cards collection - using Firestore Timestamp
+        const cardData = {
+            cards: [{
+                name,
+                surname,
+                email,
+                phone,
+                occupation,
+                company,
+                profileImage: req.files?.profileImage ? `/profiles/${req.files.profileImage[0].filename}` : null,
+                companyLogo: req.files?.companyLogo ? `/profiles/${req.files.companyLogo[0].filename}` : null,
+                socials,
+                colorScheme: '#1B2B5B', // Default color
+                createdAt: admin.firestore.Timestamp.now() // Changed to Firestore Timestamp
+            }]
+        };
+
+        // Store user data in Firestore
+        await db.collection('users').doc(userRecord.uid).set(userData);
+        
+        // Store card data in Firestore
+        await db.collection('cards').doc(userRecord.uid).set(cardData);
+
+        // Send verification email
+        const verificationLink = `${req.protocol}://${req.get('host')}/verify-email?token=${verificationToken}&uid=${userRecord.uid}`;
+        
+        await sendMailWithStatus({
+            to: email,
+            subject: 'Verify your XS Card email address',
+            html: `
+                <h1>Welcome to XS Card!</h1>
+                <p>Hello ${name},</p>
+                <p>Please click the link below to verify your email address:</p>
+                <a href="${verificationLink}">Verify Email</a>
+                <p>This link will expire in 24 hours.</p>
+                <p>If you didn't create this account, please ignore this email.</p>
+            `
+        });
         
         res.status(201).send({ 
-            message: 'User added successfully',
-            userId: docRef.id,
-            userData
+            message: 'User added successfully. Please check your email to verify your account.',
+            userId: userRecord.uid,
+            userData: {
+                ...responseData,
+                verificationToken: undefined // Don't send token in response
+            }
         });
     } catch (error) {
         console.error('Error adding user:', error);
         res.status(500).send({ message: 'Internal Server Error', error: error.message });
+    }
+};
+
+exports.verifyEmail = async (req, res) => {
+    const { token, uid } = req.query;
+
+    try {
+        const userRef = db.collection('users').doc(uid);
+        const userDoc = await userRef.get();
+
+        if (!userDoc.exists) {
+            // Redirect to the HTML page with user-not-found status
+            return res.redirect('/templates/emailVerified.html?status=user-not-found');
+        }
+
+        const userData = userDoc.data();
+
+        if (userData.verificationToken !== token) {
+            // Redirect to the HTML page with error status
+            return res.redirect('/templates/emailVerified.html?status=error');
+        }
+
+        if (userData.isEmailVerified) {
+            // Redirect to the HTML page with already-verified status
+            return res.redirect('/templates/emailVerified.html?status=already-verified');
+        }
+
+        // Update Firestore
+        await userRef.update({
+            isEmailVerified: true,
+            verificationToken: admin.firestore.FieldValue.delete()
+        });
+
+        // Update Firebase Auth
+        await admin.auth().updateUser(uid, {
+            emailVerified: true
+        });
+
+        // Redirect to the HTML page with success status
+        res.redirect('/templates/emailVerified.html?status=success');
+    } catch (error) {
+        console.error('Verification error:', error);
+        // Redirect to the HTML page with error status and message
+        res.redirect(`/templates/emailVerified.html?status=error&message=${encodeURIComponent(error.message)}`);
+    }
+};
+
+exports.resendVerification = async (req, res) => {
+    const { uid } = req.params;
+
+    try {
+        const userRef = db.collection('users').doc(uid);
+        const userDoc = await userRef.get();
+
+        if (!userDoc.exists) {
+            return res.status(404).send({ message: 'User not found' });
+        }
+
+        const userData = { ...userDoc.data(), ref: userRef, uid };
+
+        if (userData.isEmailVerified) {
+            return res.status(400).send({ message: 'Email already verified' });
+        }
+
+        try {
+            await sendVerificationEmail(userData, req);
+            res.status(200).send({ message: 'Verification email sent successfully' });
+        } catch (error) {
+            res.status(429).send({ message: error.message });
+        }
+    } catch (error) {
+        console.error('Error resending verification:', error);
+        res.status(500).send({ 
+            message: 'Failed to resend verification email',
+            error: error.message 
+        });
     }
 };
 
@@ -141,41 +290,43 @@ exports.deleteUser = async (req, res) => {
 exports.signIn = async (req, res) => {
     const { email, password } = req.body;
 
-    if (!email || !password) {
-        return res.status(400).send({ 
-            message: 'Email and password are required' 
-        });
-    }
-
     try {
-        const usersRef = db.collection('users');
-        const snapshot = await usersRef.where('email', '==', email).get();
+        const response = await axios.post(AUTH_ENDPOINTS.signIn, {
+            email,
+            password,
+            returnSecureToken: true
+        });
 
-        if (snapshot.empty) {
-            return res.status(401).send({ message: 'Invalid credentials' });
+        const { idToken, localId } = response.data;
+        const userDoc = await db.collection('users').doc(localId).get();
+        
+        if (!userDoc.exists) {
+            return res.status(404).send({ message: 'User not found' });
         }
 
-        const userDoc = snapshot.docs[0];
         const userData = userDoc.data();
 
-        if (userData.password !== password) {
-            return res.status(401).send({ message: 'Invalid credentials' });
+        if (!userData.isEmailVerified) {
+            return res.status(403).send({
+                message: 'Email not verified. Please verify your email or request a new verification email.',
+                needsVerification: true,
+                uid: localId
+            });
         }
 
         res.status(200).send({
             message: 'Sign in successful',
+            token: idToken,
             user: {
-                id: userDoc.id,
-                name: userData.name,
-                email: userData.email,
-                company: userData.company
+                uid: localId,
+                ...userData
             }
         });
     } catch (error) {
-        console.error('Sign in error:', error);
-        res.status(500).send({ 
-            message: 'Internal Server Error', 
-            error: error.message 
+        console.error('Sign in error:', error.response?.data || error);
+        res.status(401).send({ 
+            message: 'Invalid credentials',
+            error: error.response?.data || error.message
         });
     }
 };
@@ -338,54 +489,80 @@ exports.updateUserColor = async (req, res) => {
     }
 };
 
-exports.addToWallet = async (req, res) => {
-    const { id } = req.params;
+exports.logout = async (req, res) => {
+    try {
+        const uid = req.user.uid;
+        const token = req.token;
+        
+        // Add token to blacklist with expiry
+        await db.collection('tokenBlacklist').doc(token).set({
+            uid: uid,
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours from now
+        });
 
+        // Revoke refresh tokens
+        await admin.auth().revokeRefreshTokens(uid);
+        
+        res.status(200).send({ 
+            success: true,
+            message: 'Logged out successfully',
+            data: {
+                uid: uid,
+                timestamp: Date.now(),
+                sessionEnded: true,
+                tokenRevoked: true
+            },
+            meta: {
+                serverTime: new Date().toISOString(),
+                tokenStatus: 'revoked'
+            }
+        });
+    } catch (error) {
+        console.error('Logout error:', error);
+        res.status(500).send({
+            success: false,
+            message: 'Failed to logout',
+            error: {
+                code: error.code || 'UNKNOWN_ERROR',
+                message: error.message,
+                timestamp: Date.now()
+            }
+        });
+    }
+};
+
+exports.upgradeToPremium = async (req, res) => {
+    const { id } = req.params;
     try {
         const userRef = db.collection('users').doc(id);
-        const userDoc = await userRef.get();
+        const doc = await userRef.get();
 
-        if (!userDoc.exists) {
+        if (!doc.exists) {
             return res.status(404).send({ message: 'User not found' });
         }
 
-        const userData = userDoc.data();
-        
-        const thumbnailUrl = userData.profileImage ? `${config.PASSCREATOR_PUBLIC_URL}${userData.profileImage}` : null;
-        const logoUrl = userData.companyLogo ? `${config.PASSCREATOR_PUBLIC_URL}${userData.companyLogo}` : null;
-
-        const passData = {
-            name: `${userData.name} ${userData.surname}`,
-            company: userData.company,
-            jobTitle: userData.occupation,
-            urlToThumbnail: thumbnailUrl,
-            urlToLogo: logoUrl,
-            barcodeValue: `${config.PASSCREATOR_PUBLIC_URL}/queries.html?userId=${id}`
-        };
-
-        const response = await axios.post(
-            `${process.env.PASSCREATOR_BASE_URL}/api/pass?passtemplate=${process.env.PASSCREATOR_TEMPLATE_ID}&zapierStyle=true`, 
-            passData, 
-            {
-                headers: {
-                    'Authorization': process.env.PASSCREATOR_API_KEY,
-                    'Content-Type': 'application/json'
-                }
-            }
-        );
-
-        res.status(200).send({
-            message: 'Wallet pass created successfully',
-            passUri: response.data.uri,
-            passFileUrl: response.data.linkToPassFile,
-            passPageUrl: response.data.linkToPassPage,
-            identifier: response.data.identifier
+        // Update user to premium
+        await userRef.update({
+            plan: 'premium',
+            status: 'active',
+            trialStartDate: admin.firestore.Timestamp.now()
         });
 
+        const updatedDoc = await userRef.get();
+        const userData = {
+            id: updatedDoc.id,
+            ...updatedDoc.data()
+        };
+
+        res.status(200).send({
+            message: 'User upgraded to premium successfully',
+            user: userData
+        });
     } catch (error) {
-        console.error('Error creating wallet pass:', error);
+        console.error('Error upgrading user:', error);
         res.status(500).send({
-            message: 'Failed to create wallet pass' + error.message,
+            message: 'Failed to upgrade user',
             error: error.message
         });
     }

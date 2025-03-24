@@ -4,6 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const userController = require('../controllers/userController');
+const { authenticateUser } = require('../middleware/auth');
 
 // Configure multer for file upload
 const storage = multer.diskStorage({
@@ -22,12 +23,20 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-// Routes
+// Public routes (no authentication required)
+router.post('/SignIn', userController.signIn);
 router.post('/AddUser', upload.fields([
     { name: 'profileImage', maxCount: 1 },
     { name: 'companyLogo', maxCount: 1 }
 ]), userController.addUser);
-router.post('/SignIn', userController.signIn);
+router.get('/verify-email', userController.verifyEmail);
+
+// All routes below this middleware will require authentication
+router.use(authenticateUser);
+
+// Protected routes
+router.post('/logout', userController.logout);
+router.post('/resend-verification/:uid', userController.resendVerification);
 router.get('/Users', userController.getAllUsers);
 router.get('/Users/:id', userController.getUserById);
 router.patch('/UpdateUser/:id', upload.single('profileImage'), userController.updateUser);
@@ -35,6 +44,6 @@ router.delete('/Users/:id', userController.deleteUser);
 router.patch('/Users/:id/profile-image', upload.single('profileImage'), userController.updateProfileImage);
 router.patch('/Users/:id/company-logo', upload.single('companyLogo'), userController.updateCompanyLogo);
 router.patch('/Users/:id/color', userController.updateUserColor);
-router.post('/Users/:id/wallet', userController.addToWallet);
+router.patch('/Users/:id/upgrade', authenticateUser, userController.upgradeToPremium);
 
 module.exports = router;
