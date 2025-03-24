@@ -115,7 +115,7 @@ app.post('/AddContact', async (req, res) => {
         // Send email notification if user has email
         if (userData.email) {
             const mailOptions = {
-                from: process.env.EMAIL_USER_XSPARK,
+                from: process.env.EMAIL_USER,
                 to: userData.email,
                 subject: 'Someone Saved Your Contact Information',
                 html: `
@@ -206,7 +206,7 @@ app.post('/saveContact', async (req, res) => {
 
         if (userData && userData.email) {
             const mailOptions = {
-                from: process.env.EMAIL_USER_XSPARK,
+                from: process.env.EMAIL_USER,
                 to: userData.email,
                 subject: 'Someone Saved Your Contact Information',
                 html: `
