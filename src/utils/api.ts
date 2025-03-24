@@ -12,22 +12,22 @@ export interface PasscreatorResponse {
 }
 
 // Helper function to get the appropriate base URL
-// const getBaseUrl = () => {
-
-//   // return 'https://xscard-app.onrender.com';
-//     return 'http://192.168.2.237:8383';
-
-// };
-
 const getBaseUrl = () => {
-  console.log('Is Development Mode:', __DEV__);
 
-    if (__DEV__) {
-        return 'http://192.168.8.166:8383';
-    }
+   return 'https://xscard-app.onrender.com';
+    // return 'http://192.168.2.237:8383';
 
-    return 'https://xscard-app.onrender.com';
 };
+
+// const getBaseUrl = () => {
+//   console.log('Is Development Mode:', __DEV__);
+
+//     if (__DEV__) {
+//         return 'http://192.168.8.166:8383';
+//     }
+
+//     return 'https://xscard-app.onrender.com';
+// };
 
 
 export const API_BASE_URL = getBaseUrl();
