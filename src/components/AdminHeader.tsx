@@ -6,6 +6,7 @@ import { useNavigation } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { AdminTabParamList } from '../types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL, authenticatedFetch } from '../utils/api';
 
 type AdminHeaderNavigationProp = BottomTabNavigationProp<AdminTabParamList>;
 
@@ -31,6 +32,27 @@ export default function AdminHeader({ title }: AdminHeaderProps) {
 
   const handleLogout = async () => {
     try {
+      // Get token from AsyncStorage
+      const token = await AsyncStorage.getItem('userToken');
+      
+      if (token) {
+        try {
+          // Call backend logout endpoint using authenticatedFetch
+          await fetch(`${API_BASE_URL}/logout`, {
+            method: 'POST',
+            headers: {
+              'Authorization': token,
+              'Content-Type': 'application/json'
+            }
+          });
+          console.log('Successfully logged out on server');
+        } catch (error) {
+          console.error('Error during server logout:', error);
+          // Continue with local logout even if server logout fails
+        }
+      }
+      
+      // Clear local storage and navigate regardless of server response
       await AsyncStorage.clear();
       navigation.reset({
         index: 0,
@@ -38,6 +60,11 @@ export default function AdminHeader({ title }: AdminHeaderProps) {
       });
     } catch (error) {
       console.error('Error during logout:', error);
+      // If everything fails, still try to navigate to sign in
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'SignIn' as keyof AdminTabParamList }],
+      });
     }
   };
 
