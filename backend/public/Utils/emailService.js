@@ -1,31 +1,30 @@
 require('dotenv').config();
 const nodemailer = require('nodemailer');
 
-// Create email transport configuration with better timeout and connection settings
+// Create email transport configuration with Gmail settings
 const createTransporter = () => {
+  console.log('Creating email transporter with:', {
+    host: process.env.EMAIL_HOST,
+    port: parseInt(process.env.EMAIL_SMTP_PORT),
+    user: process.env.EMAIL_USER
+  });
+  
   return nodemailer.createTransport({
-    host: process.env.EMAIL_HOST_XSPARK,
-    port: parseInt(process.env.EMAIL_SMTP_PORT_XSPARK),
-    secure: true,
+    host: process.env.EMAIL_HOST,
+    port: parseInt(process.env.EMAIL_SMTP_PORT),
+    secure: true, // Use SSL/TLS for port 465
     auth: {
-      user: process.env.EMAIL_USER_XSPARK,
-      pass: process.env.EMAIL_PASSWORD_XSPARK
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD
     },
     tls: {
       rejectUnauthorized: false, // Accept self-signed certificates
-      ciphers: 'SSLv3'
     },
     debug: true, // Enable debug logging
     // Add timeout configuration
     connectionTimeout: 10000, // 10 seconds
     greetingTimeout: 10000,  // 10 seconds
     socketTimeout: 15000,    // 15 seconds
-    // Add retry configuration
-    pool: true,
-    maxConnections: 5,
-    maxMessages: 100,
-    rateDelta: 1000,
-    rateLimit: 5
   });
 };
 
@@ -41,8 +40,8 @@ const verifyTransporter = () => {
           message: error.message,
           code: error.code,
           command: error.command,
-          host: process.env.EMAIL_HOST_XSPARK,
-          port: process.env.EMAIL_SMTP_PORT_XSPARK
+          host: process.env.EMAIL_HOST,
+          port: process.env.EMAIL_SMTP_PORT
         });
         resolve(false);
       } else {
@@ -67,7 +66,7 @@ const sendMailWithStatus = async (mailOptions) => {
     if (!mailOptions.from || typeof mailOptions.from === 'string') {
       mailOptions.from = {
         name: mailOptions.from?.name || process.env.EMAIL_FROM_NAME || 'XS Card',
-        address: mailOptions.from?.address || process.env.EMAIL_FROM_ADDRESS || process.env.EMAIL_USER_XSPARK
+        address: mailOptions.from?.address || process.env.EMAIL_FROM_ADDRESS || process.env.EMAIL_USER
       };
     }
     
