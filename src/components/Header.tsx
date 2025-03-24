@@ -6,6 +6,7 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useColorScheme } from '../context/ColorSchemeContext';
+import { API_BASE_URL, authenticatedFetch } from '../utils/api';
 
 // Update this type to match your actual navigation type
 type RootStackParamList = {
@@ -59,6 +60,27 @@ export default function Header({ title, rightIcon, showAddButton = false }: Head
 
   const handleLogout = async () => {
     try {
+      // Get token from AsyncStorage
+      const token = await AsyncStorage.getItem('userToken');
+      
+      if (token) {
+        try {
+          // Call backend logout endpoint using api utilities
+          await fetch(`${API_BASE_URL}/logout`, {
+            method: 'POST',
+            headers: {
+              'Authorization': token,
+              'Content-Type': 'application/json'
+            }
+          });
+          console.log('Successfully logged out on server');
+        } catch (error) {
+          console.error('Error during server logout:', error);
+          // Continue with local logout even if server logout fails
+        }
+      }
+      
+      // Clear local storage and navigate regardless of server response
       await AsyncStorage.clear();
       navigation.reset({
         index: 0,
@@ -66,6 +88,11 @@ export default function Header({ title, rightIcon, showAddButton = false }: Head
       });
     } catch (error) {
       console.error('Error during logout:', error);
+      // If everything fails, still try to navigate to sign in
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'SignIn' }],
+      });
     }
   };
 

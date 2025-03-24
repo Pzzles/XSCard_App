@@ -10,6 +10,16 @@ exports.authenticateUser = async (req, res, next) => {
         }
 
         const token = authHeader.split('Bearer ')[1];
+        
+        // Check if token is blacklisted
+        const blacklistDoc = await db.collection('tokenBlacklist').doc(token).get();
+        if (blacklistDoc.exists) {
+            return res.status(401).json({
+                message: 'Token has been revoked. Please login again.',
+                code: 'TOKEN_REVOKED'
+            });
+        }
+        
         // Verify the token and attach user info to request
         const decodedToken = await admin.auth().verifyIdToken(token);
         req.user = decodedToken;

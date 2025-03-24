@@ -875,10 +875,10 @@ export default function Calendar() {
         endDateTime: endDateTime.toISOString(),
         location: meetingDetails.location || "Virtual Meeting",
         duration: meetingDetails.duration, // Explicitly pass duration in minutes
-        attendees: [{
-          name: selectedContact ? `${selectedContact.name} ${selectedContact.surname}`.trim() : 'Unknown',
-          email: selectedContact?.email || 'no-email@example.com'
-        }],
+        attendees: meetingDetails.attendees.map(attendee => ({
+          name: `${attendee.name} ${attendee.surname}`.trim(),
+          email: attendee.email || 'no-email@example.com'
+        })),
         organizer: {
           name: userInfo?.name ? `${userInfo.name} ${userInfo.surname}`.trim() : "XS Card User",
           email: userInfo?.email || "contact@xscard.com"

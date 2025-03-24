@@ -22,6 +22,7 @@ interface Card {
   createdAt: string;  // Changed to string format
   color?: string;
   name?: string;
+  surname?: string;
 }
 
 interface MonthCounts {
@@ -92,8 +93,8 @@ const CardsModal = ({ visible, onClose, cards }: CardsModalProps) => (
               key={index} 
               style={styles.modalItem}
             >
-              <Text style={styles.modalItemTitle}>{card.name || `Card ${index + 1}`}</Text>
-              <Text style={styles.modalItemSubtitle}>{new Date(card.createdAt).toLocaleDateString()}</Text>
+              <Text style={styles.modalItemTitle}>{card.name +" "+ card.surname || `Card ${index + 1}`}</Text>
+              {/* <Text style={styles.modalItemSubtitle}>{new Date(card.createdAt).toLocaleDateString()}</Text> */}
             </View>
           ))}
         </ScrollView>
@@ -107,15 +108,16 @@ export default function AdminDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [totalContacts, setTotalContacts] = useState(0);
   const [totalCards, setTotalCards] = useState(0);
-  const [weeklyData, setWeeklyData] = useState({
+  const [monthlyData, setMonthlyData] = useState({
     labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
     datasets: [{
       data: [0, 0, 0, 0, 0, 0],
       color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`
     }]
   });
-  const [cardsWeeklyData, setCardsWeeklyData] = useState([0, 0, 0, 0, 0, 0, 0]);
+  const [cardsMonthlyData, setCardsMonthlyData] = useState([0, 0, 0, 0, 0, 0, 0]);
   const [userPlan, setUserPlan] = useState<string>('free');
+  const [timeRange, setTimeRange] = useState<'3m' | '6m' | '1y'>('6m');
   const navigation = useNavigation<AdminDashboardNavigationProp>();
   const [showContactsModal, setShowContactsModal] = useState(false);
   const [showCardsModal, setShowCardsModal] = useState(false);
@@ -126,18 +128,37 @@ export default function AdminDashboard() {
     contacts: true
   });
 
+  // Get dynamic list based on selected time range
+  const getRecentMonths = () => {
+    const months = [];
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const today = new Date();
+    
+    let numMonths = 6; // Default for 6m
+    if (timeRange === '3m') numMonths = 3;
+    if (timeRange === '1y') numMonths = 12;
+    
+    for (let i = numMonths - 1; i >= -1; i--) {
+      const d = new Date(today);
+      d.setMonth(today.getMonth() - i);
+      months.push(monthNames[d.getMonth()]);
+    }
+    
+    return months;
+  };
+
   const countByMonth = (dates: string[]) => {
     type MonthCounts = {
       [key: string]: number;
     };
     
-    const counts: MonthCounts = {
-      'Dec': 0,
-      'Jan': 0,
-      'Feb': 0,
-      'Mar': 0,
-      'Apr': 0
-    };
+    const recentMonths = getRecentMonths();
+    const counts: MonthCounts = {};
+    
+    // Initialize counts for all recent months
+    recentMonths.forEach(month => {
+      counts[month] = 0;
+    });
 
     dates.forEach(dateStr => {
       if (!dateStr) {
@@ -148,7 +169,7 @@ export default function AdminDashboard() {
       try {
         // Extract month from date string like "February 25, 2025 at 6:25:00 PM GMT+2"
         const monthFull = dateStr.split(' ')[0];
-        const monthShort = monthFull.slice(0, 3) as keyof MonthCounts;
+        const monthShort = monthFull.slice(0, 3);
         if (monthShort in counts) {
           counts[monthShort]++;
         }
@@ -189,17 +210,17 @@ export default function AdminDashboard() {
       const cardCounts = countByMonth(cardDates);
       const contactCounts = countByMonth(contactDates);
 
-      // Create chart data
-      const months = ['Dec', 'Jan', 'Feb', 'Mar', 'Apr'];
-      setWeeklyData({
-        labels: months,
+      // Create chart data with dynamic months
+      const recentMonths = getRecentMonths();
+      setMonthlyData({
+        labels: recentMonths,
         datasets: [
           {
-            data: months.map(month => cardCounts[month as keyof MonthCounts]),
+            data: recentMonths.map(month => cardCounts[month] || 0),
             color: () => '#FF526D'
           },
           {
-            data: months.map(month => contactCounts[month]),
+            data: recentMonths.map(month => contactCounts[month] || 0),
             color: () => '#1B2559'
           }
         ]
@@ -259,6 +280,14 @@ export default function AdminDashboard() {
     checkUserPlan();
   }, [navigation]);
 
+  // Refetch data when time range changes
+  useEffect(() => {
+    if (!isLoading) {
+      setIsLoading(true);
+      fetchData();
+    }
+  }, [timeRange]);
+
   const toggleMetric = (metric: 'cards' | 'contacts') => {
     if (visibleMetrics.cards && visibleMetrics.contacts) {
       // If both are visible, show only the clicked one
@@ -276,25 +305,25 @@ export default function AdminDashboard() {
   };
 
   const getFilteredChartData = () => {
-    const months = ['Dec', 'Jan', 'Feb', 'Mar', 'Apr'];
+    const recentMonths = getRecentMonths();
     const datasets = [];
     
     if (visibleMetrics.cards) {
       datasets.push({
-        data: weeklyData.datasets[0].data,
+        data: monthlyData.datasets[0].data,
         color: () => '#FF526D'
       });
     }
     
     if (visibleMetrics.contacts) {
       datasets.push({
-        data: weeklyData.datasets[1].data,
+        data: monthlyData.datasets[1].data,
         color: () => '#1B2559'
       });
     }
     
     return {
-      labels: months,
+      labels: recentMonths,
       datasets
     };
   };
@@ -341,10 +370,30 @@ export default function AdminDashboard() {
           </TouchableOpacity>
         </View>
 
-        {/* Weekly Growth Section - Removed ellipses icon */}
+        {/* Monthly Growth Section - Removed ellipses icon */}
         <View style={styles.growthSection}>
           <View style={styles.growthHeader}>
             <Text style={styles.sectionTitle}>Monthly Growth</Text>
+            <View style={styles.timeRangeSelector}>
+              <TouchableOpacity 
+                style={[styles.timeRangeButton, timeRange === '3m' && styles.activeTimeRange]} 
+                onPress={() => setTimeRange('3m')}
+              >
+                <Text style={[styles.timeRangeText, timeRange === '3m' && styles.activeTimeRangeText]}>3M</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.timeRangeButton, timeRange === '6m' && styles.activeTimeRange]} 
+                onPress={() => setTimeRange('6m')}
+              >
+                <Text style={[styles.timeRangeText, timeRange === '6m' && styles.activeTimeRangeText]}>6M</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.timeRangeButton, timeRange === '1y' && styles.activeTimeRange]} 
+                onPress={() => setTimeRange('1y')}
+              >
+                <Text style={[styles.timeRangeText, timeRange === '1y' && styles.activeTimeRangeText]}>1Y</Text>
+              </TouchableOpacity>
+            </View>
           </View>
           
           <LineChart
@@ -352,12 +401,15 @@ export default function AdminDashboard() {
             width={Dimensions.get('window').width - 40}
             height={220}
             yAxisInterval={1} // Force 1 unit intervals
+            yAxisLabel=""
+            yAxisSuffix=""
             chartConfig={{
               backgroundColor: '#fff',
               backgroundGradientFrom: '#fff',
               backgroundGradientTo: '#fff',
               decimalPlaces: 0,
               color: (opacity = 1) => `rgba(27, 37, 89, ${opacity})`,
+              labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
               style: {
                 borderRadius: 16
               },
@@ -375,6 +427,8 @@ export default function AdminDashboard() {
             bezier
             style={styles.chart}
           />
+          
+          <Text style={styles.axisLabel}>Number of Cards/Contacts</Text>
           
           <View style={styles.legendContainer}>
             <TouchableOpacity 
@@ -494,7 +548,15 @@ const styles = StyleSheet.create({
   chart: {
     marginVertical: 8,
     borderRadius: 16,
-    marginRight:50
+    marginRight: 50
+  },
+  axisLabel: {
+    textAlign: 'center',
+    fontSize: 12,
+    color: '#666',
+    marginTop: 5,
+    marginBottom: 10,
+    fontStyle: 'italic'
   },
   legendContainer: {
     flexDirection: 'row',
@@ -632,5 +694,27 @@ const styles = StyleSheet.create({
   },
   legendTextInactive: {
     color: '#999',
+  },
+  timeRangeSelector: {
+    flexDirection: 'row',
+    backgroundColor: '#F0F0F0',
+    borderRadius: 8,
+    padding: 2,
+  },
+  timeRangeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  activeTimeRange: {
+    backgroundColor: COLORS.primary,
+  },
+  timeRangeText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#666',
+  },
+  activeTimeRangeText: {
+    color: 'white',
   },
 });
