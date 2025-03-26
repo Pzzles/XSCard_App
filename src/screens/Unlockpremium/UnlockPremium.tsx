@@ -17,6 +17,7 @@ import { API_BASE_URL, ENDPOINTS, authenticatedFetch, getUserId } from '../../ut
 
 type RootStackParamList = {
   UnlockPremium: undefined;
+  Login: undefined; // Add Login screen to the type definition
   // ... other screens
 };
 
@@ -70,6 +71,44 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
     }
   };
 
+  // Add a logout function
+  const logoutUser = async () => {
+    try {
+      // Clear all user data from AsyncStorage
+      await AsyncStorage.removeItem('userData');
+      await AsyncStorage.removeItem('userToken');
+      
+      // Try different navigation approaches
+      try {
+        // Option 1: Simple navigation to Login screen
+        navigation.navigate('Login');
+      } catch (navError) {
+        console.log('Direct navigation failed, trying alternative method');
+        
+        try {
+          // Option 2: If Login is in a parent navigator, go back first then navigate
+          navigation.goBack();
+          setTimeout(() => {
+            // Using setTimeout to ensure the goBack action completes first
+            navigation.navigate('Login');
+          }, 100);
+        } catch (altNavError) {
+          console.error('Navigation to Login failed:', altNavError);
+          
+          // Option 3: If all else fails, alert the user to restart the app
+          Alert.alert(
+            'Logged Out',
+            'You have been logged out successfully. Please restart the app to log in again.',
+            [{ text: 'OK' }]
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Error during logout:', error);
+      Alert.alert('Error', 'Failed to log out. Please try again.');
+    }
+  };
+
   const handleCancelSubscription = async () => {
     Alert.alert(
       'Cancel Subscription',
@@ -97,16 +136,16 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
                 console.log('Cancellation result:', result);
                 
                 if (result.status) {
-                  // Update local user data
-                  const userData = await AsyncStorage.getItem('userData');
-                  if (userData) {
-                    const parsedUserData = JSON.parse(userData);
-                    parsedUserData.plan = 'free';
-                    await AsyncStorage.setItem('userData', JSON.stringify(parsedUserData));
-                  }
-                  
-                  setUserPlan('free');
-                  Alert.alert('Subscription Cancelled', 'Your subscription has been cancelled successfully.');
+                  Alert.alert(
+                    'Subscription Cancelled', 
+                    'Your subscription has been cancelled successfully. You will now be logged out.',
+                    [
+                      {
+                        text: 'OK',
+                        onPress: () => logoutUser()
+                      }
+                    ]
+                  );
                 } else {
                   Alert.alert('Error', result.message || 'Failed to cancel subscription.');
                 }
@@ -139,14 +178,29 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
         body: JSON.stringify({
           email: userEmail,
           amount: amount,
+          // Add a success URL that will handle returning to the app and logging out
+          // This depends on deep linking configuration in your app
+          callback_url: 'xscard://payment-success'
         }),
       });
 
       const data = await response.json();
 
       if (data.status && data.data?.authorization_url) {
-        // Open payment URL in browser
-        await Linking.openURL(data.data.authorization_url);
+        // Inform user they'll need to log back in after payment
+        Alert.alert(
+          'Payment Processing',
+          'You will be redirected to complete your payment. After successful payment, please log back in to access your premium features.',
+          [
+            {
+              text: 'Continue',
+              onPress: async () => {
+                // Open payment URL in browser
+                await Linking.openURL(data.data.authorization_url);
+              }
+            }
+          ]
+        );
       } else {
         throw new Error('Payment initialization failed');
       }
