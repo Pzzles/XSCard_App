@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Platform, Modal, Alert, TextInput, KeyboardAvoidingView, Animated, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Platform, Modal, Alert, TextInput, KeyboardAvoidingView, Animated, ActivityIndicator, FlatList } from 'react-native';
 import { Calendar as RNCalendar, DateData } from 'react-native-calendars';
 import { COLORS } from '../../constants/colors';
 import AdminHeader from '../../components/AdminHeader';
@@ -98,7 +98,7 @@ const LocationInput = ({ value, onChange }: {
   onChange: (location: string) => void;
 }) => {
   const [suggestions, setSuggestions] = useState<string[]>([]);
-  const scrollViewRef = useRef<ScrollView>(null);
+  const [showAndroidSuggestions, setShowAndroidSuggestions] = useState(false);
   
   // Common meeting locations
   const commonLocations = [
@@ -145,44 +145,100 @@ const LocationInput = ({ value, onChange }: {
     return filtered;
   };
 
+  const handleTextChange = (text: string) => {
+    onChange(text);
+    const newSuggestions = getSuggestions(text);
+    setSuggestions(newSuggestions);
+    if (Platform.OS === 'android') {
+      setShowAndroidSuggestions(newSuggestions.length > 0);
+    }
+  };
+
+  const handleSelectSuggestion = (suggestion: string) => {
+    onChange(suggestion);
+    setSuggestions([]);
+    if (Platform.OS === 'android') {
+      setShowAndroidSuggestions(false);
+    }
+  };
+
+  // Render iOS suggestions inline
+  const renderIOSSuggestions = () => {
+    if (Platform.OS !== 'ios' || suggestions.length === 0) return null;
+    
+    return (
+      <View style={styles.suggestionsContainer}>
+        <ScrollView 
+          nestedScrollEnabled={true}
+          keyboardShouldPersistTaps="handled"
+          style={styles.suggestionsScrollView}
+          contentContainerStyle={styles.suggestionsContentContainer}
+          showsVerticalScrollIndicator={true}
+          bounces={false}
+          overScrollMode="never"
+        >
+          {suggestions.map((suggestion, index) => (
+            <TouchableOpacity
+              key={index}
+              style={styles.suggestionItem}
+              onPress={() => handleSelectSuggestion(suggestion)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.suggestionText}>{suggestion}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.locationInputContainer}>
       <TextInput
         style={styles.textInput}
         placeholder="Add meeting location..."
         value={value}
-        onChangeText={(text) => {
-          onChange(text);
-          setSuggestions(getSuggestions(text));
+        onChangeText={handleTextChange}
+        onFocus={() => {
+          if (Platform.OS === 'android' && suggestions.length > 0) {
+            setShowAndroidSuggestions(true);
+          }
         }}
       />
-      {suggestions.length > 0 && (
-        <View style={styles.suggestionsContainer}>
-          <ScrollView 
-            ref={scrollViewRef}
-            nestedScrollEnabled={true}
-            keyboardShouldPersistTaps="handled"
-            style={styles.suggestionsScrollView}
-            contentContainerStyle={styles.suggestionsContentContainer}
-            showsVerticalScrollIndicator={true}
-            bounces={false}
-            overScrollMode="never"
+      
+      {/* iOS inline suggestions */}
+      {renderIOSSuggestions()}
+      
+      {/* Android modal suggestions */}
+      {Platform.OS === 'android' && (
+        <Modal
+          visible={showAndroidSuggestions}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowAndroidSuggestions(false)}
+        >
+          <TouchableOpacity 
+            style={styles.androidSuggestionsOverlay}
+            activeOpacity={1}
+            onPress={() => setShowAndroidSuggestions(false)}
           >
-            {suggestions.map((suggestion, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.suggestionItem}
-                onPress={() => {
-                  onChange(suggestion);
-                  setSuggestions([]);
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.suggestionText}>{suggestion}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+            <View style={styles.androidSuggestionsContainer}>
+              <FlatList
+                data={suggestions}
+                keyboardShouldPersistTaps="always"
+                keyExtractor={(_, index) => `suggestion-${index}`}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.suggestionItem}
+                    onPress={() => handleSelectSuggestion(item)}
+                  >
+                    <Text style={styles.suggestionText}>{item}</Text>
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          </TouchableOpacity>
+        </Modal>
       )}
     </View>
   );
@@ -656,6 +712,41 @@ const MONTH_MAP: { [key: string]: string } = {
   'December': '12'
 };
 
+// Add helper function to get today's date in YYYY-MM-DD format
+const getTodayDateString = () => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+// Add helper function to check if a time is in the past for today
+const isTimeInPast = (timeString: string) => {
+  const now = new Date();
+  const [hours, minutes] = timeString.split(':').map(Number);
+  
+  const selectedTime = new Date();
+  selectedTime.setHours(hours, minutes, 0, 0);
+  
+  return selectedTime <= now;
+};
+
+// Add helper function to check if date with time is in the past
+const isDateTimeInPast = (dateString: string, timeString: string) => {
+  const today = getTodayDateString();
+  
+  if (dateString < today) {
+    return true;
+  }
+  
+  if (dateString === today) {
+    return isTimeInPast(timeString);
+  }
+  
+  return false;
+};
+
 export default function Calendar() {
   const [selectedYear, setSelectedYear] = useState('2024');
   const [selectedDate, setSelectedDate] = useState('');
@@ -685,6 +776,7 @@ export default function Calendar() {
     startTime: '',
     endTime: '',
   });
+  const [todayString, setTodayString] = useState(getTodayDateString());
   
   const timeSlots = [
     '09:00', '10:00', '11:00', '12:00',
@@ -858,6 +950,13 @@ export default function Calendar() {
 
       if (!selectedDate || !selectedTime || meetingDetails.attendees.length === 0) {
         Alert.alert('Error', 'Please select date, time and at least one attendee');
+        return;
+      }
+      
+      // Check if the selected date and time are in the past
+      if (isDateTimeInPast(selectedDate, selectedTime)) {
+        Alert.alert('Error', 'Cannot create meetings in the past. Please select a future date and time.');
+        setIsCreatingMeeting(false);
         return;
       }
 
@@ -1142,6 +1241,26 @@ const renderEventDate = (dateStr: string) => {
     </TouchableOpacity>
   );
 
+  // Update the todayString if the component is mounted past midnight
+  useEffect(() => {
+    const todayUpdateInterval = setInterval(() => {
+      const newTodayString = getTodayDateString();
+      if (newTodayString !== todayString) {
+        setTodayString(newTodayString);
+      }
+    }, 60000); // Check every minute
+    
+    return () => clearInterval(todayUpdateInterval);
+  }, [todayString]);
+
+  // Filter available time slots for today
+  const getAvailableTimeSlots = () => {
+    if (selectedDate === todayString) {
+      return timeSlots.filter(time => !isTimeInPast(time));
+    }
+    return timeSlots;
+  };
+
   return (
     <View style={styles.container}>
       <AdminHeader title="Calendar" />
@@ -1152,6 +1271,7 @@ const renderEventDate = (dateStr: string) => {
       >
         <RNCalendar
           style={styles.calendar}
+          minDate={todayString} // Add minimum date to prevent selecting past dates
           theme={{
             backgroundColor: '#ffffff',
             calendarBackground: '#ffffff',
@@ -1242,7 +1362,7 @@ const renderEventDate = (dateStr: string) => {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Select Time</Text>
             <ScrollView style={styles.timeList}>
-              {timeSlots.map((time) => (
+              {getAvailableTimeSlots().map((time) => (
                 <TouchableOpacity
                   key={time}
                   style={[
@@ -1264,6 +1384,9 @@ const renderEventDate = (dateStr: string) => {
                   </Text>
                 </TouchableOpacity>
               ))}
+              {selectedDate === todayString && getAvailableTimeSlots().length < timeSlots.length && (
+                <Text style={styles.pastTimeMessage}>Times in the past are not available</Text>
+              )}
             </ScrollView>
             <TouchableOpacity 
               style={styles.closeButton}
@@ -1768,6 +1891,24 @@ const styles = StyleSheet.create({
   suggestionsContentContainer: {
     flexGrow: 1,
   },
+  androidSuggestionsOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  androidSuggestionsContainer: {
+    width: '80%',
+    maxHeight: 300,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    overflow: 'hidden',
+  },
   suggestionItem: {
     padding: 15,
     borderBottomWidth: 1,
@@ -1958,5 +2099,12 @@ const styles = StyleSheet.create({
     color: '#666',
     marginLeft: 18,
     marginBottom: 2,
+  },
+  pastTimeMessage: {
+    textAlign: 'center',
+    padding: 15,
+    color: '#999',
+    fontStyle: 'italic',
+    fontSize: 14,
   },
 });
