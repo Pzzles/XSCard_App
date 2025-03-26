@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { CommonActions } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -17,7 +18,8 @@ import { API_BASE_URL, ENDPOINTS, authenticatedFetch, getUserId } from '../../ut
 
 type RootStackParamList = {
   UnlockPremium: undefined;
-  Login: undefined; // Add Login screen to the type definition
+  Login: undefined;
+  SignInScreen: undefined;
   // ... other screens
 };
 
@@ -78,31 +80,14 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
       await AsyncStorage.removeItem('userData');
       await AsyncStorage.removeItem('userToken');
       
-      // Try different navigation approaches
-      try {
-        // Option 1: Simple navigation to Login screen
-        navigation.navigate('Login');
-      } catch (navError) {
-        console.log('Direct navigation failed, trying alternative method');
-        
-        try {
-          // Option 2: If Login is in a parent navigator, go back first then navigate
-          navigation.goBack();
-          setTimeout(() => {
-            // Using setTimeout to ensure the goBack action completes first
-            navigation.navigate('Login');
-          }, 100);
-        } catch (altNavError) {
-          console.error('Navigation to Login failed:', altNavError);
-          
-          // Option 3: If all else fails, alert the user to restart the app
-          Alert.alert(
-            'Logged Out',
-            'You have been logged out successfully. Please restart the app to log in again.',
-            [{ text: 'OK' }]
-          );
-        }
-      }
+      // Use CommonActions to reset navigation to the initial route
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: 'SignIn' }],
+        })
+      );
+      
     } catch (error) {
       console.error('Error during logout:', error);
       Alert.alert('Error', 'Failed to log out. Please try again.');
