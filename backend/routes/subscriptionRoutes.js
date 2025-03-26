@@ -20,6 +20,7 @@ router.post('/subscription/trial/initialize', authenticateUser, initializeTrialS
 router.get('/subscription/plans', authenticateUser, getSubscriptionPlans);
 router.get('/subscription/status', authenticateUser, getSubscriptionStatus);
 router.post('/subscription/cancel', authenticateUser, cancelSubscription);
+router.get('/subscription/cancel', cancelSubscription); // Add GET method support for browser redirects
 router.get('/subscription/logs', authenticateUser, getSubscriptionLogs);  // Add new route
 
 module.exports = router;

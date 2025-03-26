@@ -74,6 +74,7 @@ exports.getAllCards = async (req, res) => {
 exports.getCardById = async (req, res) => {
     const { id } = req.params;
     try {
+        // Get the card document
         const cardRef = db.collection('cards').doc(id);
         const doc = await cardRef.get();
         
@@ -83,14 +84,33 @@ exports.getCardById = async (req, res) => {
 
         // Convert Firestore timestamps to readable dates
         const data = doc.data();
+        let cards = [];
+        
         if (data.cards) {
-            data.cards = data.cards.map(card => ({
+            cards = data.cards.map(card => ({
                 ...card,
                 createdAt: formatDate(card.createdAt) // Format for display
             }));
         }
         
-        res.status(200).send(data.cards);
+        // Check user's subscription plan
+        const userRef = db.collection('users').doc(id);
+        const userDoc = await userRef.get();
+        
+        if (userDoc.exists) {
+            const userData = userDoc.data();
+            // Check if user is on free plan or doesn't have an active subscription
+            const isFreePlan = userData.plan === 'free' || 
+                               !['active', 'trial'].includes(userData.subscriptionStatus);
+            
+            if (isFreePlan && cards.length > 1) {
+                // For free users, only return the first card
+                return res.status(200).send([cards[0]]);
+            }
+        }
+        
+        // For premium users or users with only one card, return all cards
+        res.status(200).send(cards);
     } catch (error) {
         console.error('Error fetching card:', error);
         res.status(500).send({ message: 'Error fetching card', error: error.message });
