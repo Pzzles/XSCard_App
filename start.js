@@ -1,4 +1,8 @@
 const { exec, spawn } = require("child_process");
+const express = require('express');
+const path = require('path');
+const app = express();
+const PORT = process.env.PORT || 3000;
 
 let serverProcess = null;
 let expoProcess = null;
@@ -19,12 +23,35 @@ function cleanup() {
 process.on('SIGINT', cleanup);
 process.on('SIGTERM', cleanup);
 
+// Security headers middleware
+app.use((req, res, next) => {
+    // Add Referrer-Policy header
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    
+    // Add other important security headers
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    res.setHeader('Content-Security-Policy', "default-src 'self'");
+    
+    next();
+});
+
+// Static file serving if you have a build folder
+app.use(express.static(path.join(__dirname, 'build')));
+
+// Catch-all handler for SPA
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'build', 'index.html'));
+});
+
 // Start the server
 console.log('Starting server...');
-serverProcess = exec("cd backend && node server.js");
+serverProcess = app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
 
-serverProcess.stdout.on("data", (data) => console.log(`[SERVER]: ${data.trim()}`));
-serverProcess.stderr.on("data", (data) => console.error(`[SERVER ERROR]: ${data.trim()}`));
 serverProcess.on("error", (error) => {
     console.error(`Failed to start server: ${error}`);
     cleanup();
