@@ -1,8 +1,9 @@
 const { exec, spawn } = require("child_process");
 const express = require('express');
+const helmet = require('helmet');
 const path = require('path');
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8383;
 
 let serverProcess = null;
 let expoProcess = null;
@@ -23,20 +24,23 @@ function cleanup() {
 process.on('SIGINT', cleanup);
 process.on('SIGTERM', cleanup);
 
-// Security headers middleware
-app.use((req, res, next) => {
-    // Add Referrer-Policy header
-    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    
-    // Add other important security headers
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'DENY');
-    res.setHeader('X-XSS-Protection', '1; mode=block');
-    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-    res.setHeader('Content-Security-Policy', "default-src 'self'");
-    
-    next();
-});
+// Add security headers using Helmet
+app.use(helmet({
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      connectSrc: ["'self'", "https://*.render.com"]
+    }
+  },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true
+  }
+}));
 
 // Static file serving if you have a build folder
 app.use(express.static(path.join(__dirname, 'build')));
@@ -68,4 +72,4 @@ setTimeout(() => {
     expoProcess.on("error", (error) => {
         console.error(`Failed to start Expo: ${error}`);
         cleanup();
-    });}, 3000);
+    });}, 8383);

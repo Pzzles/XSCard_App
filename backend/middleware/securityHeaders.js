@@ -1,19 +1,36 @@
 /**
- * Middleware to add security headers to all responses
+ * Middleware to add security headers using Helmet
  */
-const securityHeaders = (req, res, next) => {
-  // Fix for the missing Referrer-Policy header
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+const helmet = require('helmet');
+
+// Create a configured instance of helmet middleware
+const securityHeaders = helmet({
+  // Configure Referrer-Policy (which was missing according to the pentest)
+  referrerPolicy: {
+    policy: 'strict-origin-when-cross-origin',
+  },
   
-  // Additional recommended security headers
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('X-XSS-Protection', '1; mode=block');
-  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-  res.setHeader('Content-Security-Policy', "default-src 'self'");
+  // Configure Content Security Policy
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      // Add additional directives as needed for your application
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      connectSrc: ["'self'", "https://*.render.com"]
+    },
+  },
   
-  // Continue to the next middleware
-  next();
-};
+  // Set Strict Transport Security
+  hsts: {
+    maxAge: 31536000, // 1 year in seconds
+    includeSubDomains: true,
+    preload: true
+  },
+  
+  // Disable X-Powered-By header
+  hidePoweredBy: true
+});
 
 module.exports = securityHeaders;
