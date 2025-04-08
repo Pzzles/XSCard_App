@@ -30,12 +30,6 @@
       "ios": {
         "distribution": "store"
       }
-    },
-    "production-ios": {
-      "autoIncrement": true,
-      "ios": {
-        "distribution": "store"
-      }
     }
   },
   "submit": {
