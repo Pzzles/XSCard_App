@@ -31,9 +31,10 @@
     },
     "extra": {
       "eas": {
-        "projectId": "75e89bdc-a27b-4ca7-bce8-f76c910d1d47"
+       "projectId": "75e89bdc-a27b-4ca7-bce8-f76c910d1d47"
       }
     },
-    "owner": "p.zzles"
+    "owner": "p.zzles",
+    "id": "a84f7923-57e3-41c8-a3dc-3c07fb9013dc"
   }
 }
