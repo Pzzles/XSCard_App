@@ -128,7 +128,7 @@ export default function Header({ title, rightIcon, showAddButton = false }: Head
         </View>
 
         <View style={styles.rightIconContainer}>
-          {showAddButton && userPlan !== 'free' && (
+          {showAddButton && userPlan !== 'free' && userPlan !== 'enterprise' && (
             <TouchableOpacity style={styles.icon} onPress={handleAddPress}>
               <Text style={styles.iconContainer}>
                 <MaterialIcons name="add" size={24} color={COLORS.black} />
@@ -177,19 +177,21 @@ export default function Header({ title, rightIcon, showAddButton = false }: Head
               <Text style={[styles.menuText, { color: COLORS.secondary }]}>Contacts</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => handleNavigate('UnlockPremium')}
-            >
-              <MaterialIcons 
-                name={userPlan === 'free' ? "star" : "settings"} 
-                size={24} 
-                color={COLORS.secondary} 
-              />
-              <Text style={[styles.menuText, { color: COLORS.secondary }]}>
-                {userPlan === 'free' ? 'Unlock Premium' : 'Manage Subscription'}
-              </Text>
-            </TouchableOpacity>
+            {userPlan !== 'enterprise' && (
+              <TouchableOpacity 
+                style={styles.menuItem}
+                onPress={() => handleNavigate('UnlockPremium')}
+              >
+                <MaterialIcons 
+                  name={userPlan === 'free' ? "star" : "settings"} 
+                  size={24} 
+                  color={COLORS.secondary} 
+                />
+                <Text style={[styles.menuText, { color: COLORS.secondary }]}>
+                  {userPlan === 'free' ? 'Unlock Premium' : 'Manage Subscription'}
+                </Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity 
               style={styles.menuItem}

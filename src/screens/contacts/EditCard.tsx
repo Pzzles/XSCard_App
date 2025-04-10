@@ -563,12 +563,14 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
                 require('../../../assets/images/logoplaceholder.jpg')
               }
             />
-            <TouchableOpacity 
-              style={styles.editLogoButton}
-              onPress={handleLogoEdit}
-            >
-              <MaterialIcons name="edit" size={24} color={COLORS.white} />
-            </TouchableOpacity>
+            {userPlan !== 'enterprise' && (
+              <TouchableOpacity 
+                style={styles.editLogoButton}
+                onPress={handleLogoEdit}
+              >
+                <MaterialIcons name="edit" size={24} color={COLORS.white} />
+              </TouchableOpacity>
+            )}
             
             {/* Profile Image Overlaying Logo */}
             <View style={styles.profileOverlayContainer}>
@@ -639,19 +641,27 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
               onChangeText={(text) => setFormData({...formData, lastName: text})}
             />
             <TextInput 
-              style={styles.input}
+              style={[
+                styles.input, 
+                userPlan === 'enterprise' && styles.disabledInput
+              ]}
               placeholder="Company name"
               placeholderTextColor="#999"
               value={formData.company}
               onChangeText={(text) => setFormData({...formData, company: text})}
+              editable={userPlan !== 'enterprise'}
             />
             <TextInput 
-              style={styles.input}
+              style={[
+                styles.input, 
+                userPlan === 'enterprise' && styles.disabledInput
+              ]}
               placeholder="Email"
               placeholderTextColor="#999"
               value={formData.email}
               onChangeText={(text) => setFormData({...formData, email: text})}
               keyboardType="email-address"
+              editable={userPlan !== 'enterprise'}
             />
             <TextInput 
               style={styles.input}
@@ -1122,6 +1132,10 @@ const styles = StyleSheet.create({
   deleteButtonDisabled: {
     backgroundColor: '#ccc',
     opacity: 0.7,
+  },
+  disabledInput: {
+    backgroundColor: '#E8E8E8',
+    color: '#666',
   },
 });
 
