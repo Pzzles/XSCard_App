@@ -3,188 +3,126 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Email Verification - XSCard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <title>Email Verification - XS Card</title>
     <style>
-        :root {
-            --primary-color: #FF4B6E;
-            --secondary-color: #1B2B5B;
-            --success-color: #28a745;
-            --error-color: #F44336;
-            --dark-text: #333;
-            --light-text: #666;
-            --lighter-text: #888;
-            --border-color: #e9e9e9;
-            --background-light: var(--white);
-            --white: #FFFFFF;
-        }
-        
-        * {
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Poppins', 'Arial', sans-serif;
-            background-color: var(--secondary-color);
-            color: var(--dark-text);
-            line-height: 1.6;
-            min-height: 100vh;
+            background-color: #f5f5f5;
             display: flex;
-            flex-direction: column;
-        }
-        
-        .container {
-            width: 90%;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 40px 20px;
-            flex: 1;
-            display: flex;
-            flex-direction: column;
             justify-content: center;
+            align-items: center;
+            min-height: 100vh;
         }
-        
-        .card {
-            background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-            padding: 30px;
+        .container {
+            background-color: #ffffff;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            max-width: 500px;
+            width: 90%;
             text-align: center;
         }
-        
-        .icon-container {
+        .logo {
+            width: 120px;
+            margin-bottom: 30px;
+        }
+        h1 {
+            color: #1E1B4B;
+            font-size: 28px;
+            margin-bottom: 20px;
+        }
+        p {
+            color: #555;
+            font-size: 16px;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        .success-icon {
             width: 80px;
             height: 80px;
-            margin: 0 auto 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            background-color: #4CAF50;
+            color: white;
             border-radius: 50%;
+            font-size: 50px;
+            line-height: 80px;
+            margin: 0 auto 30px;
         }
-        
-        .success-icon-container {
-            background-color: rgba(40, 167, 69, 0.1);
-        }
-        
-        .error-icon-container {
-            background-color: rgba(244, 67, 54, 0.1);
-        }
-        
-        .success-icon {
-            color: var(--success-color);
-            font-size: 40px;
-        }
-        
         .error-icon {
-            color: var(--error-color);
-            font-size: 40px;
+            width: 80px;
+            height: 80px;
+            background-color: #F44336;
+            color: white;
+            border-radius: 50%;
+            font-size: 50px;
+            line-height: 80px;
+            margin: 0 auto 30px;
         }
-        
-        h1 {
-            font-size: 24px;
+        .button {
+            display: inline-block;
+            background-color: #1E1B4B;
+            color: white;
+            padding: 12px 30px;
+            border-radius: 25px;
+            text-decoration: none;
             font-weight: 600;
-            margin-bottom: 15px;
+            margin-top: 20px;
+            transition: background-color 0.3s;
         }
-        
-        .success-heading {
-            color: var(--success-color);
+        .button:hover {
+            background-color: #FF69B4;
         }
-        
-        .error-heading {
-            color: var(--error-color);
-        }
-        
-        p {
-            margin-bottom: 20px;
-            color: var(--light-text);
-            font-size: 16px;
-        }
-        
-        .info-section {
-            background-color: rgba(27, 43, 91, 0.05);
-            border: 1px solid rgba(27, 43, 91, 0.2);
-            border-radius: 6px;
-            padding: 20px;
-            margin: 20px 0;
-            text-align: left;
-        }
-        
-        footer {
-            text-align: center;
-            padding: 20px;
+        .footer {
+            margin-top: 40px;
             font-size: 14px;
-            color: var(--lighter-text);
-        }
-        
-        @media (max-width: 768px) {
-            .container {
-                padding: 20px 15px;
-            }
-            
-            .card {
-                padding: 20px 15px;
-            }
+            color: #777;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="card" id="verification-container">
-            <!-- Content will be replaced dynamically -->
-        </div>
+    <div class="container" id="verification-container">
+        <!-- Content will be replaced dynamically -->
     </div>
-    
-    <footer>
-        <p>&copy; <span id="currentYear"></span> XSCard. All Rights Reserved.</p>
-    </footer>
 
     <script>
-        // Set current year in footer
-        document.getElementById('currentYear').textContent = new Date().getFullYear();
-        
         // Templates for different states
         const templates = {
             success: `
-                <div class="icon-container success-icon-container">
-                    <span class="success-icon">✓</span>
-                </div>
-                <h1 class="success-heading">Email Verified Successfully!</h1>
-                <p>Your email has been successfully verified. You can now access all features of your XSCard account.</p>
-                <div class="info-section">
-                    <p>Your account is now fully activated. You can close this window and continue using the XSCard application.</p>
+                <div class="success-icon">✓</div>
+                <h1>Email Verified Successfully!</h1>
+                <p>Your email has been successfully verified. You can now sign in to your XS Card account and access all features.</p>
+                <a href="/signin" class="button">Sign In</a>
+                <div class="footer">
+                    <p>Thank you for choosing XS Card</p>
                 </div>
             `,
             alreadyVerified: `
-                <div class="icon-container success-icon-container">
-                    <span class="success-icon">✓</span>
-                </div>
-                <h1 class="success-heading">Email Already Verified</h1>
-                <p>Your email address has already been verified. You can continue using all features of your XSCard account.</p>
-                <div class="info-section">
-                    <p>No further action is needed. You can close this window and continue using the XSCard application.</p>
+                <div class="success-icon">✓</div>
+                <h1>Email Already Verified</h1>
+                <p>Your email address has already been verified. You can continue using all features of your XS Card account.</p>
+                <a href="/signin" class="button">Sign In</a>
+                <div class="footer">
+                    <p>Thank you for choosing XS Card</p>
                 </div>
             `,
             error: `
-                <div class="icon-container error-icon-container">
-                    <span class="error-icon">✗</span>
-                </div>
-                <h1 class="error-heading">Verification Failed</h1>
+                <div class="error-icon">✗</div>
+                <h1>Verification Failed</h1>
                 <p>We couldn't verify your email address. The verification link may have expired or is invalid.</p>
-                <div class="info-section">
-                    <p>Please open the XSCard application and request a new verification email from your profile settings.</p>
-                    <p>If you continue to experience issues, please contact our support team.</p>
+                <p>Please try signing in to request a new verification email.</p>
+                <a href="/signin" class="button">Sign In</a>
+                <div class="footer">
+                    <p>Need help? Contact support@xscard.com</p>
                 </div>
             `,
             userNotFound: `
-                <div class="icon-container error-icon-container">
-                    <span class="error-icon">✗</span>
-                </div>
-                <h1 class="error-heading">User Not Found</h1>
+                <div class="error-icon">✗</div>
+                <h1>User Not Found</h1>
                 <p>We couldn't find your account. The verification link may be invalid or your account has been deleted.</p>
-                <div class="info-section">
-                    <p>Please ensure you're using the correct verification link or create a new account through the XSCard application.</p>
+                <a href="/signup" class="button">Create Account</a>
+                <div class="footer">
+                    <p>Need help? Contact support@xscard.com</p>
                 </div>
             `
         };
