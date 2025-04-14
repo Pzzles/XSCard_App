@@ -291,44 +291,11 @@ exports.signIn = async (req, res) => {
     const { email, password } = req.body;
 
     try {
-        // This implementation is secure against timing attacks because:
-        // 1. Authentication is handled by Firebase Auth, not local code
-        // 2. Password verification happens server-side on Firebase's infrastructure
-        // 3. The entire password is sent at once, not character-by-character
-        // 4. Firebase Auth implements rate limiting and security best practices
-        
-        const ipAddress = req.ip || req.connection.remoteAddress;
-        const ipRef = db.collection('loginAttempts').doc(ipAddress);
-        const ipDoc = await ipRef.get();
-        
-        const now = Date.now();
-        const windowMs = 15 * 60 * 1000; // 15 minutes
-        const maxAttempts = 5; // 5 attempts per 15 minutes
-        
-        let attempts = ipDoc.exists ? ipDoc.data().attempts || [] : [];
-        
-        // Filter attempts to only include those within the time window
-        attempts = attempts.filter(timestamp => now - timestamp < windowMs);
-        
-        if (attempts.length >= maxAttempts) {
-            return res.status(429).send({ 
-                message: 'Too many login attempts. Please try again later.',
-                retryAfter: Math.ceil((attempts[0] + windowMs - now) / 1000) // seconds until retry
-            });
-        }
-        
-        // Add this attempt to the list
-        attempts.push(now);
-        await ipRef.set({ attempts });
-
         const response = await axios.post(AUTH_ENDPOINTS.signIn, {
             email,
             password,
             returnSecureToken: true
         });
-
-        // If login successful, clear the attempts
-        await ipRef.delete();
 
         const { idToken, localId } = response.data;
         const userDoc = await db.collection('users').doc(localId).get();

@@ -31,6 +31,10 @@ router.post('/AddUser', upload.fields([
 ]), userController.addUser);
 router.get('/verify-email', userController.verifyEmail);
 
+// Public routes for the frontend (no authentication required)
+router.get('/public/Users', userController.getAllUsers);
+router.get('/public/Users/:id', userController.getUserById);
+
 // All routes below this middleware will require authentication
 router.use(authenticateUser);
 

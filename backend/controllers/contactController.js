@@ -225,7 +225,7 @@ exports.saveContactInfo = async (req, res) => {
         // Send email notification if user has email
         if (userData.email) {
             const mailOptions = {
-                from: process.env.EMAIL_USER,
+                from: process.env.EMAIL_USER_XSPARK,
                 to: userData.email,
                 subject: 'Someone Saved Your Contact Information',
                 html: `
@@ -287,15 +287,6 @@ exports.updateContact = async (req, res) => {
     }
 
     try {
-        // Get user's plan information
-        const userRef = db.collection('users').doc(id);
-        const userDoc = await userRef.get();
-        const userData = userDoc.data();
-
-        if (!userData) {
-            return res.status(404).send({ message: 'User not found' });
-        }
-
         const contactRef = db.collection('contacts').doc(id);
         const doc = await contactRef.get();
 
@@ -303,27 +294,14 @@ exports.updateContact = async (req, res) => {
             return res.status(404).send({ message: 'Contact list not found' });
         }
 
-        // Ensure we use contactList consistently
-        const currentContacts = doc.data().contactList || [];
-        
-        // Check if free user has reached contact limit
-        if (userData.plan === 'free' && currentContacts.length >= FREE_PLAN_CONTACT_LIMIT) {
-            console.log(`Contact limit reached for free user ${id}. Current contacts: ${currentContacts.length}`);
-            return res.status(403).send({
-                message: 'Contact limit reached',
-                error: 'FREE_PLAN_LIMIT_REACHED',
-                currentContacts: currentContacts.length,
-                limit: FREE_PLAN_CONTACT_LIMIT
-            });
-        }
-
+        const currentContacts = doc.data().contactsList || [];
         currentContacts.push({
             ...contactInfo,
-            createdAt: admin.firestore.Timestamp.now()
+            createdAt: new Date().toISOString()
         });
 
         await contactRef.update({
-            contactList: currentContacts
+            contactsList: currentContacts
         });
 
         res.status(200).send({ 
@@ -349,7 +327,7 @@ exports.deleteContact = async (req, res) => {
         if (!doc.exists) {
             return res.status(404).send({ message: 'Contact list not found' });
         }
-        
+
         await contactRef.delete();
         res.status(200).send({ 
             message: 'Contact list deleted successfully',
@@ -367,8 +345,9 @@ exports.deleteContact = async (req, res) => {
 exports.deleteContactFromList = async (req, res) => {
     const { id, index } = req.params;
     const contactIndex = parseInt(index);
-    console.log('Delete request received:', { id, index, contactIndex }); // Debug log
     
+    console.log('Delete request received:', { id, index, contactIndex }); // Debug log
+
     try {
         const contactRef = db.collection('contacts').doc(id);
         const doc = await contactRef.get();
@@ -387,14 +366,14 @@ exports.deleteContactFromList = async (req, res) => {
             requestedIndex: contactIndex,
             contacts: currentContacts
         });
-        
+
         if (contactIndex < 0 || contactIndex >= currentContacts.length) {
             console.log('Index out of range:', { contactIndex, length: currentContacts.length });
             return res.status(400).send({ message: 'Contact index out of range' });
         }
 
         currentContacts.splice(contactIndex, 1);
-        
+
         await contactRef.update({
             contactList: currentContacts // Note: using contactList, not contactsList
         });
