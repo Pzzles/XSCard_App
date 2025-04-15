@@ -524,7 +524,34 @@ const handleTrialCallback = async (req, res) => {
             
             console.log('Delayed subscription result:', subscriptionResult);
 
-            if (subscriptionResult.status) {
+            // Handle both success case and the case where subscription already exists
+            if (subscriptionResult.status || 
+                (subscriptionResult.code === 'duplicate_subscription' && 
+                 subscriptionResult.message?.includes('already in place'))) {
+                
+                // Get the subscription code - either from the result or we'll need to fetch it
+                let subscriptionCode, subscriptionId;
+                
+                if (subscriptionResult.status) {
+                    // If subscription was created successfully, get details from result
+                    subscriptionCode = subscriptionResult.data.subscription_code;
+                    subscriptionId = subscriptionResult.data.id;
+                } else {
+                    // For duplicate subscription, we need to fetch the existing subscription details
+                    console.log('Subscription already exists. Using existing subscription.');
+                    
+                    // Log the duplicate subscription scenario
+                    await logSubscriptionEvent(userId, 'duplicate_subscription_detected', {
+                        customerCode,
+                        planId,
+                        reference
+                    });
+                    
+                    // We'll just use placeholders for now and rely on webhooks to update with correct info
+                    subscriptionCode = 'existing_subscription';
+                    subscriptionId = 'existing_subscription';
+                }
+
                 // Update user with trial and subscription info
                 await userDoc.ref.update({
                     subscriptionStatus: 'trial',
@@ -533,8 +560,8 @@ const handleTrialCallback = async (req, res) => {
                     trialStartDate: new Date().toISOString(),
                     trialEndDate: trialEndDate.toISOString(),
                     paymentReference: reference,
-                    subscriptionCode: subscriptionResult.data.subscription_code,
-                    subscriptionId: subscriptionResult.data.id,
+                    subscriptionCode: subscriptionCode,
+                    subscriptionId: subscriptionId,
                     lastUpdated: new Date().toISOString(),
                     plan: 'premium' // Set plan to premium for RBAC
                 });
@@ -545,15 +572,18 @@ const handleTrialCallback = async (req, res) => {
                     email: userEmail,
                     planId: planId,
                     customerCode: customerCode,
-                    subscriptionCode: subscriptionResult.data.subscription_code,
-                    subscriptionId: subscriptionResult.data.id,
+                    subscriptionCode: subscriptionCode,
+                    subscriptionId: subscriptionId,
                     reference: reference,
                     status: 'trial',
                     trialStartDate: new Date().toISOString(),
                     trialEndDate: trialEndDate.toISOString(),
                     createdAt: new Date().toISOString(),
                     paymentData: paymentData.data,
-                    subscriptionData: subscriptionResult.data
+                    subscriptionData: subscriptionResult.status ? subscriptionResult.data : { 
+                        note: 'Using existing subscription',
+                        original_error: subscriptionResult
+                    }
                 });
                 
                 console.log('User trial subscription setup successfully');
@@ -785,7 +815,22 @@ const handleSubscriptionWebhook = async (req, res) => {
  * Cancel a user's subscription with Paystack
  */
 const cancelSubscription = async (req, res) => {
-    try {
+    try {        
+        // Check if this is a GET request - serve the subscription cancel HTML page
+        if (req.method === 'GET') {
+            return res.sendFile('payment-cancelled.html', { root: './public' });
+        }
+        
+        // For POST requests, continue with cancellation logic
+        // Check if user is authenticated
+        if (!req.user || !req.user.uid) {
+            console.log('Unauthenticated cancellation request received');
+            return res.status(401).json({
+                status: false,
+                message: 'Authentication required'
+            });
+        }
+        
         const userId = req.user.uid;
         
         console.log(`Starting cancellation process for user ${userId}`);
@@ -835,7 +880,7 @@ const cancelSubscription = async (req, res) => {
         
         console.log('Extracted values from subscription document:');
         console.log(`- Subscription Code: ${subscriptionCode}`);
-        console.log(`- Email Token: ${emailToken}`);
+        console.log(`- Email Token: ${emailToken || 'Not provided'}`);
         
         // Check if subscription code exists
         if (!subscriptionCode) {

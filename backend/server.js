@@ -6,33 +6,10 @@ const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
 const https = require('https');
-const cors = require('cors');
 const { db, admin } = require('./firebase.js');
 const { sendMailWithStatus } = require('./public/Utils/emailService');
 const app = express();
 const port = 8383;
-
-// Configure CORS with secure origins
-const allowedOrigins = process.env.NODE_ENV === 'production' 
-  ? ['https://xscard.app', 'https://www.xscard.app'] // Production domains - use only HTTPS
-  : ['https://localhost:5173', 'http://localhost:5173']; // Development domains - HTTP allowed only for localhost
-
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow server-to-server requests (no origin)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'userid'],
-  credentials: true
-};
-app.use(cors(corsOptions));
 
 // Import routes
 const userRoutes = require('./routes/userRoutes');
@@ -41,7 +18,6 @@ const contactRoutes = require('./routes/contactRoutes');
 const meetingRoutes = require('./routes/meetingRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const subscriptionRoutes = require('./routes/subscriptionRoutes'); // Add subscription routes
-const departmentsRoutes = require('./routes/departmentsRoutes'); // Add departments routes
 
 // Configure multer for file upload
 const storage = multer.diskStorage({
@@ -139,7 +115,7 @@ app.post('/AddContact', async (req, res) => {
         // Send email notification if user has email
         if (userData.email) {
             const mailOptions = {
-                from: process.env.EMAIL_USER_XSPARK,
+                from: process.env.EMAIL_USER,
                 to: userData.email,
                 subject: 'Someone Saved Your Contact Information',
                 html: `
@@ -230,7 +206,7 @@ app.post('/saveContact', async (req, res) => {
 
         if (userData && userData.email) {
             const mailOptions = {
-                from: process.env.EMAIL_USER_XSPARK,
+                from: process.env.EMAIL_USER,
                 to: userData.email,
                 subject: 'Someone Saved Your Contact Information',
                 html: `
@@ -309,12 +285,66 @@ app.get('/public/cards/:id', async (req, res) => {
     }
 });
 
+// Add a route to handle query form submissions
+app.post('/submit-query', async (req, res) => {
+  try {
+    console.log('Received query form submission:', req.body);
+    
+    const { name, email, message, to } = req.body;
+    
+    if (!name || !email || !message) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields (name, email, message)',
+      });
+    }
+    
+    const mailOptions = {
+      from: process.env.EMAIL_USER, // Use system email as from address
+      replyTo: email, // Set reply-to as the user's email address
+      to: to || 'xscard@xspark.co.za', // Use provided destination or default
+      subject: `New Contact Query from ${name}`,
+      html: `
+        <h2>New Query from XS Card Website</h2>
+        <p><strong>From:</strong> ${name} (${email})</p>
+        <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 10px 0;">
+          <p><strong>Message:</strong></p>
+          <p>${message.replace(/\n/g, '<br>')}</p>
+        </div>
+        <p style="color: #666; font-size: 12px;">This message was sent from the XS Card contact form.</p>
+      `
+    };
+
+    const result = await sendMailWithStatus(mailOptions);
+    console.log('Query email send attempt completed:', result);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Your message has been sent successfully'
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: 'Failed to send your message',
+        details: result
+      });
+    }
+  } catch (error) {
+    console.error('Query submission error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to process your message',
+      error: error.message
+    });
+  }
+});
+
 // Protected routes - after public routes
 app.use('/', userRoutes);
 app.use('/', cardRoutes);
 app.use('/', contactRoutes);
 app.use('/', meetingRoutes);
-app.use('/', departmentsRoutes); // Add departments routes
 app.use('/', paymentRoutes);
 
 // Modify the user creation route to handle file upload
