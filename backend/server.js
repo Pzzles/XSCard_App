@@ -6,15 +6,28 @@ const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
 const https = require('https');
-const cors = require('cors'); // Add this line
+const cors = require('cors');
 const { db, admin } = require('./firebase.js');
 const { sendMailWithStatus } = require('./public/Utils/emailService');
 const app = express();
 const port = 8383;
 
-// Configure CORS
+// Configure CORS with secure origins
+const allowedOrigins = process.env.NODE_ENV === 'production' 
+  ? ['https://xscard.app', 'https://www.xscard.app'] // Production domains - use only HTTPS
+  : ['https://localhost:5173', 'http://localhost:5173']; // Development domains - HTTP allowed only for localhost
+
 const corsOptions = {
-  origin: 'http://localhost:5173',
+  origin: function (origin, callback) {
+    // Allow server-to-server requests (no origin)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'userid'],
   credentials: true
