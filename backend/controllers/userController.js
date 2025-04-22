@@ -296,9 +296,9 @@ exports.signIn = async (req, res) => {
         const ipRef = db.collection('loginAttempts').doc(ipAddress);
         
         const now = Date.now();
-        const windowMs = 2 * 60 * 1000; // 15 minutes
-        const maxIpEmailAttempts = 3; // 5 attempts per IP+email per 15 minutes
-        const maxIpAttempts = 10; // 50 total attempts per IP per 15 minutes
+        const windowMs = 15 * 60 * 1000; // 15 minutes
+        const maxIpEmailAttempts = 5; // 5 attempts per IP+email per 15 minutes
+        const maxIpAttempts = 50; // 50 total attempts per IP per 15 minutes
         const expiresAt = new Date(now + windowMs);
         
         try {
