@@ -291,42 +291,109 @@ exports.signIn = async (req, res) => {
     const { email, password } = req.body;
 
     try {
-        const response = await axios.post(AUTH_ENDPOINTS.signIn, {
-            email,
-            password,
-            returnSecureToken: true
-        });
-
-        const { idToken, localId } = response.data;
-        const userDoc = await db.collection('users').doc(localId).get();
+        const ipAddress = req.ip || req.connection.remoteAddress;
+        const combinedRef = db.collection('loginAttempts').doc(`${ipAddress}_${email}`);
+        const ipRef = db.collection('loginAttempts').doc(ipAddress);
         
-        if (!userDoc.exists) {
-            return res.status(404).send({ message: 'User not found' });
-        }
+        const now = Date.now();
+        const windowMs = 2 * 60 * 1000; // 15 minutes
+        const maxIpEmailAttempts = 3; // 5 attempts per IP+email per 15 minutes
+        const maxIpAttempts = 10; // 50 total attempts per IP per 15 minutes
+        const expiresAt = new Date(now + windowMs);
+        
+        try {
+            // Get both documents
+            const [combinedDoc, ipDoc] = await Promise.all([
+                combinedRef.get(),
+                ipRef.get()
+            ]);
+            
+            // Process IP+email attempts
+            let ipEmailAttempts = combinedDoc.exists ? combinedDoc.data().attempts || [] : [];
+            ipEmailAttempts = ipEmailAttempts.filter(timestamp => now - timestamp < windowMs);
+            
+            // Process IP-wide attempts
+            let ipAttempts = ipDoc.exists ? ipDoc.data().attempts || [] : [];
+            ipAttempts = ipAttempts.filter(timestamp => now - timestamp < windowMs);
+            
+            // Check IP+email limit
+            if (ipEmailAttempts.length >= maxIpEmailAttempts) {
+                return res.status(429).send({ 
+                    message: 'Too many login attempts for this account. Please try again later.',
+                    retryAfter: Math.ceil((ipEmailAttempts[0] + windowMs - now) / 1000) // seconds until retry
+                });
+            }
+            
+            // Check IP-wide limit
+            if (ipAttempts.length >= maxIpAttempts) {
+                return res.status(429).send({ 
+                    message: 'Too many login attempts from this network. Please try again later.',
+                    retryAfter: Math.ceil((ipAttempts[0] + windowMs - now) / 1000) // seconds until retry
+                });
+            }
+            
+            // Record this attempt in both places
+            ipEmailAttempts.push(now);
+            ipAttempts.push(now);
+            
+            await Promise.all([
+                combinedRef.set({ 
+                    attempts: ipEmailAttempts,
+                    email,
+                    expiresAt
+                }),
+                ipRef.set({ 
+                    attempts: ipAttempts,
+                    expiresAt
+                })
+            ]);
+            
+            const response = await axios.post(AUTH_ENDPOINTS.signIn, {
+                email,
+                password,
+                returnSecureToken: true
+            });
+            
+            // If login successful, clear only the IP+email record, not the IP-wide record
+            await combinedRef.delete();
 
-        const userData = userDoc.data();
+            const { idToken, localId } = response.data;
+            const userDoc = await db.collection('users').doc(localId).get();
+            
+            if (!userDoc.exists) {
+                return res.status(404).send({ message: 'User not found' });
+            }
 
-        if (!userData.isEmailVerified) {
-            return res.status(403).send({
-                message: 'Email not verified. Please verify your email or request a new verification email.',
-                needsVerification: true,
-                uid: localId
+            const userData = userDoc.data();
+
+            if (!userData.isEmailVerified) {
+                return res.status(403).send({
+                    message: 'Email not verified. Please verify your email or request a new verification email.',
+                    needsVerification: true,
+                    uid: localId
+                });
+            }
+
+            res.status(200).send({
+                message: 'Sign in successful',
+                token: idToken,
+                user: {
+                    uid: localId,
+                    ...userData
+                }
+            });
+        } catch (error) {
+            console.error('Sign in error:', error.response?.data || error);
+            res.status(401).send({ 
+                message: 'Invalid credentials',
+                error: error.response?.data || error.message
             });
         }
-
-        res.status(200).send({
-            message: 'Sign in successful',
-            token: idToken,
-            user: {
-                uid: localId,
-                ...userData
-            }
-        });
     } catch (error) {
-        console.error('Sign in error:', error.response?.data || error);
-        res.status(401).send({ 
-            message: 'Invalid credentials',
-            error: error.response?.data || error.message
+        console.error('Sign in error:', error);
+        res.status(500).send({ 
+            message: 'Internal Server Error',
+            error: error.message
         });
     }
 };

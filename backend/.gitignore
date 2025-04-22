@@ -35,10 +35,8 @@ yarn-error.*
 .env.*
 
 # sensitive files
-creds.json
 *credentials*.json
 *serviceAccount*.json
 
 # typescript
 *.tsbuildinfo
-backend/creds.json
