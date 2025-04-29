@@ -2,7 +2,7 @@
   "expo": {
     "name": "xscard",
     "slug": "xscard",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icons/icon.png",
     "userInterfaceStyle": "light",
@@ -15,7 +15,7 @@
   "ios": {
     "supportsTablet": true,
     "bundleIdentifier": "com.p.zzles.xscard",
-    "buildNumber": "1.0.1",
+    "buildNumber": "1.0.2",
     "icon": "./assets/icons/icon.png" 
   },
     "android": {
