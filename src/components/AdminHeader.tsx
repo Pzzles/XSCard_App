@@ -7,6 +7,7 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { AdminTabParamList } from '../types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL, authenticatedFetch } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 
 type AdminHeaderNavigationProp = BottomTabNavigationProp<AdminTabParamList>;
 
@@ -17,6 +18,7 @@ type AdminHeaderProps = {
 export default function AdminHeader({ title }: AdminHeaderProps) {
   const navigation = useNavigation<any>();
   const [isMenuVisible, setIsMenuVisible] = useState(false);
+  const { logout } = useAuth();
 
   const handleNavigate = (screen: string) => {
     setIsMenuVisible(false);
@@ -52,19 +54,12 @@ export default function AdminHeader({ title }: AdminHeaderProps) {
         }
       }
       
-      // Clear local storage and navigate regardless of server response
-      await AsyncStorage.clear();
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'SignIn' as keyof AdminTabParamList }],
-      });
+      // Use Auth context logout
+      await logout();
+      
+      // Navigation will be handled by the root App component
     } catch (error) {
       console.error('Error during logout:', error);
-      // If everything fails, still try to navigate to sign in
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'SignIn' as keyof AdminTabParamList }],
-      });
     }
   };
 

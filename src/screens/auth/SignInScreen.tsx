@@ -8,6 +8,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ErrorPopup from '../../components/popups/ErrorPopup';
+import { useAuth } from '../../context/AuthContext';
 
 type SignInScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'SignIn'>;
 
@@ -19,6 +20,7 @@ const ADMIN_CREDENTIALS = {
 
 export default function SignInScreen() {
   const navigation = useNavigation<SignInScreenNavigationProp>();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -77,6 +79,9 @@ export default function SignInScreen() {
       // Check for admin credentials first
       if (email === ADMIN_CREDENTIALS.email && password === ADMIN_CREDENTIALS.password) {
         await AsyncStorage.setItem('userRole', 'admin');
+        const adminUserData = { role: 'admin', userRole: 'admin' };
+        // Use auth context login
+        await login('admin-token', adminUserData);
         navigation.navigate('AdminDashboard');
         return;
       }
@@ -98,15 +103,17 @@ export default function SignInScreen() {
       if (response.ok) {
         // Store the token and user data, making sure to include the uid as id
         const token = `Bearer ${data.token}`;
-        await AsyncStorage.setItem('userToken', token);
         const userData = {
           ...data.user,
           id: data.user.uid,
           name: data.user.name || '',
           email: data.user.email || ''
         };
-        await AsyncStorage.setItem('userData', JSON.stringify(userData));
-        navigation.replace('MainApp');
+        
+        // Use auth context login instead of direct AsyncStorage
+        await login(token, userData);
+        
+        // Navigation will now be handled by the root App component
       } else {
         setErrorMessage(data.message || 'Sign in failed');
         setShowError(true);

@@ -15,6 +15,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL, ENDPOINTS, authenticatedFetch, getUserId } from '../../utils/api';
+import { useAuth } from '../../context/AuthContext';
 
 type RootStackParamList = {
   UnlockPremium: undefined;
@@ -24,6 +25,7 @@ type RootStackParamList = {
 };
 
 const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList, 'UnlockPremium'>) => {
+  const { logout } = useAuth();
   const [selectedPlan, setSelectedPlan] = useState('annually');
   const [userPlan, setUserPlan] = useState<string>('free');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -73,21 +75,12 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
     }
   };
 
-  // Add a logout function
+  // Update the logout function to use the AuthContext
   const logoutUser = async () => {
     try {
-      // Clear all user data from AsyncStorage
-      await AsyncStorage.removeItem('userData');
-      await AsyncStorage.removeItem('userToken');
-      
-      // Use CommonActions to reset navigation to the initial route
-      navigation.dispatch(
-        CommonActions.reset({
-          index: 0,
-          routes: [{ name: 'SignIn' }],
-        })
-      );
-      
+      // Use the auth context logout
+      await logout();
+      // Navigation will be handled by the App component when auth state changes
     } catch (error) {
       console.error('Error during logout:', error);
       Alert.alert('Error', 'Failed to log out. Please try again.');

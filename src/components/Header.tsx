@@ -7,6 +7,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useColorScheme } from '../context/ColorSchemeContext';
 import { API_BASE_URL, authenticatedFetch } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 
 // Update this type to match your actual navigation type
 type RootStackParamList = {
@@ -32,23 +33,14 @@ export default function Header({ title, rightIcon, showAddButton = false }: Head
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const [isMenuVisible, setIsMenuVisible] = useState(false);
   const { colorScheme } = useColorScheme();
+  const { logout, userData } = useAuth();
 
   // Add this useEffect to get the user's plan
   useEffect(() => {
-    const getUserPlan = async () => {
-      try {
-        const userData = await AsyncStorage.getItem('userData');
-        if (userData) {
-          const { plan } = JSON.parse(userData);
-          setUserPlan(plan);
-        }
-      } catch (error) {
-        console.error('Error fetching user plan:', error);
-      }
-    };
-
-    getUserPlan();
-  }, []);
+    if (userData) {
+      setUserPlan(userData.plan || 'free');
+    }
+  }, [userData]);
 
   const handleAddPress = () => {
     navigation.navigate('AddCards');
@@ -80,19 +72,12 @@ export default function Header({ title, rightIcon, showAddButton = false }: Head
         }
       }
       
-      // Clear local storage and navigate regardless of server response
-      await AsyncStorage.clear();
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'SignIn' }],
-      });
+      // Use Auth context logout
+      await logout();
+      
+      // Navigation will be handled by the root App component after auth state changes
     } catch (error) {
       console.error('Error during logout:', error);
-      // If everything fails, still try to navigate to sign in
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'SignIn' }],
-      });
     }
   };
 
