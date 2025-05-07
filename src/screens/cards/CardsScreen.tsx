@@ -23,6 +23,7 @@ interface UserData {
   company?: string;
   profileImage?: string;
   companyLogo?: string;
+  logoZoomLevel?: number;
 }
 
 interface CardData {
@@ -40,6 +41,7 @@ interface CardData {
   colorScheme?: string;
   createdAt: string;
   UserId: any;
+  logoZoomLevel?: number;
 }
 
 interface ShareOption {
@@ -138,6 +140,29 @@ export default function CardsScreen() {
   useFocusEffect(
     React.useCallback(() => {
       setIsLoading(true);
+      
+      // Add a direct API check when screen gets focus to verify server data
+      const verifyServerData = async () => {
+        try {
+          const userId = await getUserId();
+          if (userId) {
+            const response = await authenticatedFetch(ENDPOINTS.GET_CARD + `/${userId}`);
+            const cardsData = await response.json();
+            console.log('FOCUS CHECK - Cards API response:', JSON.stringify(cardsData, null, 2));
+            
+            // Check if logoZoomLevel exists in the data
+            if (cardsData && cardsData.length > 0) {
+              cardsData.forEach((card: any, index: number) => {
+                console.log(`Card ${index} zoom level:`, card.logoZoomLevel);
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Error in verification check:', error);
+        }
+      };
+      
+      verifyServerData();
       loadUserData().finally(() => {
         setIsLoading(false);
       });
@@ -157,6 +182,9 @@ export default function CardsScreen() {
       const cardsArray = await cardResponse.json();
 
       if (cardsArray && cardsArray.length > 0) {
+        // Log the first card's data to check if logoZoomLevel is included
+        console.log('Card data received:', JSON.stringify(cardsArray[0], null, 2));
+        
         setUserData({
           id: userId,
           cards: cardsArray // The response is now directly the cards array
@@ -526,6 +554,38 @@ export default function CardsScreen() {
     },
   });
 
+  // Enhance the applyLogoZoom function with better debugging and handling
+  const applyLogoZoom = (card: CardData) => {
+    try {
+      if (card.logoZoomLevel !== undefined && card.logoZoomLevel !== null) {
+        const zoomLevel = Number(card.logoZoomLevel);
+        if (!isNaN(zoomLevel)) {
+          console.log(`Applying zoom level ${zoomLevel} to card logo`);
+          return {
+            transform: [{ scale: zoomLevel }]
+          };
+        } else {
+          console.warn('Invalid zoom level value:', card.logoZoomLevel);
+        }
+      } else {
+        console.log('No zoom level found for card');
+      }
+    } catch (error) {
+      console.error('Error applying zoom level:', error);
+    }
+    return undefined;
+  };
+
+  // Add an effect to log when cards change in the userData state
+  useEffect(() => {
+    if (userData?.cards && userData.cards.length > 0 && currentPage < userData.cards.length) {
+      const currentCard = userData.cards[currentPage];
+      if (currentCard) {
+        console.log(`Current card (${currentPage}) zoom level:`, currentCard.logoZoomLevel);
+      }
+    }
+  }, [userData, currentPage]);
+
   return (
     <View style={styles.container}>
       <Header 
@@ -567,13 +627,24 @@ export default function CardsScreen() {
 
                 {/* Company Logo and Profile Image */}
                 <View style={styles.logoContainer}>
+                  <View style={styles.logoFrame}>
                   <Image
-                    style={styles.logo}
                     source={card.companyLogo ? 
                       { uri: `${API_BASE_URL}${card.companyLogo}` } : 
                       require('../../../assets/images/logoplaceholder.jpg')
                     }
+                      style={{ 
+                        width: '100%', 
+                        height: '100%',
+                        transform: card.logoZoomLevel ? 
+                          [{ scale: parseFloat(String(card.logoZoomLevel)) }] : 
+                          undefined,
+                        opacity: 1,  // Full opacity
+                      }}
+                      resizeMode="contain"
+                      fadeDuration={300} // Smooth fade-in animation when loading
                   />
+                  </View>
                   <View style={styles.profileOverlayContainer}>
                     <Animated.View style={[styles.profileImageContainer, { transform: [{ rotate: rotateInterpolate }] }]}>
                       <Image
@@ -817,14 +888,22 @@ const styles = StyleSheet.create({
     marginRight: -20,
     alignSelf: 'center',
     marginBottom: 75,
+    borderRadius: 12,
+    padding: 8,
+  },
+  logoFrame: {
+    width: '100%',
+    height: 200,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    borderRadius: 12,
   },
   logo: {
     width: '100%',
-    height: undefined,
-    aspectRatio: 16/9,
+    height: '100%',
     resizeMode: 'contain',
-    backgroundColor: '#F8F8F8',
-    marginHorizontal: 0,
   },
   profileOverlayContainer: {
     position: 'absolute',

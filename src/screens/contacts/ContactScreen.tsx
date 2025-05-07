@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, TextInput, Alert, Modal, Linking, RefreshControl, ActivityIndicator } from 'react-native';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
@@ -56,8 +56,6 @@ export default function ContactsScreen() {
   const [isOptionsModalVisible, setIsOptionsModalVisible] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
   const [modalTitle, setModalTitle] = useState('');
-  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
-  const [contactToDelete, setContactToDelete] = useState<number | null>(null);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [remainingContacts, setRemainingContacts] = useState<number | 'unlimited'>(FREE_PLAN_CONTACT_LIMIT);
@@ -66,9 +64,33 @@ export default function ContactsScreen() {
 
   const { colorScheme } = useColorScheme();
 
+  // Create a ref to store the swipeables
+  const swipeableRefs = useRef<Map<number, Swipeable | null>>(new Map());
+  
+  // Reset refs when contacts change
+  useEffect(() => {
+    swipeableRefs.current = new Map();
+    
+    // Cleanup when component unmounts
+    return () => {
+      closeAllSwipeables();
+    };
+  }, [contacts]);
+
+  // Helper to close all swipeables
+  const closeAllSwipeables = () => {
+    // Close all open swipeables
+    swipeableRefs.current.forEach(ref => {
+      ref?.close();
+    });
+  };
+
   useFocusEffect(
     React.useCallback(() => {
       loadContacts();
+      return () => {
+        closeAllSwipeables();
+      };
     }, [])
   );
 
@@ -112,51 +134,70 @@ export default function ContactsScreen() {
     }
   };
 
-  const deleteContact = async (index: number) => {
-    try {
-      const userId = await getUserId();
-      if (!userId) {
-        throw new Error('User ID not found');
-      }
+  const handleDeleteContact = (index: number) => {
+    // Store a reference to the swipeable we want to delete
+    const swipeableToDelete = swipeableRefs.current.get(index);
+    
+    // First close the swipeable
+    swipeableToDelete?.close();
+    
+    // Small delay to allow the swipeable to close
+    setTimeout(() => {
+      Alert.alert(
+        "Delete Contact",
+        "Are you sure you want to delete this contact?",
+        [
+          { 
+            text: "Cancel", 
+            style: "cancel"
+          },
+          { 
+            text: "Delete", 
+            style: "destructive",
+            onPress: async () => {
+              try {
+                const userId = await getUserId();
+                if (!userId) {
+                  throw new Error('User ID not found');
+                }
 
-      console.log('Attempting to delete contact:', { userId, index });
+                const response = await authenticatedFetch(
+                  `${ENDPOINTS.DELETE_CONTACT}/${userId}/contact/${index}`,
+                  { 
+                    method: 'DELETE',
+                    headers: {
+                      'Content-Type': 'application/json'
+                    }
+                  }
+                );
 
-      const response = await authenticatedFetch(
-        `${ENDPOINTS.DELETE_CONTACT}/${userId}/contact/${index}`,
-        { 
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json'
+                const responseData = await response.json();
+
+                if (!response.ok) {
+                  throw new Error(responseData.message || 'Failed to delete contact');
+                }
+
+                // Update local state
+                const updatedContacts = [...contacts];
+                updatedContacts.splice(index, 1);
+                setContacts(updatedContacts);
+                
+                // Update remaining contacts count
+                if (typeof remainingContacts === 'number') {
+                  setRemainingContacts(remainingContacts + 1);
+                }
+                
+                // Show success message
+                Alert.alert("Success", "Contact deleted successfully");
+              } catch (error) {
+                console.error('Error deleting contact:', error);
+                Alert.alert("Error", error instanceof Error ? error.message : 'Failed to delete contact');
+              }
+            }
           }
-        }
+        ]
       );
-
-      const responseData = await response.json();
-      console.log('Delete response:', responseData);
-
-      if (!response.ok) {
-        throw new Error(responseData.message || 'Failed to delete contact');
-      }
-
-      // Update local state correctly - Important change here
-      const updatedContacts = [...contacts];
-      updatedContacts.splice(index, 1);
-      setContacts(updatedContacts);
-      
-      // Also update remaining contacts count after successful deletion
-      if (typeof remainingContacts === 'number') {
-        setRemainingContacts(remainingContacts + 1);
-      }
-      
-      showModal('Success', responseData.message || 'Contact deleted successfully');
-      
-      // After successful deletion, refresh the contacts list to get updated indices
-      await loadContacts();
-      
-    } catch (error) {
-      console.error('Error deleting contact:', error);
-      showModal('Error', error instanceof Error ? error.message : 'Failed to delete contact');
-    }
+    }, 300);
   };
 
   const filteredContacts = contacts.filter(contact =>
@@ -288,26 +329,6 @@ export default function ContactsScreen() {
     }
   };
 
-  const handleDeleteContact = (index: number) => {
-    setContactToDelete(index);
-    setConfirmModalVisible(true);
-  };
-
-  const confirmDelete = async () => {
-    if (contactToDelete !== null) {
-      try {
-        await deleteContact(contactToDelete);
-        setConfirmModalVisible(false);
-        setContactToDelete(null);
-      } catch (error) {
-        console.error('Error in confirmDelete:', error);
-        // Still close the modal even if there's an error
-        setConfirmModalVisible(false);
-        setContactToDelete(null);
-      }
-    }
-  };
-
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
     loadContacts().finally(() => setRefreshing(false));
@@ -384,14 +405,46 @@ export default function ContactsScreen() {
         {/* Only show remaining contacts for free users */}
         {remainingContacts !== 'unlimited' && (
           <View style={styles.contactCountContainer}>
-            <Text style={[
-              styles.contactCountText,
-              { color: remainingContacts === 0 ? COLORS.error : COLORS.black }
-            ]}>
-              {remainingContacts > 0 
-                ? `Remaining Contacts: ${remainingContacts}` 
-                : 'Contact limit reached. Upgrade to add more!'}
-            </Text>
+            <View style={styles.contactCountIconContainer}>
+              <MaterialIcons 
+                name={remainingContacts === 0 ? "error-outline" : "people-outline"} 
+                size={22} 
+                color={remainingContacts === 0 ? COLORS.error : colorScheme} 
+              />
+            </View>
+            <View style={styles.contactCountContent}>
+              <Text style={[
+                styles.contactCountText,
+                { color: remainingContacts === 0 ? COLORS.error : COLORS.black }
+              ]}>
+                {remainingContacts > 0 
+                  ? `${remainingContacts} free contacts remaining` 
+                  : 'Contact limit reached'}
+              </Text>
+              <View style={styles.progressBarContainer}>
+                <View 
+                  style={[
+                    styles.progressBar, 
+                    { 
+                      width: `${(remainingContacts / FREE_PLAN_CONTACT_LIMIT) * 100}%`,
+                      backgroundColor: remainingContacts === 0 
+                        ? COLORS.error 
+                        : remainingContacts === 1 
+                          ? '#FFA500' // Orange for warning when only 1 left
+                          : colorScheme
+                    }
+                  ]} 
+                />
+              </View>
+              {remainingContacts === 0 && (
+                <TouchableOpacity 
+                  onPress={navigateToUpgrade}
+                  style={[styles.upgradeButton, {backgroundColor: colorScheme}]}
+                >
+                  <Text style={styles.upgradeButtonText}>Upgrade</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         )}
         
@@ -442,6 +495,7 @@ export default function ContactsScreen() {
               {filteredContacts.map((contact, index) => (
                 <Swipeable
                   key={index}
+                  ref={(el) => swipeableRefs.current.set(index, el)}
                   renderRightActions={(progress, dragX) => 
                     RenderRightActions(progress, dragX, index)
                   }
@@ -567,40 +621,6 @@ export default function ContactsScreen() {
               </TouchableOpacity>
               <Text style={styles.modalTitle}>{modalTitle}</Text>
               <Text style={styles.modalMessage}>{modalMessage}</Text>
-            </View>
-          </View>
-        </Modal>
-
-        <Modal
-          visible={confirmModalVisible}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setConfirmModalVisible(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => setConfirmModalVisible(false)}
-              >
-                <MaterialIcons name="close" size={24} color={COLORS.black} />
-              </TouchableOpacity>
-              <Text style={styles.modalTitle}>Confirm Delete</Text>
-              <Text style={styles.modalMessage}>Are you sure you want to delete this contact?</Text>
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.cancelButton]}
-                  onPress={() => setConfirmModalVisible(false)}
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.modalDeleteButton]}
-                  onPress={confirmDelete}
-                >
-                  <Text style={styles.deleteButtonText}>Delete</Text>
-                </TouchableOpacity>
-              </View>
             </View>
           </View>
         </Modal>
@@ -895,26 +915,61 @@ const styles = StyleSheet.create({
   },
   contactCountContainer: {
     padding: 12,
-    backgroundColor: '#f7f7f7',
-    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
     marginHorizontal: 15,
-    marginTop: 120,  // Add top margin for breathing room from header
+    marginTop: 120,
     marginBottom: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowRadius: 4,
+    elevation: 2,
     borderWidth: 1,
-    borderColor: '#e5e5e5',
+    borderColor: '#eeeeee',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  contactCountIconContainer: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#f5f5f5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  contactCountContent: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'flex-start',
   },
   contactCountText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
-    textAlign: 'center',
-    letterSpacing: 0.25,
+    marginBottom: 6,
+  },
+  progressBarContainer: {
+    width: '100%',
+    height: 6,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 3,
+    marginBottom: 8,
+  },
+  progressBar: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  upgradeButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 15,
+    alignSelf: 'flex-end',
+  },
+  upgradeButtonText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: '600',
   },
   loadingContainer: {
     flex: 1,

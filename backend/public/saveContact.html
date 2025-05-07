@@ -27,6 +27,23 @@
             box-sizing: border-box;
         }
 
+        /* XS Card Logo Header Styles */
+        .xs-logo-header {
+            background-color: var(--secondary);
+            padding: 15px 0;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            position: relative;
+            z-index: 10;
+        }
+        
+        .xs-logo {
+            height: 40px;
+            width: auto;
+        }
+        
+        /* End of XS Card Logo Header Styles */
+
         .logo-container {
             width: 100%;
             position: relative;
@@ -247,10 +264,10 @@
 <body>
     <div class="container">
         <div class="logo-container">
-            <img id="companyLogo" class="company-logo" src="/assets/images/logoplaceholder.jpg" alt="Company Logo">
+            <div style="background-color: #f5f5f5; height: 150px; width: 100%;"></div>
             <div class="profile-overlay">
                 <div class="profile-container">
-                    <img id="profileImage" class="profile-image" src="/assets/images/profile.png" alt="Profile Image">
+                    <div style="background-color: #e0e0e0; height: 100%; width: 100%; border-radius: 50%;"></div>
                 </div>
             </div>
         </div>
@@ -310,16 +327,6 @@
                 
                 userData = await response.json();
                 
-                // Update profile image if available
-                if (userData.profileImage) {
-                    document.getElementById('profileImage').src = userData.profileImage;
-                }
-
-                // Update company logo if available
-                if (userData.companyLogo) {
-                    document.getElementById('companyLogo').src = userData.companyLogo;
-                }
-
                 // Update user information with styled elements
                 document.getElementById('userData').innerHTML = `
                     <h2 class="name">${userData.name} ${userData.surname}</h2>

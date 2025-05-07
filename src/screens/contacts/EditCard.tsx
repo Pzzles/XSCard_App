@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Image, Platform, KeyboardAvoidingView } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Image, Platform, KeyboardAvoidingView, BackHandler, PanResponder, GestureResponderEvent, LayoutChangeEvent, Dimensions, SafeAreaView } from 'react-native';
+import { Modal as RNModal } from 'react-native';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Animated } from 'react-native';
 import { COLORS, CARD_COLORS } from '../../constants/colors';
@@ -8,11 +9,14 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { authenticatedFetch, getUserId, API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-import Modal from 'react-native-modal';
 import { EditCardScreenRouteProp, RootStackParamList } from '../../types/navigation';
 import { RouteProp } from '@react-navigation/native';
+import Modal from 'react-native-modal';
 
-// Add this interface for the form data type
+// Create a type for social media platforms
+type SocialMediaPlatform = 'whatsapp' | 'x' | 'facebook' | 'linkedin' | 'website' | 'tiktok' | 'instagram';
+
+// Update the FormData interface to properly handle social media fields
 interface FormData {
   firstName: string;
   lastName: string;
@@ -20,6 +24,7 @@ interface FormData {
   company: string;
   email: string;
   phoneNumber: string;
+  // Social media fields
   whatsapp?: string;
   x?: string;
   facebook?: string;
@@ -27,9 +32,13 @@ interface FormData {
   website?: string;
   tiktok?: string;
   instagram?: string;
+  // Images and styling
   profileImage?: string;
-  companyLogo?: string;  // Add this line
-  [key: string]: string | undefined;  // Index signature to allow dynamic social media fields
+  companyLogo?: string;
+  logoZoomLevel?: number;
+  
+  // Add a more specific index signature for social media platforms
+  [key: string]: string | number | undefined;
 }
 
 interface CustomModalProps {
@@ -65,7 +74,8 @@ export default function EditCard() {
     tiktok: '',
     instagram: '',
     profileImage: '',
-    companyLogo: '',  // Add this line
+    companyLogo: '',
+    logoZoomLevel: 1.0,
   });
   const [selectedColor, setSelectedColor] = useState('#1B2B5B'); // Default color
   const [selectedSocials, setSelectedSocials] = useState<string[]>([]);
@@ -78,6 +88,8 @@ export default function EditCard() {
   const [modalType, setModalType] = useState<'profile' | 'logo' | null>(null);
   const [modalMessage, setModalMessage] = useState('');
   const [userPlan, setUserPlan] = useState<string>('free');
+  const [zoomLevel, setZoomLevel] = useState(1.0);
+  const [isPreviewModalVisible, setIsPreviewModalVisible] = useState(false);
 
   useEffect(() => {
     loadUserData();
@@ -97,6 +109,7 @@ export default function EditCard() {
       
       if (cardsData && cardsData.length > cardIndex) {
         const userData = cardsData[cardIndex]; 
+        console.log('Card data loaded with zoom level:', userData.logoZoomLevel);
         
         setSelectedColor(userData.colorScheme || '#1B2B5B');
         setFormData({
@@ -112,7 +125,17 @@ export default function EditCard() {
           }), {}),
           profileImage: userData.profileImage || '',
           companyLogo: userData.companyLogo || '',
+          logoZoomLevel: userData.logoZoomLevel || 1.0,
         });
+
+        // Set zoom level if it exists in the card data
+        if (userData.logoZoomLevel) {
+          console.log('Setting zoom level from saved data:', userData.logoZoomLevel);
+          setZoomLevel(userData.logoZoomLevel);
+        } else {
+          console.log('No saved zoom level found, using default 1.0');
+          setZoomLevel(1.0);
+        }
 
         const existingSocials = Object.entries(userData.socials || {})
           .filter(([_, value]) => typeof value === 'string' && value.trim() !== '')
@@ -150,13 +173,13 @@ export default function EditCard() {
 
   // Update the socials array with the correct type
   const socials: Social[] = [
-    { id: 'whatsapp', icon: 'whatsapp', label: 'WhatsApp', color: '#25D366' },
-    { id: 'x', icon: 'twitter', label: 'X', color: '#000000' },
-    { id: 'facebook', icon: 'facebook', label: 'Facebook', color: '#1877F2' },
-    { id: 'linkedin', icon: 'linkedin', label: 'LinkedIn', color: '#0A66C2' },
-    { id: 'website', icon: 'web', label: 'Website', color: '#4285F4' },
-    { id: 'tiktok', icon: 'music-note', label: 'TikTok', color: '#000000' },
-    { id: 'instagram', icon: 'instagram', label: 'Instagram', color: '#E4405F' },
+    { id: 'whatsapp' as SocialMediaPlatform, icon: 'whatsapp', label: 'WhatsApp', color: '#25D366' },
+    { id: 'x' as SocialMediaPlatform, icon: 'twitter', label: 'X', color: '#000000' },
+    { id: 'facebook' as SocialMediaPlatform, icon: 'facebook', label: 'Facebook', color: '#1877F2' },
+    { id: 'linkedin' as SocialMediaPlatform, icon: 'linkedin', label: 'LinkedIn', color: '#0A66C2' },
+    { id: 'website' as SocialMediaPlatform, icon: 'web', label: 'Website', color: '#4285F4' },
+    { id: 'tiktok' as SocialMediaPlatform, icon: 'music-note', label: 'TikTok', color: '#000000' },
+    { id: 'instagram' as SocialMediaPlatform, icon: 'instagram', label: 'Instagram', color: '#E4405F' },
   ];
 
   const handleCancel = () => {
@@ -188,11 +211,11 @@ export default function EditCard() {
       const socialFields: { [key: string]: string } = {};
       selectedSocials.forEach(socialId => {
         if (formData[socialId]) {
-          socialFields[socialId] = formData[socialId];
+          socialFields[socialId] = formData[socialId] as string;
         }
       });
 
-      // Create card data object
+      // Create card data object - ensure logoZoomLevel is included as a number, not a string
       const cardData = {
         name: formData.firstName,
         surname: formData.lastName,
@@ -203,8 +226,12 @@ export default function EditCard() {
         socials: socialFields,
         colorScheme: selectedColor,
         profileImage: formData.profileImage,
-        companyLogo: formData.companyLogo
+        companyLogo: formData.companyLogo,
+        logoZoomLevel: Number(zoomLevel) // Ensure it's a number
       };
+
+      console.log('Saving card with zoom level:', cardData.logoZoomLevel);
+      console.log('Full card data:', JSON.stringify(cardData, null, 2));
 
       // Send update request
       const response = await authenticatedFetch(
@@ -220,6 +247,7 @@ export default function EditCard() {
       }
 
       const result = await response.json();
+      console.log('Server response after save:', JSON.stringify(result, null, 2));
       
       setModalMessage('Card updated successfully');
       setIsSuccessModalVisible(true);
@@ -230,7 +258,7 @@ export default function EditCard() {
     }
   };
 
-  const handleSocialSelect = (socialId: string) => {
+  const handleSocialSelect = (socialId: SocialMediaPlatform) => {
     if (selectedSocials.includes(socialId)) {
       setCurrentSocialToRemove(socialId);
       setIsSocialRemoveModalVisible(true);
@@ -245,7 +273,7 @@ export default function EditCard() {
     }
   };
 
-  const handleRemoveSocial = (socialId: string) => {
+  const handleRemoveSocial = (socialId: SocialMediaPlatform) => {
     setSelectedSocials(selectedSocials.filter(id => id !== socialId));
     setFormData({...formData, [socialId]: ''});
     setIsSocialRemoveModalVisible(false);
@@ -328,8 +356,8 @@ const pickImage = async (source: 'camera' | 'gallery') => {
         profileImage: updatedData.updatedCard.profileImage
       }));
 
-      setModalMessage('Profile picture updated successfully');
-      setIsSuccessModalVisible(true);
+      // Show feedback but don't navigate away
+      Alert.alert('Success', 'Profile picture updated successfully');
     }
   } catch (error) {
     console.error('Error updating profile image:', error);
@@ -337,24 +365,15 @@ const pickImage = async (source: 'camera' | 'gallery') => {
   }
 };
 
-// Update pickLogo function similarly
+// First, remove all size validation from pickLogo function
 const pickLogo = async (source: 'camera' | 'gallery') => {
   try {
     let result;
     
-    // Define size constraints (in pixels)
-    const MIN_WIDTH = 800;
-    const MAX_WIDTH = 3000;
-    const MIN_HEIGHT = 450;  // For 16:9 ratio with MIN_WIDTH
-    const MAX_HEIGHT = 1688; // For 16:9 ratio with MAX_WIDTH
-    
     const options: ImagePicker.ImagePickerOptions = {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
-      aspect: [16, 9],
       quality: 1,
-      // Add size constraints
-      exif: true // To get image dimensions
     };
 
     if (source === 'camera') {
@@ -376,38 +395,7 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
     if (!result.canceled && result.assets[0]) {
       const selectedImage = result.assets[0];
       
-      // Get image dimensions
-      const { width, height } = await new Promise<{ width: number; height: number }>((resolve) => {
-        Image.getSize(selectedImage.uri, (width, height) => {
-          resolve({ width, height });
-        });
-      });
-
-      // Validate image dimensions
-      if (width < MIN_WIDTH || height < MIN_HEIGHT) {
-        setModalMessage(`Image is too small. Minimum dimensions are ${MIN_WIDTH}x${MIN_HEIGHT} pixels.`);
-        setIsSuccessModalVisible(true);
-        return;
-      }
-
-      if (width > MAX_WIDTH || height > MAX_HEIGHT) {
-        setModalMessage(`Image is too large. Maximum dimensions are ${MAX_WIDTH}x${MAX_HEIGHT} pixels.`);
-        setIsSuccessModalVisible(true);
-        return;
-      }
-
-      // Check aspect ratio
-      const aspectRatio = width / height;
-      const targetRatio = 16 / 9;
-      const RATIO_TOLERANCE = 0.1; // 10% tolerance
-
-      if (Math.abs(aspectRatio - targetRatio) > RATIO_TOLERANCE) {
-        setModalMessage('Please select an image closer to 16:9 aspect ratio for optimal display.');
-        setIsSuccessModalVisible(true);
-        return;
-      }
-
-      // Continue with upload if image meets requirements
+      // Skip all dimension validation - allow any size image
       const userId = await getUserId();
       if (!userId) {
         setError('User ID not found');
@@ -422,7 +410,7 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
       } as any);
       formData.append('imageType', 'companyLogo');
 
-      // Use cardIndex from route params instead of hardcoded 0
+      // Use cardIndex from route params
       const response = await fetch(buildUrl(ENDPOINTS.UPDATE_CARD.replace(':id', userId)) + `?cardIndex=${cardIndex}`, {
         method: 'PATCH',
         body: formData,
@@ -443,8 +431,11 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
         companyLogo: updatedData.updatedCard.companyLogo
       }));
 
-      setModalMessage('Logo updated successfully');
-      setIsSuccessModalVisible(true);
+      // Show feedback but don't navigate away
+      Alert.alert('Success', 'Logo updated successfully. Use the Save button when you are ready.');
+      
+      // Reset zoom level when new logo is uploaded
+      setZoomLevel(1.0);
     }
   } catch (error) {
     console.error('Error updating company logo:', error);
@@ -452,41 +443,62 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
   }
 };
 
-  const CustomModal = ({ isVisible, onClose, title, message, buttons }: CustomModalProps) => (
-    <Modal
-      isVisible={isVisible}
-      onBackdropPress={onClose}
-      animationIn="fadeIn"
-      animationOut="fadeOut"
-      backdropOpacity={0.5}
-      style={{ margin: 20 }}
-    >
-      <View style={styles.modalContainer}>
-        <Text style={styles.modalTitle}>{title}</Text>
-        <Text style={styles.modalMessage}>{message}</Text>
-        <View style={styles.modalButtonsContainer}>
-          {buttons.map((button, index) => (
-            <TouchableOpacity
-              key={index}
-              style={[
-                styles.modalButton,
-                button.type === 'cancel' && styles.modalButtonCancel,
-                button.type === 'confirm' && styles.modalButtonConfirm
-              ]}
-              onPress={button.onPress}
-            >
-              <Text style={[
-                styles.modalButtonText,
-                button.type === 'cancel' && styles.modalButtonTextCancel
-              ]}>
-                {button.text}
-              </Text>
-            </TouchableOpacity>
-          ))}
+  // Update the CustomModal component to use the correct Modal type
+  const CustomModal = ({ isVisible, onClose, title, message, buttons }: CustomModalProps) => {
+    useEffect(() => {
+      const backAction = () => {
+        if (isVisible) {
+          onClose();
+          return true;
+        }
+        return false;
+      };
+
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+
+      return () => {
+        if (backHandler) {
+          backHandler.remove();
+        }
+      };
+    }, [isVisible, onClose]);
+
+    return (
+      <Modal
+        isVisible={isVisible}
+        onBackdropPress={onClose}
+        animationIn="fadeIn"
+        animationOut="fadeOut"
+        backdropOpacity={0.5}
+        style={{ margin: 20 }}
+      >
+        <View style={styles.modalContainer}>
+          <Text style={styles.modalTitle}>{title}</Text>
+          <Text style={styles.modalMessage}>{message}</Text>
+          <View style={styles.modalButtonsContainer}>
+            {buttons.map((button, index) => (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.modalButton,
+                  button.type === 'cancel' && styles.modalButtonCancel,
+                  button.type === 'confirm' && styles.modalButtonConfirm
+                ]}
+                onPress={button.onPress}
+              >
+                <Text style={[
+                  styles.modalButtonText,
+                  button.type === 'cancel' && styles.modalButtonTextCancel
+                ]}>
+                  {button.text}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
-      </View>
-    </Modal>
-  );
+      </Modal>
+    );
+  };
 
   const handleDelete = () => {
     // Prevent deletion of the default card (index 0)
@@ -500,6 +512,15 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
     setIsConfirmModalVisible(true);
   };
 
+  // Add this function to handle zoom reset
+  const resetZoom = () => {
+    setZoomLevel(1.0);
+  };
+
+  const handlePreview = () => {
+    setIsPreviewModalVisible(true);
+  };
+
   return (
     <View style={styles.container}>
       <Header title="Edit Card" />
@@ -509,9 +530,17 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
         <TouchableOpacity onPress={handleCancel}>
           <Text style={styles.cancelButton}>Cancel</Text>
         </TouchableOpacity>
+        <View style={styles.rightButtons}>
+          <TouchableOpacity onPress={handlePreview}>
+            <View style={styles.previewButton}>
+              <MaterialIcons name="visibility" size={16} color="#666" />
+              <Text style={styles.previewButtonText}>Preview</Text>
+            </View>
+        </TouchableOpacity>
         <TouchableOpacity onPress={handleSave}>
           <Text style={styles.saveButton}>Save</Text>
         </TouchableOpacity>
+        </View>
       </View>
 
       <KeyboardAvoidingView 
@@ -556,13 +585,22 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
           {/* Images & Layout Section */}
           <Text style={styles.sectionTitle}>Images & layout</Text>
           <View style={styles.logoContainer}>
+            <View style={styles.logoFrame}>
             <Image
-              style={styles.logo}
               source={formData.companyLogo ? 
                 { uri: `${API_BASE_URL}${formData.companyLogo}` } : 
                 require('../../../assets/images/logoplaceholder.jpg')
               }
+                style={{ 
+                  width: '100%', 
+                  height: '100%',
+                  transform: [{ scale: zoomLevel }],
+                  opacity: 1,
+                }}
+                resizeMode="contain"
+                fadeDuration={300}
             />
+            </View>
             {userPlan !== 'enterprise' && (
               <TouchableOpacity 
                 style={styles.editLogoButton}
@@ -570,6 +608,60 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
               >
                 <MaterialIcons name="edit" size={24} color={COLORS.white} />
               </TouchableOpacity>
+            )}
+            
+            {/* Logo Zoom Controls */}
+            {formData.companyLogo && (
+              <View style={styles.zoomSliderContainer}>
+                <View style={styles.zoomHeaderRow}>
+                  <Text style={styles.zoomLabel}>Logo Size: {zoomLevel.toFixed(2)}x</Text>
+                  <TouchableOpacity onPress={resetZoom} style={styles.resetButton}>
+                    <Text style={styles.resetButtonText}>Reset</Text>
+                  </TouchableOpacity>
+                </View>
+                
+                <View style={styles.zoomControlsContainer}>
+                  <TouchableOpacity 
+                    style={[styles.zoomButton, zoomLevel <= 0.5 && styles.zoomButtonDisabled]} 
+                    onPress={() => {
+                      if (zoomLevel > 0.5) {
+                        setZoomLevel(Math.max(0.5, zoomLevel - 0.1));
+                      }
+                    }}
+                    disabled={zoomLevel <= 0.5}
+                  >
+                    <MaterialIcons name="remove" size={20} color={zoomLevel <= 0.5 ? '#ccc' : COLORS.white} />
+                  </TouchableOpacity>
+                  
+                  <View style={styles.zoomBarContainer}>
+                    <View style={styles.zoomBarTrack}>
+                      <View 
+                        style={[
+                          styles.zoomBarFill, 
+                          { width: `${((zoomLevel - 0.5) / 1.0) * 100}%` }
+                        ]} 
+                      />
+                    </View>
+                  </View>
+                  
+                  <TouchableOpacity 
+                    style={[styles.zoomButton, zoomLevel >= 1.5 && styles.zoomButtonDisabled]} 
+                    onPress={() => {
+                      if (zoomLevel < 1.5) {
+                        setZoomLevel(Math.min(1.5, zoomLevel + 0.1));
+                      }
+                    }}
+                    disabled={zoomLevel >= 1.5}
+                  >
+                    <MaterialIcons name="add" size={20} color={zoomLevel >= 1.5 ? '#ccc' : COLORS.white} />
+                  </TouchableOpacity>
+                </View>
+                
+                <View style={styles.zoomLabels}>
+                  <Text style={styles.zoomLabelText}>Small</Text>
+                  <Text style={styles.zoomLabelText}>Large</Text>
+                </View>
+              </View>
             )}
             
             {/* Profile Image Overlaying Logo */}
@@ -603,7 +695,7 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
                   styles.socialItem,
                   selectedSocials.includes(social.id) && styles.selectedSocialItem
                 ]}
-                onPress={() => handleSocialSelect(social.id)}
+                onPress={() => handleSocialSelect(social.id as SocialMediaPlatform)}
               >
                 <MaterialCommunityIcons
                   name={social.icon || 'link'}
@@ -688,7 +780,7 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
                     {socials.find(s => s.id === socialId)?.label}
                   </Text>
                   <TouchableOpacity
-                    onPress={() => handleSocialSelect(socialId)}
+                    onPress={() => handleSocialSelect(socialId as SocialMediaPlatform)}
                     style={styles.removeSocialButton}
                   >
                     <MaterialIcons name="close" size={24} color="#666" />
@@ -702,7 +794,7 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
                     'username (without @)'
                   }`}
                   placeholderTextColor="#999"
-                  value={formData[socialId]}
+                  value={formData[socialId]?.toString() || ''}
                   onChangeText={(text) => {
                     // Remove @ symbol if user includes it
                     const cleanText = text.startsWith('@') ? text.substring(1) : text;
@@ -747,7 +839,7 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
             type: 'confirm',
             onPress: () => {
               if (currentSocialToRemove) {
-                handleRemoveSocial(currentSocialToRemove);
+                handleRemoveSocial(currentSocialToRemove as SocialMediaPlatform);
               }
             }
           }
@@ -846,11 +938,137 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
             type: 'confirm',
             onPress: () => {
               setIsSuccessModalVisible(false);
+              if (modalMessage.includes('updated successfully') || modalMessage.includes('deleted successfully')) {
               navigation.goBack();
+              }
             }
           }
         ]}
       />
+
+      {/* Preview Modal */}
+      <RNModal
+        visible={isPreviewModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsPreviewModalVisible(false)}
+      >
+        <SafeAreaView style={previewStyles.modalContainer}>
+          <View style={previewStyles.modalHeader}>
+            <Text style={previewStyles.modalTitle}>Card Preview</Text>
+            <TouchableOpacity onPress={() => setIsPreviewModalVisible(false)}>
+              <MaterialIcons name="close" size={24} color="#000" />
+            </TouchableOpacity>
+    </View>
+          
+          <ScrollView style={previewStyles.cardScrollView}>
+            <View style={previewStyles.cardContainer}>
+              {/* QR Code Placeholder */}
+              <View style={previewStyles.qrContainer}>
+                <View style={previewStyles.qrPlaceholder}>
+                  <MaterialIcons name="qr-code-2" size={80} color="#ccc" />
+                  <Text style={previewStyles.qrText}>QR Code</Text>
+                </View>
+              </View>
+              
+              {/* Company Logo and Profile Image */}
+              <View style={previewStyles.logoContainer}>
+                <View style={previewStyles.logoFrame}>
+                  <Image 
+                    source={formData.companyLogo ? 
+                      { uri: `${API_BASE_URL}${formData.companyLogo}` } : 
+                      require('../../../assets/images/logoplaceholder.jpg')
+                    }
+                    style={{ 
+                      width: '100%', 
+                      height: '100%',
+                      transform: [{ scale: zoomLevel }],
+                      opacity: 1,
+                    }}
+                    resizeMode="contain"
+                    fadeDuration={300}
+                  />
+                </View>
+                
+                {/* Profile Image */}
+                <View style={previewStyles.profileContainer}>
+                  <View style={previewStyles.profileImageContainer}>
+                    <Image
+                      style={previewStyles.profileImage}
+                      source={
+                        formData.profileImage
+                          ? { uri: `${API_BASE_URL}${formData.profileImage}` }
+                          : require('../../../assets/images/profile.png')
+                      }
+                    />
+                  </View>
+                </View>
+              </View>
+              
+              {/* Basic Info - these should NOT use the color scheme as per user's request */}
+              <Text style={previewStyles.name}>
+                {`${formData.firstName} ${formData.lastName}`}
+              </Text>
+              <Text style={previewStyles.position}>
+                {formData.occupation}
+              </Text>
+              <Text style={previewStyles.company}>
+                {formData.company}
+              </Text>
+              
+              {/* Contact Info - SHOULD use the color scheme */}
+              <TouchableOpacity style={previewStyles.contactSection}>
+                <MaterialCommunityIcons name="email-outline" size={24} color={selectedColor} />
+                <Text style={previewStyles.contactText}>{formData.email}</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={previewStyles.contactSection}>
+                <MaterialCommunityIcons name="phone-outline" size={24} color={selectedColor} />
+                <Text style={previewStyles.contactText}>{formData.phoneNumber}</Text>
+              </TouchableOpacity>
+              
+              {/* Social Links - SHOULD use the color scheme */}
+              {selectedSocials.map(socialId => {
+                const social = socials.find(s => s.id === socialId);
+                if (social && formData[socialId]) {
+                  return (
+                    <TouchableOpacity key={socialId} style={previewStyles.contactSection}>
+                      <MaterialCommunityIcons 
+                        name={social.icon} 
+                        size={24} 
+                        color={selectedColor} 
+                      />
+                      <Text style={previewStyles.contactText}>
+                        {formData[socialId]?.toString() || ''}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                }
+                return null;
+              })}
+            </View>
+          </ScrollView>
+          
+          <View style={previewStyles.modalActions}>
+            <TouchableOpacity 
+              style={[previewStyles.continueButton, { borderColor: selectedColor }]}
+              onPress={() => setIsPreviewModalVisible(false)}
+            >
+              <Text style={[previewStyles.continueText, { color: selectedColor }]}>Continue Editing</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[previewStyles.saveButton, { backgroundColor: selectedColor }]}
+              onPress={() => {
+                setIsPreviewModalVisible(false);
+                handleSave();
+              }}
+            >
+              <Text style={previewStyles.saveText}>Save & Exit</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </RNModal>
     </View>
   );
 }
@@ -925,9 +1143,27 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: COLORS.white,
   },
+  rightButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   cancelButton: {
     color: '#666',
     fontSize: 16,
+  },
+  previewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 15,
+    backgroundColor: '#F5F5F5',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 15,
+  },
+  previewButtonText: {
+    color: '#666',
+    fontSize: 14,
+    marginLeft: 4,
   },
   saveButton: {
     color: '#666',
@@ -981,14 +1217,23 @@ const styles = StyleSheet.create({
     marginRight: -20,
     alignSelf: 'center',
     marginBottom: 80,
+    borderRadius: 12,
+    padding: 8,
+  },
+  logoFrame: {
+    width: '100%',
+    height: 200,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    padding: 0,
+    borderRadius: 12,
   },
   logo: {
-    width: '100%',
-    height: undefined,
-    aspectRatio: 16/9,
+    width: '80%', // Use percentage of container
+    height: '80%', // Use percentage of container
     resizeMode: 'contain',
-    backgroundColor: '#F8F8F8', // Light background to show logo bounds
-    marginHorizontal: 0,
   },
   profileOverlayContainer: {
     position: 'absolute',
@@ -1136,6 +1381,380 @@ const styles = StyleSheet.create({
   disabledInput: {
     backgroundColor: '#E8E8E8',
     color: '#666',
+  },
+  zoomSliderContainer: {
+    width: '100%',
+    backgroundColor: '#F5F7FA',
+    borderRadius: 8,
+    padding: 15,
+    marginTop: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E0E5EC',
+  },
+  zoomHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  zoomLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.black,
+  },
+  resetButton: {
+    backgroundColor: COLORS.secondary,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+  },
+  resetButtonText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  zoomControlsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 40,
+  },
+  zoomButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  zoomButtonDisabled: {
+    backgroundColor: '#D3D3D3',
+  },
+  zoomBarContainer: {
+    flex: 1,
+    marginHorizontal: 10,
+    height: 40,
+    justifyContent: 'center',
+  },
+  zoomBarTrack: {
+    height: 4,
+    backgroundColor: '#D3D3D3',
+    borderRadius: 2,
+    position: 'relative',
+  },
+  zoomBarFill: {
+    height: 4,
+    backgroundColor: COLORS.primary,
+    borderRadius: 2,
+    position: 'absolute',
+    left: 0,
+  },
+  zoomLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 5,
+  },
+  zoomLabelText: {
+    fontSize: 12,
+    color: '#666',
+  },
+  previewModalContainer: {
+    flex: 1,
+    backgroundColor: '#FFF',
+  },
+  previewModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EFEFEF',
+  },
+  previewModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.black,
+  },
+  previewCardScrollView: {
+    flex: 1,
+  },
+  previewCardContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: 15,
+    padding: 16,
+    margin: 16,
+  },
+  previewQrContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  previewQrPlaceholder: {
+    width: 150,
+    height: 150,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8F8F8',
+    borderRadius: 8,
+  },
+  previewQrText: {
+    marginTop: 10,
+    color: '#999',
+  },
+  previewLogoContainer: {
+    width: '100%',
+    position: 'relative',
+    overflow: 'visible',
+    marginBottom: 80,
+    borderRadius: 12,
+    padding: 8,
+  },
+  previewLogoFrame: {
+    width: '100%',
+    height: 200,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    borderRadius: 12,
+  },
+  previewProfileContainer: {
+    position: 'absolute',
+    bottom: -60,
+    left: '50%',
+    transform: [{ translateX: -60 }],
+    alignItems: 'center',
+  },
+  previewProfileImageContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 5,
+    borderColor: COLORS.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  previewProfileImage: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+  },
+  previewName: {
+    fontSize: 22,
+    fontWeight: '600',
+    marginBottom: 5,
+    marginTop: 20,
+    textAlign: 'center',
+    color: COLORS.black,
+  },
+  previewPosition: {
+    fontSize: 18,
+    marginBottom: 5,
+    textAlign: 'center',
+    color: '#444',
+  },
+  previewCompany: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 20,
+    textAlign: 'center',
+    color: '#666',
+  },
+  previewContactSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#F9F9F9',
+    borderRadius: 8,
+  },
+  previewContactText: {
+    marginLeft: 12,
+    fontSize: 14,
+    color: '#333',
+  },
+  previewModalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#EFEFEF',
+  },
+  previewContinueButton: {
+    flex: 1,
+    paddingVertical: 12,
+    marginRight: 8,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  previewContinueText: {
+    fontWeight: '500',
+  },
+  previewSaveButton: {
+    flex: 1,
+    paddingVertical: 12,
+    marginLeft: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  previewSaveText: {
+    color: COLORS.white,
+    fontWeight: '500',
+  },
+});
+
+const previewStyles = StyleSheet.create({
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#FFF',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EFEFEF',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.black,
+  },
+  cardScrollView: {
+    flex: 1,
+  },
+  cardContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: 15,
+    padding: 16,
+    margin: 16,
+  },
+  qrContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  qrPlaceholder: {
+    width: 150,
+    height: 150,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8F8F8',
+    borderRadius: 8,
+  },
+  qrText: {
+    marginTop: 10,
+    color: '#999',
+  },
+  logoContainer: {
+    width: '100%',
+    position: 'relative',
+    overflow: 'visible',
+    marginBottom: 80,
+    borderRadius: 12,
+    padding: 8,
+  },
+  logoFrame: {
+    width: '100%',
+    height: 200,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    borderRadius: 12,
+  },
+  profileContainer: {
+    position: 'absolute',
+    bottom: -60,
+    left: '50%',
+    transform: [{ translateX: -60 }],
+    alignItems: 'center',
+  },
+  profileImageContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 5,
+    borderColor: COLORS.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  profileImage: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+  },
+  name: {
+    fontSize: 22,
+    fontWeight: '600',
+    marginBottom: 5,
+    marginTop: 20,
+    color: COLORS.black,
+    marginLeft: 10,
+  },
+  position: {
+    fontSize: 18,
+    marginBottom: 5,
+    color: '#444',
+    marginLeft: 10,
+  },
+  company: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 20,
+    color: '#666',
+    marginLeft: 10,
+  },
+  contactSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+    padding: 5,
+    borderRadius: 8,
+    marginLeft: 10,
+  },
+  contactText: {
+    marginLeft: 10,
+    fontSize: 16,
+    color: '#333',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#EFEFEF',
+  },
+  continueButton: {
+    flex: 1,
+    paddingVertical: 12,
+    marginRight: 8,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  continueText: {
+    fontWeight: '500',
+  },
+  saveButton: {
+    flex: 1,
+    paddingVertical: 12,
+    marginLeft: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  saveText: {
+    color: COLORS.white,
+    fontWeight: '500',
   },
 });
 
