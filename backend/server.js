@@ -1,15 +1,26 @@
+/**
+ * XS Card Backend Server
+ */
+
 process.removeAllListeners('warning');
 
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
-const multer = require('multer');
-const fs = require('fs');
 const https = require('https');
-const { db, admin } = require('./firebase.js');
+const { db, admin, storage, bucket } = require('./firebase.js');
 const { sendMailWithStatus } = require('./public/Utils/emailService');
+const { handleSingleUpload } = require('./middleware/fileUpload');
 const app = express();
 const port = 8383;
+
+// Add CORS middleware to allow loading Firebase Storage images
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*'); // Allow requests from any origin
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  next();
+});
 
 // Import routes
 const userRoutes = require('./routes/userRoutes');
@@ -18,26 +29,6 @@ const contactRoutes = require('./routes/contactRoutes');
 const meetingRoutes = require('./routes/meetingRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const subscriptionRoutes = require('./routes/subscriptionRoutes'); // Add subscription routes
-
-// Configure multer for file upload
-const storage = multer.diskStorage({
-  destination: function(req, file, cb) {
-    const profilesDir = path.join(__dirname, 'public', 'profiles');
-    
-    // Create profiles directory if it doesn't exist
-    if (!fs.existsSync(profilesDir)) {
-      fs.mkdirSync(profilesDir, { recursive: true });
-    }
-    
-    cb(null, profilesDir);
-  },
-  filename: function(req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-const upload = multer({ storage: storage });
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -256,24 +247,32 @@ app.get('/public/cards/:id', async (req, res) => {
     try {
         const userId = req.params.id;
         const cardIndex = parseInt(req.query.cardIndex) || 0;
+        console.log(`Fetching public card for user ${userId}, card index ${cardIndex}`);
 
         const cardRef = db.collection('cards').doc(userId);
         const doc = await cardRef.get();
         
         if (!doc.exists) {
+            console.log(`User ${userId} not found`);
             return res.status(404).send({ message: 'User not found' });
         }
 
         const userData = doc.data();
         if (!userData.cards || !userData.cards[cardIndex]) {
+            console.log(`Card index ${cardIndex} not found for user ${userId}`);
             return res.status(404).send({ message: 'Card not found' });
         }
 
-        // Return the specific card with user ID included
+        // Get the specific card and add user ID
         const card = {
             id: userId,
             ...userData.cards[cardIndex]
         };
+
+        // Log image URLs for debugging
+        console.log('Card data being sent to client:');
+        console.log('- Profile Image:', card.profileImage);
+        console.log('- Company Logo:', card.companyLogo);
 
         res.status(200).send(card);
     } catch (error) {
@@ -348,9 +347,9 @@ app.use('/', meetingRoutes);
 app.use('/', paymentRoutes);
 
 // Modify the user creation route to handle file upload
-app.post('/api/users', upload.single('profileImage'), (req, res, next) => {
-  if (req.file) {
-    req.body.profileImage = `/profiles/${req.file.filename}`;
+app.post('/api/users', handleSingleUpload('profileImage'), (req, res, next) => {
+  if (req.file && req.file.firebaseUrl) {
+    req.body.profileImage = req.file.firebaseUrl;
   }
   next();
 });

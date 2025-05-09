@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "migrate-images": "node scripts/migrateImages.js",
+    "migrate-images:dry": "node scripts/migrateImages.js --dry-run",
+    "migrate-user": "node scripts/migrateImages.js --userId"
   },
   "keywords": [],
   "author": "",
