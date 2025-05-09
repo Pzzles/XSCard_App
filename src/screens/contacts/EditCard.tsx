@@ -12,6 +12,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { EditCardScreenRouteProp, RootStackParamList } from '../../types/navigation';
 import { RouteProp } from '@react-navigation/native';
 import Modal from 'react-native-modal';
+import { getImageUrl } from '../../utils/imageUtils';
 
 // Create a type for social media platforms
 type SocialMediaPlatform = 'whatsapp' | 'x' | 'facebook' | 'linkedin' | 'website' | 'tiktok' | 'instagram';
@@ -289,159 +290,178 @@ export default function EditCard() {
     setIsImageSourceModalVisible(true);
   };
 
-  // Update pickImage function
-const pickImage = async (source: 'camera' | 'gallery') => {
-  try {
-    let result;
-    
-    if (source === 'camera') {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Sorry, we need camera permissions to make this work!');
-        return;
+  // Improved implementation for iOS compatibility
+  const pickImage = async (source: 'camera' | 'gallery') => {
+    try {
+      // First, check and request permissions
+      if (source === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Camera access needed', 'Please grant camera permissions to use this feature.');
+          return;
+        }
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Gallery access needed', 'Please grant photo library permissions to use this feature.');
+          return;
+        }
       }
-      result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+
+      // Simplified configuration options that work better on iOS
+      const options = {
+        quality: 0.8,
         allowsEditing: true,
-        aspect: [1, 1],
-        quality: 1,
-      });
-    } else {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Sorry, we need gallery permissions to make this work!');
-        return;
+        aspect: [1, 1] as [number, number]
+      };
+
+      let result;
+      if (source === 'camera') {
+        result = await ImagePicker.launchCameraAsync(options);
+      } else {
+        result = await ImagePicker.launchImageLibraryAsync(options);
       }
-      result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+
+      console.log('Image picker result:', result);
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const userId = await getUserId();
+        if (!userId) {
+          setError('User ID not found');
+          return;
+        }
+
+        // Create form data for upload
+        const formData = new FormData();
+        formData.append('image', {
+          uri: result.assets[0].uri,
+          type: 'image/jpeg',
+          name: 'profile-image.jpg',
+        } as any);
+        formData.append('imageType', 'profileImage');
+
+        // Upload the image
+        try {
+          const response = await fetch(
+            buildUrl(ENDPOINTS.UPDATE_CARD.replace(':id', userId)) + `?cardIndex=${cardIndex}`,
+            {
+              method: 'PATCH',
+              body: formData,
+              headers: {
+                'Content-Type': 'multipart/form-data',
+                'Authorization': await AsyncStorage.getItem('userToken') || '',
+              },
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(`Upload failed with status ${response.status}`);
+          }
+
+          const data = await response.json();
+          setFormData(prev => ({
+            ...prev,
+            profileImage: data.updatedCard.profileImage
+          }));
+
+          Alert.alert('Success', 'Profile picture updated successfully');
+        } catch (uploadError) {
+          console.error('Upload error:', uploadError);
+          Alert.alert('Upload Failed', 'Could not upload the image. Please try again.');
+        }
+      }
+    } catch (error) {
+      console.error('Image picker error:', error);
+      Alert.alert('Error', 'There was a problem with the image picker');
+    }
+  };
+
+  // Improved implementation for logo picker with iOS compatibility
+  const pickLogo = async (source: 'camera' | 'gallery') => {
+    try {
+      // First, check and request permissions
+      if (source === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Camera access needed', 'Please grant camera permissions to use this feature.');
+          return;
+        }
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Gallery access needed', 'Please grant photo library permissions to use this feature.');
+          return;
+        }
+      }
+
+      // Simplified configuration options that work better on iOS
+      const options = {
+        quality: 0.8,
         allowsEditing: true,
-        aspect: [1, 1],
-        quality: 1,
-      });
+        aspect: [4, 3] as [number, number]
+      };
+
+      let result;
+      if (source === 'camera') {
+        result = await ImagePicker.launchCameraAsync(options);
+      } else {
+        result = await ImagePicker.launchImageLibraryAsync(options);
+      }
+
+      console.log('Logo picker result:', result);
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const userId = await getUserId();
+        if (!userId) {
+          setError('User ID not found');
+          return;
+        }
+
+        // Create form data for upload
+        const formData = new FormData();
+        formData.append('image', {
+          uri: result.assets[0].uri,
+          type: 'image/jpeg',
+          name: 'company-logo.jpg',
+        } as any);
+        formData.append('imageType', 'companyLogo');
+
+        // Upload the image
+        try {
+          const response = await fetch(
+            buildUrl(ENDPOINTS.UPDATE_CARD.replace(':id', userId)) + `?cardIndex=${cardIndex}`,
+            {
+              method: 'PATCH',
+              body: formData,
+              headers: {
+                'Content-Type': 'multipart/form-data',
+                'Authorization': await AsyncStorage.getItem('userToken') || '',
+              },
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(`Upload failed with status ${response.status}`);
+          }
+
+          const data = await response.json();
+          setFormData(prev => ({
+            ...prev,
+            companyLogo: data.updatedCard.companyLogo
+          }));
+
+          Alert.alert('Success', 'Logo updated successfully');
+          setZoomLevel(1.0); // Reset zoom level when new logo is uploaded
+        } catch (uploadError) {
+          console.error('Upload error:', uploadError);
+          Alert.alert('Upload Failed', 'Could not upload the logo. Please try again.');
+        }
+      }
+    } catch (error) {
+      console.error('Logo picker error:', error);
+      Alert.alert('Error', 'There was a problem with the image picker');
     }
-
-    if (!result.canceled && result.assets[0]) {
-      const userId = await getUserId();
-      if (!userId) {
-        setError('User ID not found');
-        return;
-      }
-
-      const formData = new FormData();
-      formData.append('image', {
-        uri: result.assets[0].uri,
-        type: 'image/jpeg',
-        name: 'profile-image.jpg',
-      } as any);
-      formData.append('imageType', 'profileImage');
-
-      // Use cardIndex from route params instead of hardcoded 0
-      const response = await fetch(buildUrl(ENDPOINTS.UPDATE_CARD.replace(':id', userId)) + `?cardIndex=${cardIndex}`, {
-        method: 'PATCH',
-        body: formData,
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          'Authorization': await AsyncStorage.getItem('userToken') || '',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update profile image');
-      }
-
-      const updatedData = await response.json();
-      
-      setFormData(prev => ({
-        ...prev,
-        profileImage: updatedData.updatedCard.profileImage
-      }));
-
-      // Show feedback but don't navigate away
-      Alert.alert('Success', 'Profile picture updated successfully');
-    }
-  } catch (error) {
-    console.error('Error updating profile image:', error);
-    Alert.alert('Error', 'Failed to update profile image');
-  }
-};
-
-// First, remove all size validation from pickLogo function
-const pickLogo = async (source: 'camera' | 'gallery') => {
-  try {
-    let result;
-    
-    const options: ImagePicker.ImagePickerOptions = {
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 1,
-    };
-
-    if (source === 'camera') {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Sorry, we need camera permissions to make this work!');
-        return;
-      }
-      result = await ImagePicker.launchCameraAsync(options);
-    } else {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Sorry, we need gallery permissions to make this work!');
-        return;
-      }
-      result = await ImagePicker.launchImageLibraryAsync(options);
-    }
-
-    if (!result.canceled && result.assets[0]) {
-      const selectedImage = result.assets[0];
-      
-      // Skip all dimension validation - allow any size image
-      const userId = await getUserId();
-      if (!userId) {
-        setError('User ID not found');
-        return;
-      }
-
-      const formData = new FormData();
-      formData.append('image', {
-        uri: selectedImage.uri,
-        type: 'image/jpeg',
-        name: 'company-logo.jpg',
-      } as any);
-      formData.append('imageType', 'companyLogo');
-
-      // Use cardIndex from route params
-      const response = await fetch(buildUrl(ENDPOINTS.UPDATE_CARD.replace(':id', userId)) + `?cardIndex=${cardIndex}`, {
-        method: 'PATCH',
-        body: formData,
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          'Authorization': await AsyncStorage.getItem('userToken') || '',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update company logo');
-      }
-
-      const updatedData = await response.json();
-      
-      setFormData(prev => ({
-        ...prev,
-        companyLogo: updatedData.updatedCard.companyLogo
-      }));
-
-      // Show feedback but don't navigate away
-      Alert.alert('Success', 'Logo updated successfully. Use the Save button when you are ready.');
-      
-      // Reset zoom level when new logo is uploaded
-      setZoomLevel(1.0);
-    }
-  } catch (error) {
-    console.error('Error updating company logo:', error);
-    Alert.alert('Error', 'Failed to update company logo');
-  }
-};
+  };
 
   // Update the CustomModal component to use the correct Modal type
   const CustomModal = ({ isVisible, onClose, title, message, buttons }: CustomModalProps) => {
@@ -588,7 +608,7 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
             <View style={styles.logoFrame}>
             <Image
               source={formData.companyLogo ? 
-                { uri: `${API_BASE_URL}${formData.companyLogo}` } : 
+                { uri: getImageUrl(formData.companyLogo) } : 
                 require('../../../assets/images/logoplaceholder.jpg')
               }
                 style={{ 
@@ -671,7 +691,7 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
                   style={styles.profileImage}
                   source={
                     formData.profileImage
-                      ? { uri: `${API_BASE_URL}${formData.profileImage}` }
+                      ? { uri: getImageUrl(formData.profileImage) }
                       : require('../../../assets/images/profile.png')
                   }
                 />
@@ -976,7 +996,7 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
                 <View style={previewStyles.logoFrame}>
                   <Image 
                     source={formData.companyLogo ? 
-                      { uri: `${API_BASE_URL}${formData.companyLogo}` } : 
+                      { uri: getImageUrl(formData.companyLogo) } : 
                       require('../../../assets/images/logoplaceholder.jpg')
                     }
                     style={{ 
@@ -997,7 +1017,7 @@ const pickLogo = async (source: 'camera' | 'gallery') => {
                       style={previewStyles.profileImage}
                       source={
                         formData.profileImage
-                          ? { uri: `${API_BASE_URL}${formData.profileImage}` }
+                          ? { uri: getImageUrl(formData.profileImage) }
                           : require('../../../assets/images/profile.png')
                       }
                     />

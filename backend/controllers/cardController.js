@@ -131,6 +131,7 @@ exports.addCard = async (req, res) => {
         console.log('Request headers:', req.headers);
         console.log('Request files:', req.files);
         console.log('Request body:', req.body);
+        console.log('Firebase Storage URLs:', req.firebaseStorageUrls);
 
         const { 
             company, 
@@ -160,17 +161,13 @@ exports.addCard = async (req, res) => {
         const cardRef = db.collection('cards').doc(userId);
         const cardDoc = await cardRef.get();
 
-        // Handle file paths if files were uploaded
-        let profileImagePath = null;
-        let companyLogoPath = null;
+        // Handle file URLs from Firebase Storage
+        let profileImageUrl = null;
+        let companyLogoUrl = null;
 
-        if (req.files) {
-            if (req.files.profileImage) {
-                profileImagePath = `/profiles/${req.files.profileImage[0].filename}`;
-            }
-            if (req.files.companyLogo) {
-                companyLogoPath = `/profiles/${req.files.companyLogo[0].filename}`;
-            }
+        if (req.firebaseStorageUrls) {
+            profileImageUrl = req.firebaseStorageUrls.profileImage || null;
+            companyLogoUrl = req.firebaseStorageUrls.companyLogo || null;
         }
 
         const newCard = {
@@ -183,8 +180,8 @@ exports.addCard = async (req, res) => {
             socials: {},
             colorScheme: '#1B2B5B',
             createdAt: admin.firestore.Timestamp.now(), // Store as Firestore Timestamp
-            profileImage: profileImagePath,
-            companyLogo: companyLogoPath
+            profileImage: profileImageUrl,
+            companyLogo: companyLogoUrl
         };
 
         console.log('Creating new card:', newCard); // Debug log
@@ -240,13 +237,12 @@ exports.updateCard = async (req, res) => {
 
         let updateData = {};
 
-        // Handle file upload
-        if (req.file) {
-            const filePath = `/profiles/${req.file.filename}`; // Changed from /uploads/ to /profiles/
+        // Handle file upload using Firebase Storage
+        if (req.file && req.file.firebaseUrl) {
             if (req.body.imageType === 'profileImage') {
-                updateData.profileImage = filePath;
+                updateData.profileImage = req.file.firebaseUrl;
             } else if (req.body.imageType === 'companyLogo') {
-                updateData.companyLogo = filePath;
+                updateData.companyLogo = req.file.firebaseUrl;
             }
         } else if (req.body) {
             // If no file but has body data, it's a regular update

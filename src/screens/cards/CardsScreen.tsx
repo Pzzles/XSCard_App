@@ -10,6 +10,7 @@ import * as Clipboard from 'expo-clipboard';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../types/navigation';
 import { useColorScheme } from '../../context/ColorSchemeContext';
+import { getImageUrl } from '../../utils/imageUtils';
 
 // Update interfaces to match new data structure
 interface UserData {
@@ -630,7 +631,7 @@ export default function CardsScreen() {
                   <View style={styles.logoFrame}>
                   <Image
                     source={card.companyLogo ? 
-                      { uri: `${API_BASE_URL}${card.companyLogo}` } : 
+                      { uri: getImageUrl(card.companyLogo) } : 
                       require('../../../assets/images/logoplaceholder.jpg')
                     }
                       style={{ 
@@ -650,7 +651,7 @@ export default function CardsScreen() {
                       <Image
                         style={styles.profileImage}
                         source={card.profileImage ? 
-                          { uri: `${API_BASE_URL}${card.profileImage}` } : 
+                          { uri: getImageUrl(card.profileImage) } : 
                           require('../../../assets/images/profile.png')
                         }
                       />
