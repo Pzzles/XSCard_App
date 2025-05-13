@@ -6,12 +6,13 @@ const { handleSingleUpload, handleMultipleUploads } = require('../middleware/fil
 
 // Public routes (no authentication required)
 router.post('/SignIn', userController.signIn);
-router.post('/AddUser', 
+router.post('/AddUser', userController.addUser);
+router.post('/Users/:userId/UploadImages', 
     handleMultipleUploads([
         { name: 'profileImage', maxCount: 1 },
         { name: 'companyLogo', maxCount: 1 }
     ]), 
-    userController.addUser
+    userController.uploadUserImages
 );
 router.get('/verify-email', userController.verifyEmail);
 

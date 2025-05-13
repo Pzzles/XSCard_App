@@ -153,7 +153,7 @@ export default function AddCards() {
       const response = await fetch(buildUrl(ENDPOINTS.ADD_CARD), {
         method: 'POST',
         headers: {
-          'Authorization': `${token}`,  // Add token here
+          'Authorization': `${token}`,
         },
         body: form,
       });
