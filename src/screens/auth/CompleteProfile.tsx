@@ -456,7 +456,8 @@ export default function CompleteProfile() {
           bounces={false}
         >
           <View style={styles.stepIndicator}>
-            <View style={styles.stepCompleted}>2
+            <View style={styles.stepCompleted}>
+              <Text style={styles.stepActiveText}>2</Text>
               <MaterialIcons name="check" size={20} color={COLORS.white} />
             </View>
             <View style={styles.stepLine} />
@@ -469,13 +470,6 @@ export default function CompleteProfile() {
           <Text style={styles.subtitle}>
             Add your details to create your digital business card.
           </Text>
-
-          {/* Display user ID for development purposes - can be removed in production */}
-          {__DEV__ && userId && (
-            <View style={styles.devInfo}>
-              <Text style={styles.devInfoText}>User ID: {userId.substring(0, 8)}...</Text>
-            </View>
-          )}
 
           {/* Business Information Fields */}
           <TextInput
