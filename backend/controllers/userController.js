@@ -93,12 +93,15 @@ exports.addUser = async (req, res) => {
     } = req.body;
     
     try {
+        console.log('Starting user creation process for:', email);
+        
         // Create user in Firebase Auth
         const userRecord = await admin.auth().createUser({
             email: email,
             password: password,
             emailVerified: false
         });
+        console.log('Firebase Auth user created with UID:', userRecord.uid);
 
         const verificationToken = Math.random().toString(36).substring(2) + Date.now().toString(36);
         
@@ -121,7 +124,9 @@ exports.addUser = async (req, res) => {
         };
 
         // Store user data in Firestore
+        console.log('Storing user data in Firestore, document ID:', userRecord.uid);
         await db.collection('users').doc(userRecord.uid).set(userData);
+        console.log('User data stored successfully in Firestore');
 
         // Send verification email
         const verificationLink = `${req.protocol}://${req.get('host')}/verify-email?token=${verificationToken}&uid=${userRecord.uid}`;
@@ -138,6 +143,7 @@ exports.addUser = async (req, res) => {
                 <p>If you didn't create this account, please ignore this email.</p>
             `
         });
+        console.log('Verification email sent to:', email);
         
         res.status(201).send({ 
             message: 'User added successfully. Please check your email to verify your account.',
@@ -626,6 +632,7 @@ exports.uploadUserImages = async (req, res) => {
     console.log('uploadUserImages called with userId:', userId);
     console.log('Request parameters:', req.params);
     console.log('Request body keys:', Object.keys(req.body));
+    console.log('Request body values:', req.body);
     
     if (!userId) {
         return res.status(400).send({ 
@@ -646,36 +653,41 @@ exports.uploadUserImages = async (req, res) => {
         }
         
         const userData = userDoc.data();
+        console.log('Retrieved user data:', userData.name, userData.surname, userData.email);
         
         // Extract additional fields from the request
         const { phone, occupation, company } = req.body;
+        console.log('Profile completion data:', { phone, occupation, company });
         
         // Update user with additional profile information
         await userRef.update({
-            phone: phone || '',
-            occupation: occupation || '',
-            company: company || ''
+            phone: phone ?? '',
+            occupation: occupation ?? '',
+            company: company ?? ''
         });
+        console.log('Updated user profile with additional information');
         
         // Create a new card for the user - ensure all required fields have values
         const cardData = {
             cards: [{
-                name: userData.name || '',
-                surname: userData.surname || '',
-                email: userData.email || '',
-                phone: phone || '', // Use data from request
-                occupation: occupation || '', // Use data from request
-                company: company || '', // Use data from request
-                profileImage: req.firebaseStorageUrls?.profileImage || null,
-                companyLogo: req.firebaseStorageUrls?.companyLogo || null,
+                name: userData.name ?? '',
+                surname: userData.surname ?? '',
+                email: userData.email ?? '',
+                phone: phone ?? '',
+                occupation: occupation ?? '',
+                company: company ?? '',
+                profileImage: req.firebaseStorageUrls?.profileImage ?? null,
+                companyLogo: req.firebaseStorageUrls?.companyLogo ?? null,
                 socials: {},
                 colorScheme: '#1B2B5B', // Default color
                 createdAt: admin.firestore.Timestamp.now() // Changed to Firestore Timestamp
             }]
         };
+        console.log('Creating card with data:', JSON.stringify(cardData.cards[0], null, 2));
         
         // Store card data in Firestore
         await db.collection('cards').doc(userId).set(cardData);
+        console.log('Card created successfully for user:', userId);
         
         res.status(200).send({
             message: 'Card created successfully with images',

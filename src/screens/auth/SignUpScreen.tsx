@@ -96,7 +96,7 @@ export default function SignUpScreen() {
     if (!validateForm()) {
       return;
     }
-    
+
     setIsLoading(true);
 
     try {

@@ -88,8 +88,11 @@ try {
     storage = admin.storage();
     bucket = storage.bucket();
     
-    // Enable timestamps in snapshots
-    db.settings({ timestampsInSnapshots: true });
+    // Enable timestamps in snapshots and ignore undefined properties
+    db.settings({ 
+      timestampsInSnapshots: true,
+      ignoreUndefinedProperties: true 
+    });
   } else {
     throw new Error('Missing required Firebase credentials');
   }
@@ -127,7 +130,10 @@ try {
     db = admin.firestore();
     
     // Enable timestamps in snapshots
-    db.settings({ timestampsInSnapshots: true });
+    db.settings({ 
+      timestampsInSnapshots: true,
+      ignoreUndefinedProperties: true 
+    });
     
     console.log('Firebase Firestore initialized successfully in fallback mode');
   } catch (firestoreError) {
