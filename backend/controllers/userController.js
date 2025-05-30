@@ -89,26 +89,30 @@ exports.getUserById = async (req, res) => {
 
 exports.addUser = async (req, res) => {
     const { 
-        name, surname, email, password, occupation, company, 
-        status, phone, plan = 'free', socials = {} 
+        name, surname, email, password, status = 'active' 
     } = req.body;
     
     try {
+        console.log('Starting user creation process for:', email);
+        
         // Create user in Firebase Auth
         const userRecord = await admin.auth().createUser({
             email: email,
             password: password,
             emailVerified: false
         });
+        console.log('Firebase Auth user created with UID:', userRecord.uid);
 
         const verificationToken = Math.random().toString(36).substring(2) + Date.now().toString(36);
         
-        // Data for users collection - using Firestore Timestamp
+        // Data for users collection - only include essential fields
         const userData = {
             uid: userRecord.uid,
+            name,
+            surname,
             email,
             status,
-            plan,
+            plan: 'free', // Default plan
             createdAt: admin.firestore.Timestamp.now(), // Changed to Firestore Timestamp
             isEmailVerified: false,
             verificationToken
@@ -119,28 +123,10 @@ exports.addUser = async (req, res) => {
             createdAt: formatDate(userData.createdAt) // Format for display
         };
 
-        // Data for cards collection - using Firestore Timestamp
-        const cardData = {
-            cards: [{
-                name,
-                surname,
-                email,
-                phone,
-                occupation,
-                company,
-                profileImage: req.firebaseStorageUrls?.profileImage || null,
-                companyLogo: req.firebaseStorageUrls?.companyLogo || null,
-                socials,
-                colorScheme: '#1B2B5B', // Default color
-                createdAt: admin.firestore.Timestamp.now() // Changed to Firestore Timestamp
-            }]
-        };
-
         // Store user data in Firestore
+        console.log('Storing user data in Firestore, document ID:', userRecord.uid);
         await db.collection('users').doc(userRecord.uid).set(userData);
-        
-        // Store card data in Firestore
-        await db.collection('cards').doc(userRecord.uid).set(cardData);
+        console.log('User data stored successfully in Firestore');
 
         // Send verification email
         const verificationLink = `${req.protocol}://${req.get('host')}/verify-email?token=${verificationToken}&uid=${userRecord.uid}`;
@@ -157,6 +143,7 @@ exports.addUser = async (req, res) => {
                 <p>If you didn't create this account, please ignore this email.</p>
             `
         });
+        console.log('Verification email sent to:', email);
         
         res.status(201).send({ 
             message: 'User added successfully. Please check your email to verify your account.',
@@ -634,5 +621,81 @@ exports.upgradeToPremium = async (req, res) => {
             message: 'Failed to upgrade user',
             error: error.message
         });
+    }
+};
+
+// Update the uploadUserImages function to create the card as well
+exports.uploadUserImages = async (req, res) => {
+    // Extract userId from all possible sources for consistency with middleware
+    const userId = req.params.userId || req.params.id || req.body.userId || req.body.uid || req.query.userId;
+    
+    console.log('uploadUserImages called with userId:', userId);
+    console.log('Request parameters:', req.params);
+    console.log('Request body keys:', Object.keys(req.body));
+    console.log('Request body values:', req.body);
+    
+    if (!userId) {
+        return res.status(400).send({ 
+            message: 'User ID is required', 
+            params: req.params,
+            body: Object.keys(req.body),
+            query: req.query
+        });
+    }
+    
+    try {
+        // Verify the user exists
+        const userRef = db.collection('users').doc(userId);
+        const userDoc = await userRef.get();
+        
+        if (!userDoc.exists) {
+            return res.status(404).send({ message: 'User not found' });
+        }
+        
+        const userData = userDoc.data();
+        console.log('Retrieved user data:', userData.name, userData.surname, userData.email);
+        
+        // Extract additional fields from the request
+        const { phone, occupation, company } = req.body;
+        console.log('Profile completion data:', { phone, occupation, company });
+        
+        // Update user with additional profile information
+        await userRef.update({
+            phone: phone ?? '',
+            occupation: occupation ?? '',
+            company: company ?? ''
+        });
+        console.log('Updated user profile with additional information');
+        
+        // Create a new card for the user - ensure all required fields have values
+        const cardData = {
+            cards: [{
+                name: userData.name ?? '',
+                surname: userData.surname ?? '',
+                email: userData.email ?? '',
+                phone: phone ?? '',
+                occupation: occupation ?? '',
+                company: company ?? '',
+                profileImage: req.firebaseStorageUrls?.profileImage ?? null,
+                companyLogo: req.firebaseStorageUrls?.companyLogo ?? null,
+                socials: {},
+                colorScheme: '#1B2B5B', // Default color
+                createdAt: admin.firestore.Timestamp.now() // Changed to Firestore Timestamp
+            }]
+        };
+        console.log('Creating card with data:', JSON.stringify(cardData.cards[0], null, 2));
+        
+        // Store card data in Firestore
+        await db.collection('cards').doc(userId).set(cardData);
+        console.log('Card created successfully for user:', userId);
+        
+        res.status(200).send({
+            message: 'Card created successfully with images',
+            profileImage: cardData.cards[0].profileImage,
+            companyLogo: cardData.cards[0].companyLogo
+        });
+    } catch (error) {
+        console.error('Error creating card with images:', error);
+        res.status(500).send({ message: 'Failed to create card', error: error.message });
     }
 };

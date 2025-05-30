@@ -2,6 +2,8 @@ import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import SignInScreen from '../screens/auth/SignInScreen';
 import SignUpScreen from '../screens/auth/SignUpScreen';
+import CompleteProfile from '../screens/auth/CompleteProfile';
+import SplashScreen from '../screens/auth/SplashScreen';
 import TabNavigator from './TabNavigator';
 import DashboardNavigator from './DashboardNavigator';
 import { AuthStackParamList } from '../types';
@@ -15,10 +17,12 @@ export default function AuthNavigator() {
         headerShown: false,
         cardStyle: { backgroundColor: 'white' }
       }}
-      initialRouteName="SignIn"
+      initialRouteName="Splash"
     >
+      <Stack.Screen name="Splash" component={SplashScreen} />
       <Stack.Screen name="SignIn" component={SignInScreen} />
       <Stack.Screen name="SignUp" component={SignUpScreen} />
+      <Stack.Screen name="CompleteProfile" component={CompleteProfile} />
       <Stack.Screen name="MainApp" component={TabNavigator} />
       <Stack.Screen 
         name="AdminDashboard" 

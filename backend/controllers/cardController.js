@@ -99,9 +99,8 @@ exports.getCardById = async (req, res) => {
         
         if (userDoc.exists) {
             const userData = userDoc.data();
-            // Check if user is on free plan or doesn't have an active subscription
-            const isFreePlan = userData.plan === 'free' || 
-                               !['active', 'trial'].includes(userData.subscriptionStatus);
+            // Only check if the plan is free, ignore subscription status
+            const isFreePlan = userData.plan === 'free';
             
             if (isFreePlan && cards.length > 1) {
                 // For free users, only return the first card
@@ -490,16 +489,16 @@ exports.createWalletPass = async (req, res) => {
             name: `${card.name} ${card.surname}`,
             company: card.company,
             jobTitle: card.occupation,
-            barcodeValue: `${config.PASSCREATOR_PUBLIC_URL}/queries.html?userId=${userId}&cardIndex=${cardIndex}`
+            barcodeValue: `${config.PASSCREATOR_PUBLIC_URL}/saveContact?userId=${userId}&cardIndex=${cardIndex}`
         };
 
         // Add images only if we shouldn't skip them
         if (!shouldSkipImages) {
             if (card.profileImage) {
-                passData.urlToThumbnail = `${config.PASSCREATOR_PUBLIC_URL}${card.profileImage}`;
+                passData.urlToThumbnail = card.profileImage;
             }
             if (card.companyLogo) {
-                passData.urlToLogo = `${config.PASSCREATOR_PUBLIC_URL}${card.companyLogo}`;
+                passData.urlToLogo = card.companyLogo;
             }
         }
 
@@ -552,7 +551,7 @@ exports.createWalletPass = async (req, res) => {
                     name: `${card.name} ${card.surname}`,
                     company: card.company,
                     jobTitle: card.occupation,
-                    barcodeValue: `${config.PASSCREATOR_PUBLIC_URL}/queries.html?userId=${userId}&cardIndex=${cardIndex}`
+                    barcodeValue: `${config.PASSCREATOR_PUBLIC_URL}/saveContact?userId=${userId}&cardIndex=${cardIndex}`
                 };
                 
                 const response = await axios.post(

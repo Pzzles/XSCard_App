@@ -47,12 +47,19 @@ const handleSingleUpload = (fieldName) => {
         }
 
         // Get user ID from authenticated request or params
-        const userId = req.user?.uid || req.params.id;
+        // Check both id and userId params, also allow userId or uid in the body
+        const userId = req.user?.uid || 
+                       req.params.id || 
+                       req.params.userId || 
+                       req.body.userId || 
+                       req.body.uid || 
+                       req.query.userId ||
+                       (req.body.email ? `temp_${req.body.email}` : null);
         
         if (!userId) {
           return res.status(400).json({
             success: false,
-            message: 'User ID is required for file upload'
+            message: 'User ID or email is required for file upload'
           });
         }
 
@@ -106,12 +113,19 @@ const handleMultipleUploads = (fields) => {
         }
 
         // Get user ID from authenticated request or params
-        const userId = req.user?.uid || req.params.id;
+        // Check both id and userId params, also allow userId or uid in the body and query
+        const userId = req.user?.uid || 
+                       req.params.id || 
+                       req.params.userId || 
+                       req.body.userId || 
+                       req.body.uid || 
+                       req.query.userId ||
+                       (req.body.email ? `temp_${req.body.email}` : null);
         
         if (!userId) {
           return res.status(400).json({
             success: false,
-            message: 'User ID is required for file upload'
+            message: 'User ID or email is required for file upload'
           });
         }
 

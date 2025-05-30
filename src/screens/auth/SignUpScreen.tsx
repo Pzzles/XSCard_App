@@ -7,9 +7,8 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { AuthStackParamList } from '../../types';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
-import * as ImagePicker from 'expo-image-picker';
-import { pickImage, requestPermissions } from '../../utils/imageUtils';
 import ErrorPopup from '../../components/popups/ErrorPopup';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type SignUpScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'SignUp'>;
 
@@ -18,101 +17,21 @@ export default function SignUpScreen() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [companyName, setCompanyName] = useState('');
-  const [occupation, setOccupation] = useState(''); // Changed from status
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [profileImage, setProfileImage] = useState<string | null>(null);
-  const [companyLogo, setCompanyLogo] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({
     firstName: '',
     lastName: '',
     email: '',
-    phoneNumber: '',
-    companyName: '',
-    occupation: '',
     password: '',
   });
   const [errorMessage, setErrorMessage] = useState('');
   const [showError, setShowError] = useState(false);
 
-  const handleImagePick = async () => {
-    const { cameraGranted, galleryGranted } = await requestPermissions();
-    
-    if (!cameraGranted || !galleryGranted) {
-      Alert.alert('Permission Required', 'Camera and gallery permissions are required to use this feature.');
-      return;
-    }
-
-    Alert.alert(
-      'Select Image Source',
-      'Choose where you want to pick your profile picture from',
-      [
-        {
-          text: 'Camera',
-          onPress: async () => {
-            const imageUri = await pickImage(true);
-            if (imageUri) setProfileImage(imageUri);
-          },
-        },
-        {
-          text: 'Gallery',
-          onPress: async () => {
-            const imageUri = await pickImage(false);
-            if (imageUri) setProfileImage(imageUri);
-          },
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-      ]
-    );
-  };
-
-  const handleLogoUpload = async () => {
-    const { cameraGranted, galleryGranted } = await requestPermissions();
-    
-    if (!cameraGranted || !galleryGranted) {
-      Alert.alert('Permission Required', 'Camera and gallery permissions are required to use this feature.');
-      return;
-    }
-
-    Alert.alert(
-      'Select Logo Source',
-      'Choose where you want to pick your company logo from',
-      [
-        {
-          text: 'Camera',
-          onPress: async () => {
-            const imageUri = await pickImage(true);
-            if (imageUri) setCompanyLogo(imageUri);
-          },
-        },
-        {
-          text: 'Gallery',
-          onPress: async () => {
-            const imageUri = await pickImage(false);
-            if (imageUri) setCompanyLogo(imageUri);
-          },
-        },
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-      ]
-    );
-  };
-
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
-  };
-
-  const validatePhone = (phone: string) => {
-    const phoneRegex = /^\+?[\d\s-]{10,}$/;
-    return phoneRegex.test(phone);
   };
 
   const validatePassword = (password: string) => {
@@ -126,9 +45,6 @@ export default function SignUpScreen() {
       firstName: '',
       lastName: '',
       email: '',
-      phoneNumber: '',
-      companyName: '',
-      occupation: '',
       password: '',
     };
 
@@ -160,32 +76,6 @@ export default function SignUpScreen() {
       isValid = false;
     }
 
-    if (!phoneNumber.trim()) {
-      setErrorMessage('Phone number is required');
-      setShowError(true);
-      newErrors.phoneNumber = 'Phone number is required';
-      isValid = false;
-    } else if (!validatePhone(phoneNumber)) {
-      setErrorMessage('Please enter a valid phone number');
-      setShowError(true);
-      newErrors.phoneNumber = 'Please enter a valid phone number';
-      isValid = false;
-    }
-
-    if (!companyName.trim()) {
-      setErrorMessage('Company name is required');
-      setShowError(true);
-      newErrors.companyName = 'Company name is required';
-      isValid = false;
-    }
-
-    if (!occupation.trim()) {
-      setErrorMessage('Occupation is required');
-      setShowError(true);
-      newErrors.occupation = 'Occupation is required';
-      isValid = false;
-    }
-
     if (!password) {
       setErrorMessage('Password is required');
       setShowError(true);
@@ -207,57 +97,46 @@ export default function SignUpScreen() {
       return;
     }
 
+    setIsLoading(true);
+
     try {
-      // Create form data for multipart/form-data
-      const formData = new FormData();
-      formData.append('name', firstName);
-      formData.append('surname', lastName);
-      formData.append('email', email);
-      formData.append('phone', phoneNumber);
-      formData.append('password', password);
-      formData.append('occupation', occupation);
-      formData.append('company', companyName);
-      formData.append('status', 'active');
-      formData.append('colorScheme', COLORS.secondary);
-
-      if (profileImage) {
-        const imageName = profileImage.split('/').pop() || 'profile.jpg';
-        formData.append('profileImage', {
-          uri: profileImage,
-          type: 'image/jpeg',
-          name: imageName,
-        } as any);
-      }
-
-      if (companyLogo) {
-        const logoName = companyLogo.split('/').pop() || 'logo.jpg';
-        formData.append('companyLogo', {
-          uri: companyLogo,
-          type: 'image/jpeg',
-          name: logoName,
-        } as any);
-      }
+      // Create basic user account with minimal info
+      const userData = {
+        name: firstName,
+        surname: lastName,
+        email,
+        password,
+        status: 'active',
+      };
 
       const response = await fetch(buildUrl(ENDPOINTS.ADD_USER), {
         method: 'POST',
         headers: {
-          'Content-Type': 'multipart/form-data',
+          'Content-Type': 'application/json',
         },
-        body: formData,
+        body: JSON.stringify(userData),
       });
 
-      if (response.ok) {
-        Alert.alert(
-          'Success',
-          'Account created successfully! Please sign in.',
-          [{ text: 'OK', onPress: () => navigation.navigate('SignIn') }]
-        );
-      } else {
-        Alert.alert('Error', 'Failed to create account. Please try again.');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to create account');
       }
+
+      const data = await response.json();
+      const userId = data.userId;
+
+      // Store temporary auth state
+      await AsyncStorage.setItem('tempUserId', userId);
+      await AsyncStorage.setItem('tempUserEmail', email);
+      
+      // Navigate to complete profile
+      navigation.navigate('CompleteProfile', { userId });
+      
     } catch (error) {
-      setErrorMessage('Network error. Please check your connection.');
+      setErrorMessage(error instanceof Error ? error.message : 'Network error. Please check your connection.');
       setShowError(true);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -279,7 +158,18 @@ export default function SignUpScreen() {
           showsVerticalScrollIndicator={false}
           bounces={false}
         >
-          <Text style={styles.title}>Sign Up</Text>
+          <View style={styles.stepIndicator}>
+            <View style={styles.stepActive}>
+              <Text style={styles.stepActiveText}>1</Text>
+            </View>
+            <View style={styles.stepLine} />
+            <View style={styles.stepInactive}>
+              <Text style={styles.stepInactiveText}>2</Text>
+            </View>
+          </View>
+          
+          <Text style={styles.title}>Create Account</Text>
+          <Text style={styles.subtitle}>Basic Information</Text>
           
           <TextInput
             style={[styles.input, errors.firstName ? styles.inputError : null]}
@@ -307,7 +197,7 @@ export default function SignUpScreen() {
 
           <TextInput
             style={[styles.input, errors.email ? styles.inputError : null]}
-            placeholder="Mail"
+            placeholder="Email"
             value={email}
             onChangeText={(text) => {
               setEmail(text);
@@ -318,43 +208,6 @@ export default function SignUpScreen() {
             placeholderTextColor="#999"
           />
           {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
-
-          <TextInput
-            style={[styles.input, errors.phoneNumber ? styles.inputError : null]}
-            placeholder="Phone number"
-            value={phoneNumber}
-            onChangeText={(text) => {
-              setPhoneNumber(text);
-              setErrors(prev => ({ ...prev, phoneNumber: '' }));
-            }}
-            keyboardType="phone-pad"
-            placeholderTextColor="#999"
-          />
-          {errors.phoneNumber ? <Text style={styles.errorText}>{errors.phoneNumber}</Text> : null}
-
-          <TextInput
-            style={[styles.input, errors.companyName ? styles.inputError : null]}
-            placeholder="Company name"
-            value={companyName}
-            onChangeText={(text) => {
-              setCompanyName(text);
-              setErrors(prev => ({ ...prev, companyName: '' }));
-            }}
-            placeholderTextColor="#999"
-          />
-          {errors.companyName ? <Text style={styles.errorText}>{errors.companyName}</Text> : null}
-
-          <TextInput
-            style={[styles.input, errors.occupation ? styles.inputError : null]}
-            placeholder="Occupation (e.g. Software Developer)"
-            value={occupation}
-            onChangeText={(text) => {
-              setOccupation(text);
-              setErrors(prev => ({ ...prev, occupation: '' }));
-            }}
-            placeholderTextColor="#999"
-          />
-          {errors.occupation ? <Text style={styles.errorText}>{errors.occupation}</Text> : null}
 
           <View style={styles.passwordContainer}>
             <TextInput
@@ -381,39 +234,14 @@ export default function SignUpScreen() {
           </View>
           {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
 
-          <View style={styles.uploadSection}>
-            <Text style={styles.uploadLabel}>Company Logo:</Text>
-            <TouchableOpacity style={styles.uploadButton} onPress={handleLogoUpload}>
-              {companyLogo ? (
-                <Image 
-                  source={{ uri: companyLogo }} 
-                  style={styles.profilePreview} 
-                />
-              ) : (
-                <MaterialIcons name="add" size={24} color={COLORS.white} />
-              )}
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.uploadSection}>
-            <Text style={styles.uploadLabel}>Profile Picture:</Text>
-            <TouchableOpacity style={styles.uploadButton} onPress={handleImagePick}>
-              {profileImage ? (
-                <Image 
-                  source={{ uri: profileImage }} 
-                  style={styles.profilePreview} 
-                />
-              ) : (
-                <MaterialIcons name="add" size={24} color={COLORS.white} />
-              )}
-            </TouchableOpacity>
-          </View>
-
           <TouchableOpacity 
-            style={styles.signUpButton}
+            style={[styles.signUpButton, isLoading && styles.disabledButton]}
             onPress={handleSignUp}
+            disabled={isLoading}
           >
-            <Text style={styles.signUpButtonText}>Sign Up</Text>
+            <Text style={styles.signUpButtonText}>
+              {isLoading ? 'Creating Account...' : 'Continue to Step 2'}
+            </Text>
           </TouchableOpacity>
 
           <View style={styles.signInContainer}>
@@ -454,9 +282,53 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    marginBottom: 40,
+    marginBottom: 8,
     textAlign: 'center',
-    marginTop: 20,
+  },
+  subtitle: {
+    fontSize: 18,
+    color: '#666',
+    marginBottom: 30,
+    textAlign: 'center',
+  },
+  stepIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    marginTop: 10,
+  },
+  stepActive: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepActiveText: {
+    color: COLORS.white,
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  stepInactive: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#E0E0E0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepInactiveText: {
+    color: '#999',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  stepLine: {
+    width: 60,
+    height: 2,
+    backgroundColor: '#E0E0E0',
+    marginHorizontal: 10,
   },
   input: {
     backgroundColor: '#F5F5F5',
@@ -552,5 +424,56 @@ const styles = StyleSheet.create({
     marginTop: -10,
     marginBottom: 10,
     marginLeft: 15,
+  },
+  disabledButton: {
+    backgroundColor: '#999',
+    opacity: 0.7,
+  },
+  imageSection: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 15,
+    padding: 15,
+    marginVertical: 15,
+  },
+  sectionHeader: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 5,
+  },
+  sectionDescription: {
+    fontSize: 14,
+    color: '#777',
+    marginBottom: 15,
+  },
+  imageButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  imageButton: {
+    width: 130,
+    height: 130,
+    borderRadius: 15,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    overflow: 'hidden',
+  },
+  imagePlaceholder: {
+    flex: 1,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imagePlaceholderText: {
+    marginTop: 10,
+    color: '#666',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  imagePreview: {
+    width: '100%',
+    height: '100%',
   },
 });
