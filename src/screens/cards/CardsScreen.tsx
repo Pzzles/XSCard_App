@@ -25,6 +25,7 @@ interface UserData {
   profileImage?: string;
   companyLogo?: string;
   logoZoomLevel?: number;
+  analytics?: any;
 }
 
 interface CardData {
@@ -180,15 +181,34 @@ export default function CardsScreen() {
 
       // Uses authenticated request to fetch cards
       const cardResponse = await authenticatedFetch(ENDPOINTS.GET_CARD + `/${userId}`);
-      const cardsArray = await cardResponse.json();
+      const responseData = await cardResponse.json();
+
+      // Handle new response structure
+      let cardsArray;
+      let analytics;
+      
+      if (responseData.cards) {
+        // New structure: { cards: [...], analytics: {...} }
+        cardsArray = responseData.cards;
+        analytics = responseData.analytics;
+        console.log('Scan analytics:', analytics);
+      } else if (Array.isArray(responseData)) {
+        // Fallback for old structure: [card1, card2, ...]
+        cardsArray = responseData;
+        console.log('Using fallback for old API response structure');
+      } else {
+        console.error('Unexpected API response structure:', responseData);
+        return;
+      }
 
       if (cardsArray && cardsArray.length > 0) {
-        // Log the first card's data to check if logoZoomLevel is included
+        // Log the first card's data to check if scans and logoZoomLevel are included
         console.log('Card data received:', JSON.stringify(cardsArray[0], null, 2));
         
         setUserData({
           id: userId,
-          cards: cardsArray // The response is now directly the cards array
+          cards: cardsArray,
+          analytics: analytics // Store analytics for future use
         });
 
         // Set card color from the first card (index 0)
@@ -502,7 +522,7 @@ export default function CardsScreen() {
       justifyContent: 'center',
       marginVertical: 10,
       alignSelf: 'center',  // Center horizontally
-      width: '40%',  // Restore original width
+      width: '55%',  // Updated to match wallet button width
       gap: 8,
     },
     input: {

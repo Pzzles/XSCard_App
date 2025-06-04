@@ -919,12 +919,27 @@ export default function Calendar() {
         return;
       }
       
-      const cards = await response.json();
-      console.log('User cards data:', cards);
+      const responseData = await response.json();
+      console.log('User cards response data:', responseData);
       
-      if (cards && cards.length > 0) {
+      // Handle new response structure
+      let cardsArray;
+      
+      if (responseData.cards) {
+        // New structure: { cards: [...], analytics: {...} }
+        cardsArray = responseData.cards;
+      } else if (Array.isArray(responseData)) {
+        // Fallback for old structure: [card1, card2, ...]
+        cardsArray = responseData;
+        console.log('Using fallback for old API response structure in Calendar');
+      } else {
+        console.error('Unexpected API response structure:', responseData);
+        return;
+      }
+      
+      if (cardsArray && cardsArray.length > 0) {
         // Use the default card (first card)
-        const defaultCard = cards[0];
+        const defaultCard = cardsArray[0];
         setUserInfo({
           name: defaultCard.name || '',
           surname: defaultCard.surname || '',

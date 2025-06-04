@@ -106,10 +106,26 @@ export default function EditCard() {
       }
 
       const response = await authenticatedFetch(ENDPOINTS.GET_CARD + `/${userId}`);
-      const cardsData = await response.json();
+      const responseData = await response.json();
       
-      if (cardsData && cardsData.length > cardIndex) {
-        const userData = cardsData[cardIndex]; 
+      // Handle new response structure
+      let cardsArray;
+      
+      if (responseData.cards) {
+        // New structure: { cards: [...], analytics: {...} }
+        cardsArray = responseData.cards;
+      } else if (Array.isArray(responseData)) {
+        // Fallback for old structure: [card1, card2, ...]
+        cardsArray = responseData;
+        console.log('Using fallback for old API response structure');
+      } else {
+        console.error('Unexpected API response structure:', responseData);
+        setError('Failed to load user data - unexpected response format');
+        return;
+      }
+      
+      if (cardsArray && cardsArray.length > cardIndex) {
+        const userData = cardsArray[cardIndex]; 
         console.log('Card data loaded with zoom level:', userData.logoZoomLevel);
         
         setSelectedColor(userData.colorScheme || '#1B2B5B');

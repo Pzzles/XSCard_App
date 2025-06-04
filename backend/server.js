@@ -29,6 +29,7 @@ const contactRoutes = require('./routes/contactRoutes');
 const meetingRoutes = require('./routes/meetingRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const subscriptionRoutes = require('./routes/subscriptionRoutes'); // Add subscription routes
+const apkRoutes = require('./routes/apkRoutes'); // Add APK routes
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -37,6 +38,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/', paymentRoutes); // Add this line before protected routes
 app.use('/', subscriptionRoutes); // Add subscription routes
+app.use('/', apkRoutes); // Add APK routes for public download
 
 app.get('/saveContact', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'saveContact.html'));
@@ -337,6 +339,201 @@ app.post('/submit-query', async (req, res) => {
       error: error.message
     });
   }
+});
+
+// Add scan tracking endpoint
+app.post('/track-scan', async (req, res) => {
+    const { userId, cardIndex = 0, scanType = 'save' } = req.body;
+    
+    console.log('Track scan called:', { userId, cardIndex, scanType });
+    
+    // Validate required parameters
+    if (!userId) {
+        return res.status(400).send({ 
+            success: false,
+            message: 'User ID is required'
+        });
+    }
+
+    // Validate cardIndex is a number
+    const parsedCardIndex = parseInt(cardIndex);
+    if (isNaN(parsedCardIndex) || parsedCardIndex < 0) {
+        return res.status(400).send({ 
+            success: false,
+            message: 'Valid card index is required'
+        });
+    }
+
+    try {
+        // Get user's cards
+        const cardRef = db.collection('cards').doc(userId);
+        const cardDoc = await cardRef.get();
+
+        if (!cardDoc.exists) {
+            return res.status(404).send({ 
+                success: false,
+                message: 'User cards not found' 
+            });
+        }
+
+        const cardsData = cardDoc.data();
+        if (!cardsData.cards || !Array.isArray(cardsData.cards)) {
+            return res.status(404).send({ 
+                success: false,
+                message: 'No cards found for user' 
+            });
+        }
+
+        // Check if cardIndex is valid
+        if (parsedCardIndex >= cardsData.cards.length) {
+            return res.status(404).send({ 
+                success: false,
+                message: 'Card index out of range' 
+            });
+        }
+
+        // Update the cards array
+        const updatedCards = [...cardsData.cards];
+        
+        // Initialize scans field if it doesn't exist, then increment
+        if (!updatedCards[parsedCardIndex].scans) {
+            updatedCards[parsedCardIndex].scans = 0;
+        }
+        updatedCards[parsedCardIndex].scans += 1;
+
+        // Save back to database
+        await cardRef.update({
+            cards: updatedCards
+        });
+
+        console.log(`Scan tracked for user ${userId}, card ${parsedCardIndex}. New count: ${updatedCards[parsedCardIndex].scans}`);
+
+        res.status(200).send({ 
+            success: true,
+            message: 'Scan tracked successfully',
+            cardIndex: parsedCardIndex,
+            newScanCount: updatedCards[parsedCardIndex].scans,
+            scanType: scanType
+        });
+
+    } catch (error) {
+        console.error('Error tracking scan:', error);
+        res.status(500).send({ 
+            success: false,
+            message: 'Failed to track scan',
+            error: error.message 
+        });
+    }
+});
+
+// Data migration endpoint - run once to initialize scans field for existing cards
+app.post('/migrate-scans', async (req, res) => {
+    try {
+        console.log('Starting scans migration for existing cards...');
+        
+        const cardsRef = db.collection('cards');
+        const snapshot = await cardsRef.get();
+        
+        if (snapshot.empty) {
+            return res.status(200).send({
+                success: true,
+                message: 'No cards found to migrate'
+            });
+        }
+
+        let migratedUsers = 0;
+        let migratedCards = 0;
+        const batch = db.batch();
+
+        snapshot.forEach(doc => {
+            const userData = doc.data();
+            if (userData.cards && Array.isArray(userData.cards)) {
+                let needsUpdate = false;
+                const updatedCards = userData.cards.map(card => {
+                    if (card.scans === undefined || card.scans === null) {
+                        needsUpdate = true;
+                        migratedCards++;
+                        return {
+                            ...card,
+                            scans: 0
+                        };
+                    }
+                    return card;
+                });
+
+                if (needsUpdate) {
+                    batch.update(doc.ref, { cards: updatedCards });
+                    migratedUsers++;
+                }
+            }
+        });
+
+        // Commit all updates
+        await batch.commit();
+
+        console.log(`Migration completed: ${migratedUsers} users, ${migratedCards} cards updated`);
+
+        res.status(200).send({
+            success: true,
+            message: 'Migration completed successfully',
+            stats: {
+                usersUpdated: migratedUsers,
+                cardsUpdated: migratedCards,
+                totalUsersScanned: snapshot.size
+            }
+        });
+
+    } catch (error) {
+        console.error('Error during migration:', error);
+        res.status(500).send({
+            success: false,
+            message: 'Migration failed',
+            error: error.message
+        });
+    }
+});
+
+// Test endpoint to verify scan tracking (development only)
+app.get('/test-scan-tracking/:userId/:cardIndex?', async (req, res) => {
+    const { userId } = req.params;
+    const cardIndex = parseInt(req.params.cardIndex) || 0;
+    
+    try {
+        // Get current card data
+        const cardRef = db.collection('cards').doc(userId);
+        const doc = await cardRef.get();
+        
+        if (!doc.exists) {
+            return res.status(404).send({ message: 'User not found' });
+        }
+        
+        const cardsData = doc.data();
+        if (!cardsData.cards || cardIndex >= cardsData.cards.length) {
+            return res.status(404).send({ message: 'Card not found' });
+        }
+        
+        const card = cardsData.cards[cardIndex];
+        const totalScans = cardsData.cards.reduce((sum, c) => sum + (c.scans || 0), 0);
+        
+        res.status(200).send({
+            success: true,
+            userId: userId,
+            cardIndex: cardIndex,
+            currentScans: card.scans || 0,
+            totalScans: totalScans,
+            cardInfo: {
+                name: `${card.name} ${card.surname}`,
+                company: card.company
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error in test endpoint:', error);
+        res.status(500).send({ 
+            success: false, 
+            error: error.message 
+        });
+    }
 });
 
 // Protected routes - after public routes

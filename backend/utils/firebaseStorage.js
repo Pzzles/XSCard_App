@@ -38,7 +38,14 @@ const uploadFile = async (fileBuffer, originalName, userId, fileType) => {
       const filename = `${fileType}-${uniqueSuffix}${extension}`;
       
       // Create a reference to the file in Firebase Storage
-      const filePath = `profiles/${userId}/${filename}`;
+      let filePath;
+      if (fileType === 'apk') {
+        // Store APK files in a dedicated apk-files folder
+        filePath = `apk-files/${filename}`;
+      } else {
+        // Store other files in user-specific profile folders
+        filePath = `profiles/${userId}/${filename}`;
+      }
       console.log('Creating file reference at path:', filePath);
       
       const file = bucket.file(filePath);
@@ -73,15 +80,27 @@ const uploadFile = async (fileBuffer, originalName, userId, fileType) => {
       console.warn('FALLBACK: Using local file storage approach since Firebase Storage is not available');
       
       // Create uploads directory if it doesn't exist
-      const uploadsDir = path.join(__dirname, '..', 'public', 'profiles');
+      let uploadsDir;
+      if (fileType === 'apk') {
+        uploadsDir = path.join(__dirname, '..', 'public', 'downloads');
+      } else {
+        uploadsDir = path.join(__dirname, '..', 'public', 'profiles');
+      }
+      
       if (!fs.existsSync(uploadsDir)) {
         fs.mkdirSync(uploadsDir, { recursive: true });
       }
       
-      // Create user directory if it doesn't exist
-      const userDir = path.join(uploadsDir, userId);
-      if (!fs.existsSync(userDir)) {
-        fs.mkdirSync(userDir, { recursive: true });
+      let userDir;
+      if (fileType === 'apk') {
+        // APK files don't need user-specific directories in local storage
+        userDir = uploadsDir;
+      } else {
+        // Create user directory for profile images
+        userDir = path.join(uploadsDir, userId);
+        if (!fs.existsSync(userDir)) {
+          fs.mkdirSync(userDir, { recursive: true });
+        }
       }
       
       // Create a unique filename
@@ -94,8 +113,13 @@ const uploadFile = async (fileBuffer, originalName, userId, fileType) => {
       fs.writeFileSync(filePath, fileBuffer);
       
       // Return the relative URL path
-      const relativePath = `/profiles/${userId}/${filename}`;
-      console.log('Upload complete. Local URL:', relativePath);
+      let relativePath;
+      if (fileType === 'apk') {
+        relativePath = `/downloads/${filename}`;
+      } else {
+        relativePath = `/profiles/${userId}/${filename}`;
+      }
+      console.log('Local fallback successful. URL:', relativePath);
       
       return relativePath;
     }
@@ -108,15 +132,27 @@ const uploadFile = async (fileBuffer, originalName, userId, fileType) => {
       console.warn('Attempting local fallback after Firebase upload failure');
       try {
         // Create uploads directory if it doesn't exist
-        const uploadsDir = path.join(__dirname, '..', 'public', 'profiles');
+        let uploadsDir;
+        if (fileType === 'apk') {
+          uploadsDir = path.join(__dirname, '..', 'public', 'downloads');
+        } else {
+          uploadsDir = path.join(__dirname, '..', 'public', 'profiles');
+        }
+        
         if (!fs.existsSync(uploadsDir)) {
           fs.mkdirSync(uploadsDir, { recursive: true });
         }
         
-        // Create user directory if it doesn't exist
-        const userDir = path.join(uploadsDir, userId);
-        if (!fs.existsSync(userDir)) {
-          fs.mkdirSync(userDir, { recursive: true });
+        let userDir;
+        if (fileType === 'apk') {
+          // APK files don't need user-specific directories in local storage
+          userDir = uploadsDir;
+        } else {
+          // Create user directory for profile images
+          userDir = path.join(uploadsDir, userId);
+          if (!fs.existsSync(userDir)) {
+            fs.mkdirSync(userDir, { recursive: true });
+          }
         }
         
         // Create a unique filename
@@ -129,7 +165,12 @@ const uploadFile = async (fileBuffer, originalName, userId, fileType) => {
         fs.writeFileSync(filePath, fileBuffer);
         
         // Return the relative URL path
-        const relativePath = `/profiles/${userId}/${filename}`;
+        let relativePath;
+        if (fileType === 'apk') {
+          relativePath = `/downloads/${filename}`;
+        } else {
+          relativePath = `/profiles/${userId}/${filename}`;
+        }
         console.log('Local fallback successful. URL:', relativePath);
         
         return relativePath;
@@ -182,7 +223,8 @@ const getContentType = (extension) => {
     '.png': 'image/png',
     '.gif': 'image/gif',
     '.webp': 'image/webp',
-    '.svg': 'image/svg+xml'
+    '.svg': 'image/svg+xml',
+    '.apk': 'application/vnd.android.package-archive'
   };
   
   return types[extension.toLowerCase()] || 'application/octet-stream';
