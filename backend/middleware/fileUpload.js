@@ -12,14 +12,17 @@ const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB file size limit
+    fileSize: 120 * 1024 * 1024, // Increased to 50MB for APK files
   },
   fileFilter: (req, file, cb) => {
-    // Accept only image files
+    // Accept image files and APK files
     if (file.mimetype.startsWith('image/')) {
       cb(null, true);
+    } else if (file.mimetype === 'application/vnd.android.package-archive' || 
+               file.originalname.toLowerCase().endsWith('.apk')) {
+      cb(null, true);
     } else {
-      cb(new Error('Only image files are allowed!'), false);
+      cb(new Error('Only image files and APK files are allowed!'), false);
     }
   }
 });
@@ -48,15 +51,19 @@ const handleSingleUpload = (fieldName) => {
 
         // Get user ID from authenticated request or params
         // Check both id and userId params, also allow userId or uid in the body
-        const userId = req.user?.uid || 
-                       req.params.id || 
-                       req.params.userId || 
-                       req.body.userId || 
-                       req.body.uid || 
-                       req.query.userId ||
-                       (req.body.email ? `temp_${req.body.email}` : null);
+        let userId = req.user?.uid || 
+                     req.params.id || 
+                     req.params.userId || 
+                     req.body.userId || 
+                     req.body.uid || 
+                     req.query.userId ||
+                     (req.body.email ? `temp_${req.body.email}` : null);
         
-        if (!userId) {
+        // For APK files, use a system/default userId since APKs are global
+        if (fieldName === 'apk') {
+          userId = 'system_apk_uploads';
+          console.log('Using system userId for APK upload');
+        } else if (!userId) {
           return res.status(400).json({
             success: false,
             message: 'User ID or email is required for file upload'
@@ -114,15 +121,19 @@ const handleMultipleUploads = (fields) => {
 
         // Get user ID from authenticated request or params
         // Check both id and userId params, also allow userId or uid in the body and query
-        const userId = req.user?.uid || 
-                       req.params.id || 
-                       req.params.userId || 
-                       req.body.userId || 
-                       req.body.uid || 
-                       req.query.userId ||
-                       (req.body.email ? `temp_${req.body.email}` : null);
+        let userId = req.user?.uid || 
+                     req.params.id || 
+                     req.params.userId || 
+                     req.body.userId || 
+                     req.body.uid || 
+                     req.query.userId ||
+                     (req.body.email ? `temp_${req.body.email}` : null);
         
-        if (!userId) {
+        // For APK files, use a system/default userId since APKs are global
+        if (Object.keys(req.files).includes('apk')) {
+          userId = 'system_apk_uploads';
+          console.log('Using system userId for APK upload in multiple files');
+        } else if (!userId) {
           return res.status(400).json({
             success: false,
             message: 'User ID or email is required for file upload'

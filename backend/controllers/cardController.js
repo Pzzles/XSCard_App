@@ -89,9 +89,13 @@ exports.getCardById = async (req, res) => {
         if (data.cards) {
             cards = data.cards.map(card => ({
                 ...card,
-                createdAt: formatDate(card.createdAt) // Format for display
+                createdAt: formatDate(card.createdAt), // Format for display
+                scans: card.scans || 0 // Initialize scans field if missing
             }));
         }
+        
+        // Calculate total scans across all cards
+        const totalScans = cards.reduce((sum, card) => sum + (card.scans || 0), 0);
         
         // Check user's subscription plan
         const userRef = db.collection('users').doc(id);
@@ -103,13 +107,32 @@ exports.getCardById = async (req, res) => {
             const isFreePlan = userData.plan === 'free';
             
             if (isFreePlan && cards.length > 1) {
-                // For free users, only return the first card
-                return res.status(200).send([cards[0]]);
+                // For free users, only return the first card but still calculate total scans from visible card
+                const visibleCards = [cards[0]];
+                const visibleTotalScans = visibleCards.reduce((sum, card) => sum + (card.scans || 0), 0);
+                
+                // Include analytics summary for free users
+                return res.status(200).send({
+                    cards: visibleCards,
+                    analytics: {
+                        totalScans: visibleTotalScans,
+                        cardsVisible: 1,
+                        cardsTotal: cards.length
+                    }
+                });
             }
         }
         
-        // For premium users or users with only one card, return all cards
-        res.status(200).send(cards);
+        // For premium users or users with only one card, return all cards with full analytics
+        res.status(200).send({
+            cards: cards,
+            analytics: {
+                totalScans: totalScans,
+                cardsVisible: cards.length,
+                cardsTotal: cards.length,
+                averageScansPerCard: cards.length > 0 ? Math.round(totalScans / cards.length) : 0
+            }
+        });
     } catch (error) {
         console.error('Error fetching card:', error);
         res.status(500).send({ message: 'Error fetching card', error: error.message });

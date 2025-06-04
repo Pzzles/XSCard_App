@@ -29,6 +29,25 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
   const [isProcessing, setIsProcessing] = useState(false);
   const [userEmail, setUserEmail] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
+  const [currency, setCurrency] = useState<'ZAR' | 'USD'>('ZAR');
+
+  // Define pricing for both currencies
+  const pricing = {
+    ZAR: {
+      annually: { total: 1800, monthly: 150, save: 120 },
+      monthly: { total: 159.99 }
+    },
+    USD: {
+      annually: { total: 99, monthly: 8.25, save: 7 },
+      monthly: { total: 8.99 }
+    }
+  };
+
+  // Currency symbols
+  const currencySymbols = {
+    ZAR: 'R',
+    USD: '$'
+  };
 
   useEffect(() => {
     const getUserData = async () => {
@@ -72,6 +91,43 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
       console.error('Error checking subscription status:', error);
     }
   };
+
+  // Currency Toggle Component
+  const CurrencyToggle = () => (
+    <View style={styles.currencyToggleContainer}>
+      <Text style={styles.currencyToggleLabel}>Currency:</Text>
+      <View style={styles.toggleContainer}>
+        <TouchableOpacity
+          style={[
+            styles.toggleOption,
+            currency === 'ZAR' && styles.toggleOptionActive
+          ]}
+          onPress={() => setCurrency('ZAR')}
+        >
+          <Text style={[
+            styles.toggleText,
+            currency === 'ZAR' && styles.toggleTextActive
+          ]}>
+            ZAR (R)
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.toggleOption,
+            currency === 'USD' && styles.toggleOptionActive
+          ]}
+          onPress={() => setCurrency('USD')}
+        >
+          <Text style={[
+            styles.toggleText,
+            currency === 'USD' && styles.toggleTextActive
+          ]}>
+            USD ($)
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 
   // Add a logout function
   const logoutUser = async () => {
@@ -153,7 +209,8 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
   const handlePaymentInitiation = async () => {
     try {
       setIsProcessing(true);
-      const amount = selectedPlan === 'annually' ? 1800 : 159.99;
+      const currentPricing = pricing[currency];
+      const amount = selectedPlan === 'annually' ? currentPricing.annually.total : currentPricing.monthly.total;
 
       const response = await authenticatedFetch(ENDPOINTS.INITIALIZE_PAYMENT, {
         method: 'POST',
@@ -163,6 +220,7 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
         body: JSON.stringify({
           email: userEmail,
           amount: amount,
+          currency: currency,
           // Add a success URL that will handle returning to the app and logging out
           // This depends on deep linking configuration in your app
           callback_url: 'xscard://payment-success'
@@ -216,6 +274,9 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
     </View>
   );
 
+  const currentPricing = pricing[currency];
+  const symbol = currencySymbols[currency];
+
   return (
     <SafeAreaView style={styles.container}>
       <TouchableOpacity 
@@ -230,7 +291,7 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
       ) : (
         <ScrollView style={styles.content}>
           <Text style={styles.title}>
-            Be a better networker, upgrade to XSCard premium
+            Be a better networker, upgrade to XS Card premium
           </Text>
 
           <TouchableOpacity 
@@ -247,6 +308,9 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
             </Text>
           </TouchableOpacity>
 
+          {/* Currency Toggle */}
+          <CurrencyToggle />
+
           {/* Pricing Options */}
           <View style={styles.pricingContainer}>
             <TouchableOpacity 
@@ -257,11 +321,11 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
               onPress={() => setSelectedPlan('annually')}
             >
               <View style={styles.saveBadge}>
-                <Text style={styles.saveText}>Save R120</Text>
+                <Text style={styles.saveText}>Save {symbol}{currentPricing.annually.save}</Text>
               </View>
               <Text style={styles.planType}>Annually</Text>
-              <Text style={styles.price}>R1,800.00</Text>
-              <Text style={styles.monthlyPrice}>R150.00/month</Text>
+              <Text style={styles.price}>{symbol}{currentPricing.annually.total.toFixed(2)}</Text>
+              <Text style={styles.monthlyPrice}>{symbol}{currentPricing.annually.monthly.toFixed(2)}/month</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
@@ -272,7 +336,7 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
               onPress={() => setSelectedPlan('monthly')}
             >
               <Text style={styles.planType}>Monthly</Text>
-              <Text style={styles.price}>R159.99</Text>
+              <Text style={styles.price}>{symbol}{currentPricing.monthly.total.toFixed(2)}</Text>
             </TouchableOpacity>
           </View>
 
@@ -635,6 +699,60 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
+  },
+  currencyToggleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 25,
+    marginTop: 10,
+  },
+  currencyToggleLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginRight: 15,
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#f0f0f0',
+    borderRadius: 25,
+    padding: 3,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  toggleOption: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 22,
+    minWidth: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toggleOptionActive: {
+    backgroundColor: '#FF6B6B',
+    shadowColor: '#FF6B6B',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  toggleText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  toggleTextActive: {
+    color: 'white',
   },
 });
 

@@ -188,18 +188,33 @@ export default function AdminDashboard() {
 
       const [contactsResponse, cardsResponse] = await Promise.all([
         authenticatedFetch(`/contacts/${userId}`),
-        authenticatedFetch(`/cards/${userId}`)
+        authenticatedFetch(`/Cards/${userId}`)
       ]);
 
       const contactsData = await contactsResponse.json();
-      const cardsData = await cardsResponse.json();
+      const cardsResponseData = await cardsResponse.json();
+
+      // Handle new response structure for cards
+      let cardsArray;
+      
+      if (cardsResponseData.cards) {
+        // New structure: { cards: [...], analytics: {...} }
+        cardsArray = cardsResponseData.cards;
+      } else if (Array.isArray(cardsResponseData)) {
+        // Fallback for old structure: [card1, card2, ...]
+        cardsArray = cardsResponseData;
+        console.log('Using fallback for old API response structure in AdminDashboard');
+      } else {
+        console.error('Unexpected API response structure:', cardsResponseData);
+        cardsArray = [];
+      }
 
       // Extract dates and ensure they're in the correct string format
       const contactDates = contactsData?.contactList
         ?.map((contact: Contact) => contact?.createdAt)
         ?.filter(Boolean) || [];
       
-      const cardDates = cardsData
+      const cardDates = cardsArray
         ?.map((card: Card) => card?.createdAt)
         ?.filter(Boolean) || [];
 
@@ -228,13 +243,13 @@ export default function AdminDashboard() {
 
       // Update totals
       setTotalContacts(contactsData?.contactList?.length || 0);
-      setTotalCards(cardsData?.length || 0);
+      setTotalCards(cardsArray?.length || 0);
 
       if (contactsData?.contactList) {
         setContactsList(contactsData.contactList);
       }
-      if (cardsData) {
-        setCardsList(cardsData);
+      if (cardsArray) {
+        setCardsList(cardsArray);
       }
 
     } catch (error) {
