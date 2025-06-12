@@ -48,6 +48,7 @@ export type AuthStackParamList = {
   Splash: undefined;
   SignIn: undefined;
   SignUp: undefined;
+  ForgotPassword: undefined;
   CompleteProfile: { userId: string };
   MainApp: undefined;
   AdminDashboard: undefined;
