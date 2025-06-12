@@ -11,9 +11,13 @@ import { RootStackParamList } from '../../types/navigation';
 import { Swipeable } from 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useColorScheme } from '../../context/ColorSchemeContext';
+import { generateVCard, generateFileName, generateMultipleVCards, generateBatchFileName } from '../../utils/vCardGenerator';
 
 // Define constant for free plan contact limit
 const FREE_PLAN_CONTACT_LIMIT = 3;
+
+// Test mode flag for development - matches the one in contactExport.ts
+const TEST_MODE = true;
 
 // Update interfaces to match Firestore structure
 interface Contact {
@@ -67,6 +71,11 @@ export default function ContactsScreen() {
   // Create a ref to store the swipeables
   const swipeableRefs = useRef<Map<number, Swipeable | null>>(new Map());
   
+  // Add contact options modal state
+  const [isContactOptionsVisible, setIsContactOptionsVisible] = useState(false);
+  const [selectedContactForOptions, setSelectedContactForOptions] = useState<Contact | null>(null);
+  const [selectedContactIndex, setSelectedContactIndex] = useState<number>(-1);
+
   // Reset refs when contacts change
   useEffect(() => {
     swipeableRefs.current = new Map();
@@ -359,7 +368,36 @@ export default function ContactsScreen() {
       alignItems: 'center' as const,
       width: 80,
       height: '100%' as const,
-    }
+    },
+    exportAction: {
+      backgroundColor: '#4CAF50',
+      justifyContent: 'center' as const,
+      alignItems: 'center' as const,
+      width: 80,
+      height: '100%' as const,
+    },
+    exportAllButton: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      marginLeft: 10,
+      borderRadius: 12,
+      backgroundColor: colorScheme,
+      shadowColor: '#000',
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      shadowOpacity: 0.15,
+      shadowRadius: 3,
+      elevation: 3,
+    },
+    exportAllButtonText: {
+      color: COLORS.white,
+      fontSize: 16,
+      fontWeight: '600',
+    },
   };
 
   // Add this component for the swipe actions
@@ -397,10 +435,98 @@ export default function ContactsScreen() {
     navigation.navigate('UnlockPremium');
   };
 
+  // Handler for when a contact is clicked
+  const handleContactPress = (contact: Contact, index: number) => {
+    setSelectedContactForOptions(contact);
+    setSelectedContactIndex(index);
+    setIsContactOptionsVisible(true);
+  };
+
+  // Export handler functions
+  const handleExportContact = async (contact: Contact) => {
+    try {
+      if (TEST_MODE) {
+        // Test mode: Direct implementation to avoid native module imports
+        const vCardData = generateVCard(contact);
+        const fileName = generateFileName(contact);
+        
+        console.log('📱 TEST MODE: Export Single Contact');
+        console.log('📁 File Name:', fileName);
+        console.log('📄 vCard Data:', vCardData);
+        
+        Alert.alert(
+          '📱 TEST MODE: Export Success!',
+          `Contact: ${contact.name} ${contact.surname}\n\nFile: ${fileName}\n\nIn production, this would export a vCard file that can be imported to any phone's contacts.`,
+          [{ text: 'View vCard Data', onPress: () => {
+            Alert.alert('vCard Content', vCardData);
+          }}, { text: 'OK' }]
+        );
+        return;
+      }
+      
+      // Production mode
+      const exportModule = require('../../utils/contactExport');
+      await exportModule.exportSingleContact(contact);
+      Alert.alert('Success', `Contact "${contact.name} ${contact.surname}" exported successfully!`);
+    } catch (error) {
+      console.error('Export contact error:', error);
+      Alert.alert('Error', 'Failed to export contact. Please try again.');
+    }
+  };
+
+  const handleExportAllContacts = async () => {
+    try {
+      if (filteredContacts.length === 0) {
+        Alert.alert('No Contacts', 'No contacts available to export.');
+        return;
+      }
+      
+      if (TEST_MODE) {
+        // Test mode: Direct implementation to avoid native module imports
+        const vCardData = generateMultipleVCards(filteredContacts);
+        const fileName = generateBatchFileName(filteredContacts.length);
+        
+        console.log('📱 TEST MODE: Export All Contacts');
+        console.log('📊 Contact Count:', filteredContacts.length);
+        console.log('📁 File Name:', fileName);
+        console.log('📄 vCard Data Preview:', vCardData.substring(0, 500) + '...');
+        
+        const contactNames = filteredContacts.map(c => `• ${c.name} ${c.surname}`).join('\n');
+        
+        Alert.alert(
+          '📱 TEST MODE: Bulk Export Success!',
+          `Exported ${filteredContacts.length} contacts:\n\n${contactNames}\n\nFile: ${fileName}\n\nIn production, this would create a single vCard file with all contacts.`,
+          [{ text: 'View vCard Preview', onPress: () => {
+            Alert.alert('vCard Content Preview', vCardData.substring(0, 800) + '\n\n... and more');
+          }}, { text: 'OK' }]
+        );
+        return;
+      }
+      
+      // Production mode
+      const exportModule = require('../../utils/contactExport');
+      await exportModule.exportAllContacts(filteredContacts);
+      Alert.alert('Success', `${filteredContacts.length} contacts exported successfully!`);
+    } catch (error) {
+      console.error('Export all contacts error:', error);
+      Alert.alert('Error', 'Failed to export contacts. Please try again.');
+    }
+  };
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={styles.container}>
         <Header title="Contacts" />
+        
+        {/* Test Mode Banner */}
+        {TEST_MODE && (
+          <View style={styles.testModeBanner}>
+            <MaterialIcons name="science" size={20} color="#FFA500" />
+            <Text style={styles.testModeText}>
+              📱 TEST MODE: Export feature will show previews (no actual files created)
+            </Text>
+          </View>
+        )}
         
         {/* Only show remaining contacts for free users */}
         {remainingContacts !== 'unlimited' && (
@@ -463,6 +589,18 @@ export default function ContactsScreen() {
             />
           </View>
 
+          {filteredContacts.length > 0 && (
+            <View style={styles.exportButtonContainer}>
+              <TouchableOpacity 
+                style={dynamicStyles.exportAllButton}
+                onPress={handleExportAllContacts}
+              >
+                <MaterialIcons name="download" size={20} color={COLORS.white} />
+                <Text style={styles.exportAllButtonText}>Export All</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {isLoading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={colorScheme} />
@@ -504,33 +642,39 @@ export default function ContactsScreen() {
                   }
                 >
                   <View style={styles.contactCard}>
-                    <View style={styles.contactLeft}>
-                      <Image 
-                        source={require('../../../assets/images/profile.png')} 
-                        style={styles.contactImage} 
-                      />
-                      <View style={styles.contactInfo}>
-                        <Text style={styles.contactName}>
-                          {contact.name} {contact.surname}
-                        </Text>
-                        <View style={styles.contactSubInfo}>
-                          <Text style={styles.contactPhone}>
-                            {contact.phone || 'No phone number'}
+                    <TouchableOpacity 
+                      style={styles.contactCardContent}
+                      onPress={() => handleContactPress(contact, index)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.contactLeft}>
+                        <Image 
+                          source={require('../../../assets/images/profile.png')} 
+                          style={styles.contactImage} 
+                        />
+                        <View style={styles.contactInfo}>
+                          <Text style={styles.contactName}>
+                            {contact.name} {contact.surname}
                           </Text>
-                          {contact.email && (
-                            <Text style={styles.contactEmail}>
-                              {contact.email || 'No email address'}
+                          <View style={styles.contactSubInfo}>
+                            <Text style={styles.contactPhone}>
+                              {contact.phone || 'No phone number'}
                             </Text>
-                          )}
-                          <Text style={styles.contactHowWeMet}>
-                            Met at: {contact.howWeMet}
-                          </Text>
-                          <Text style={styles.contactDate}>
-                            {contact.createdAt || 'Recently'}
-                          </Text>
+                            {contact.email && (
+                              <Text style={styles.contactEmail}>
+                                {contact.email || 'No email address'}
+                              </Text>
+                            )}
+                            <Text style={styles.contactHowWeMet}>
+                              Met at: {contact.howWeMet}
+                            </Text>
+                            <Text style={styles.contactDate}>
+                              {contact.createdAt || 'Recently'}
+                            </Text>
+                          </View>
                         </View>
                       </View>
-                    </View>
+                    </TouchableOpacity>
                   </View>
                 </Swipeable>
               ))}
@@ -655,6 +799,94 @@ export default function ContactsScreen() {
             </View>
           </View>
         </Modal>
+
+        {/* Contact Options Modal */}
+        <Modal
+          visible={isContactOptionsVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => {
+            setIsContactOptionsVisible(false);
+            setSelectedContactForOptions(null);
+            setSelectedContactIndex(-1);
+          }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => {
+                  setIsContactOptionsVisible(false);
+                  setSelectedContactForOptions(null);
+                  setSelectedContactIndex(-1);
+                }}
+              >
+                <MaterialIcons name="close" size={24} color={COLORS.black} />
+              </TouchableOpacity>
+
+              {selectedContactForOptions && (
+                <>
+                  <View style={styles.selectedContactHeader}>
+                    <Image 
+                      source={require('../../../assets/images/profile.png')} 
+                      style={styles.modalContactImage} 
+                    />
+                    <Text style={styles.modalContactName}>
+                      {selectedContactForOptions.name} {selectedContactForOptions.surname}
+                    </Text>
+                    <Text style={styles.modalContactPhone}>
+                      {selectedContactForOptions.phone}
+                    </Text>
+                    <Text style={styles.modalContactSubtitle}>
+                      {selectedContactForOptions.howWeMet}
+                    </Text>
+                  </View>
+
+                  <View style={styles.contactActionButtons}>
+                    <TouchableOpacity
+                      style={[styles.actionButton, { backgroundColor: '#4CAF50' }]}
+                      onPress={() => {
+                        handleExportContact(selectedContactForOptions);
+                        setIsContactOptionsVisible(false);
+                        setSelectedContactForOptions(null);
+                        setSelectedContactIndex(-1);
+                      }}
+                    >
+                      <MaterialIcons name="download" size={24} color={COLORS.white} />
+                      <Text style={styles.actionButtonText}>Export Contact</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.actionButton, { backgroundColor: colorScheme }]}
+                      onPress={() => {
+                        handleShare(selectedContactForOptions);
+                        setIsContactOptionsVisible(false);
+                        setSelectedContactForOptions(null);
+                        setSelectedContactIndex(-1);
+                      }}
+                    >
+                      <MaterialIcons name="share" size={24} color={COLORS.white} />
+                      <Text style={styles.actionButtonText}>Share Contact</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.actionButton, { backgroundColor: COLORS.error }]}
+                      onPress={() => {
+                        setIsContactOptionsVisible(false);
+                        setSelectedContactForOptions(null);
+                        setSelectedContactIndex(-1);
+                        handleDeleteContact(selectedContactIndex);
+                      }}
+                    >
+                      <MaterialIcons name="delete" size={24} color={COLORS.white} />
+                      <Text style={styles.actionButtonText}>Delete Contact</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </View>
+          </View>
+        </Modal>
       </View>
     </GestureHandlerRootView>
   );
@@ -678,6 +910,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#F5F5F5',
     margin: 15,
+    marginTop: 10,
     borderRadius: 8,
   },
   searchIcon: {
@@ -708,6 +941,10 @@ const styles = StyleSheet.create({
     elevation: 1,
     borderWidth: 1,
     borderColor: COLORS.gray + '20',
+  },
+  contactCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   contactLeft: {
     flexDirection: 'row',
@@ -804,10 +1041,19 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: COLORS.white,
-    padding: 20,
+    padding: 24,
     borderRadius: 20,
-    width: '80%',
+    width: '90%',
+    maxWidth: 340,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
   },
   closeButton: {
     position: 'absolute',
@@ -980,5 +1226,94 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
     color: COLORS.gray,
+  },
+  swipeActionsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: 160,
+  },
+  testModeBanner: {
+    padding: 10,
+    backgroundColor: '#FFA500',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  testModeText: {
+    color: COLORS.white,
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginLeft: 8,
+    textAlign: 'center',
+  },
+  selectedContactHeader: {
+    alignItems: 'center',
+    marginBottom: 24,
+    paddingTop: 12,
+  },
+  modalContactImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    marginBottom: 12,
+  },
+  modalContactName: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.black,
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  modalContactPhone: {
+    fontSize: 14,
+    color: COLORS.gray,
+    textAlign: 'center',
+  },
+  modalContactSubtitle: {
+    fontSize: 14,
+    color: COLORS.gray,
+    textAlign: 'center',
+  },
+  contactActionButtons: {
+    flexDirection: 'column',
+    width: '100%',
+    marginTop: 20,
+    gap: 12,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 12,
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  actionButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+    textAlign: 'center',
+  },
+  exportAllButtonText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  exportButtonContainer: {
+    paddingHorizontal: 15,
+    marginTop: -5,
+    marginBottom: 10,
+    alignItems: 'flex-end',
   },
 });

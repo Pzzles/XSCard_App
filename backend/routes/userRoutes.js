@@ -3,6 +3,7 @@ const router = express.Router();
 const userController = require('../controllers/userController');
 const { authenticateUser } = require('../middleware/auth');
 const { handleSingleUpload, handleMultipleUploads } = require('../middleware/fileUpload');
+const path = require('path');
 
 // Public routes (no authentication required)
 router.post('/SignIn', userController.signIn);
@@ -15,6 +16,20 @@ router.post('/Users/:userId/UploadImages',
     userController.uploadUserImages
 );
 router.get('/verify-email', userController.verifyEmail);
+router.post('/forgot-password', userController.forgotPassword);
+router.get('/forgot-password', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/templates/forgotPassword.html'));
+});
+router.post('/reset-password', userController.resetPassword);
+router.get('/reset-password', (req, res) => {
+    // Redirect to the proper HTML page
+    const { token, uid } = req.query;
+    if (!token || !uid) {
+        return res.redirect('/templates/passwordReset.html?status=invalid-link');
+    }
+    res.redirect(`/templates/passwordReset.html?token=${token}&uid=${uid}`);
+});
+router.get('/reset-user-info', userController.getResetUserInfo);
 
 // All routes below this middleware will require authentication
 router.use(authenticateUser);

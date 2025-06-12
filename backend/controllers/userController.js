@@ -699,3 +699,200 @@ exports.uploadUserImages = async (req, res) => {
         res.status(500).send({ message: 'Failed to create card', error: error.message });
     }
 };
+
+exports.forgotPassword = async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) {
+        return res.status(400).send({ message: 'Email is required' });
+    }
+
+    try {
+        // Check if user exists in Firestore
+        const usersRef = db.collection('users');
+        const userQuery = await usersRef.where('email', '==', email).get();
+        
+        if (userQuery.empty) {
+            // Don't reveal if email exists or not for security
+            return res.status(200).send({ 
+                message: 'If an account with that email exists, we have sent a password reset link.'
+            });
+        }
+
+        const userDoc = userQuery.docs[0];
+        const userData = userDoc.data();
+        const userId = userDoc.id;
+
+        // Debug: Log user data to see what fields are available
+        console.log('User data for password reset:', {
+            name: userData.name,
+            surname: userData.surname,
+            email: userData.email,
+            allFields: Object.keys(userData)
+        });
+
+        // Generate reset token
+        const resetToken = Math.random().toString(36).substring(2) + Date.now().toString(36);
+        const resetExpiry = Date.now() + 60 * 60 * 1000; // 1 hour
+
+        // Store reset token in user document
+        await userDoc.ref.update({
+            passwordResetToken: resetToken,
+            passwordResetExpiry: resetExpiry
+        });
+
+        // Send reset email - handle cases where name might be undefined
+        const resetLink = `${req.protocol}://${req.get('host')}/reset-password?token=${resetToken}&uid=${userId}`;
+        const userName = userData.name || userData.surname || 'User';
+        
+        await sendMailWithStatus({
+            to: email,
+            subject: 'XS Card - Password Reset Request',
+            html: `
+                <h1>Password Reset Request</h1>
+                <p>Hello ${userName},</p>
+                <p>You requested to reset your password for your XS Card account.</p>
+                <p>Click the link below to reset your password:</p>
+                <a href="${resetLink}" style="background-color: #1E1B4B; color: white; padding: 15px 25px; text-decoration: none; border-radius: 5px; display: inline-block;">Reset Password</a>
+                <p>This link will expire in 1 hour.</p>
+                <p>If you didn't request this reset, please ignore this email and your password will remain unchanged.</p>
+                <p>For security reasons, please do not share this link with anyone.</p>
+            `
+        });
+
+        res.status(200).send({ 
+            message: 'If an account with that email exists, we have sent a password reset link.'
+        });
+
+    } catch (error) {
+        console.error('Forgot password error:', error);
+        res.status(500).send({ 
+            message: 'Internal server error',
+            error: error.message 
+        });
+    }
+};
+
+exports.resetPassword = async (req, res) => {
+    const { token, uid, newPassword } = req.body;
+
+    if (!token || !uid || !newPassword) {
+        return res.status(400).send({ message: 'Token, user ID, and new password are required' });
+    }
+
+    // Validate password strength
+    if (newPassword.length < 8) {
+        return res.status(400).send({ message: 'Password must be at least 8 characters long' });
+    }
+
+    // Additional password validation
+    const hasUpper = /[A-Z]/.test(newPassword);
+    const hasLower = /[a-z]/.test(newPassword);
+    const hasNumber = /[0-9]/.test(newPassword);
+    const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword);
+    
+    if (!hasUpper || !hasLower || !hasNumber || !hasSpecial) {
+        return res.status(400).send({ 
+            message: 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character (!@#$%^&*)' 
+        });
+    }
+
+    try {
+        // Get user document
+        const userRef = db.collection('users').doc(uid);
+        const userDoc = await userRef.get();
+
+        if (!userDoc.exists) {
+            return res.status(404).send({ message: 'Invalid reset link' });
+        }
+
+        const userData = userDoc.data();
+
+        // Check if token is valid and not expired
+        if (!userData.passwordResetToken || userData.passwordResetToken !== token) {
+            return res.status(400).send({ message: 'Invalid or expired reset token' });
+        }
+
+        if (!userData.passwordResetExpiry || Date.now() > userData.passwordResetExpiry) {
+            return res.status(400).send({ message: 'Reset token has expired' });
+        }
+
+        // Update password in Firebase Auth
+        await admin.auth().updateUser(uid, {
+            password: newPassword
+        });
+
+        // Clear reset token from user document
+        await userRef.update({
+            passwordResetToken: admin.firestore.FieldValue.delete(),
+            passwordResetExpiry: admin.firestore.FieldValue.delete()
+        });
+
+        // Send confirmation email
+        await sendMailWithStatus({
+            to: userData.email,
+            subject: 'XS Card - Password Successfully Reset',
+            html: `
+                <h1>Password Reset Successful</h1>
+                <p>Hello ${userData.name || userData.surname || 'User'},</p>
+                <p>Your password has been successfully reset.</p>
+                <p>If you didn't make this change, please contact us immediately.</p>
+                <p>For security, please sign in with your new password.</p>
+            `
+        });
+
+        res.status(200).send({ 
+            message: 'Password reset successful. You can now sign in with your new password.'
+        });
+
+    } catch (error) {
+        console.error('Reset password error:', error);
+        res.status(500).send({ 
+            message: 'Failed to reset password',
+            error: error.message 
+        });
+    }
+};
+
+// Add new function to get user info for reset page
+exports.getResetUserInfo = async (req, res) => {
+    const { token, uid } = req.query;
+
+    if (!token || !uid) {
+        return res.status(400).send({ message: 'Token and user ID are required' });
+    }
+
+    try {
+        // Get user document
+        const userRef = db.collection('users').doc(uid);
+        const userDoc = await userRef.get();
+
+        if (!userDoc.exists) {
+            return res.status(404).send({ message: 'Invalid reset link' });
+        }
+
+        const userData = userDoc.data();
+
+        // Check if token is valid and not expired
+        if (!userData.passwordResetToken || userData.passwordResetToken !== token) {
+            return res.status(400).send({ message: 'Invalid or expired reset token' });
+        }
+
+        if (!userData.passwordResetExpiry || Date.now() > userData.passwordResetExpiry) {
+            return res.status(400).send({ message: 'Reset token has expired' });
+        }
+
+        // Return only safe user info for display
+        res.status(200).send({ 
+            email: userData.email,
+            name: userData.name || userData.surname || 'User'
+        });
+
+    } catch (error) {
+        console.error('Get reset user info error:', error);
+        res.status(500).send({ 
+            message: 'Failed to get user information',
+            error: error.message 
+        });
+    }
+};
