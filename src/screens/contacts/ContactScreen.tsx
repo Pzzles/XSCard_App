@@ -17,7 +17,7 @@ import { generateVCard, generateFileName, generateMultipleVCards, generateBatchF
 const FREE_PLAN_CONTACT_LIMIT = 3;
 
 // Test mode flag for development - matches the one in contactExport.ts
-const TEST_MODE = true;
+const TEST_MODE = false;
 
 // Update interfaces to match Firestore structure
 interface Contact {
