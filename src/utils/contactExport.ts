@@ -1,8 +1,6 @@
 import { Alert, Platform } from 'react-native';
 import { Contact } from './vCardGenerator';
-
-// Test mode flag - set to true for Expo Go testing
-const TEST_MODE = true; // Keep as true for Expo Go compatibility
+import { TEST_MODE, logTestModeStatus } from '../config/testMode';
 
 // Dynamic import for react-native-contacts
 let Contacts: any = null;
@@ -37,9 +35,10 @@ const convertToNativeContact = (contact: Contact) => {
 
 export const exportSingleContact = async (contact: Contact): Promise<void> => {
   try {
+    logTestModeStatus('Add Single Contact');
+    
     if (TEST_MODE) {
       // Test mode: Show what would be added to contacts
-      console.log('📱 TEST MODE: Add Contact to Phone');
       console.log('📞 Contact Details:', contact);
       
       Alert.alert(
@@ -103,6 +102,8 @@ export const exportAllContacts = async (contacts: Contact[]): Promise<void> => {
       Alert.alert('No Contacts', 'No contacts to add to your phone.');
       return;
     }
+    
+    logTestModeStatus(`Add ${contacts.length} Contacts`);
     
     if (TEST_MODE) {
       // Test mode: Show what would be added
@@ -201,7 +202,8 @@ export const exportSelectedContacts = async (contacts: Contact[]): Promise<void>
   }
 };
 
-// Helper function to toggle test mode
+// Helper function to toggle test mode (deprecated - use centralized config)
 export const setTestMode = (enabled: boolean) => {
+  console.warn('⚠️ setTestMode is deprecated. Use centralized config in src/config/testMode.ts');
   console.log(`🔄 Contact integration test mode ${enabled ? 'ENABLED' : 'DISABLED'}`);
 }; 

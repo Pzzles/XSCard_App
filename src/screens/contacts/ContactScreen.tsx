@@ -12,12 +12,10 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useColorScheme } from '../../context/ColorSchemeContext';
 import { generateVCard, generateFileName, generateMultipleVCards, generateBatchFileName } from '../../utils/vCardGenerator';
+import { TEST_MODE } from '../../config/testMode';
 
 // Define constant for free plan contact limit
 const FREE_PLAN_CONTACT_LIMIT = 3;
-
-// Test mode flag for development - matches the one in contactExport.ts
-const TEST_MODE = false;
 
 // Update interfaces to match Firestore structure
 interface Contact {

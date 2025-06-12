@@ -4,10 +4,11 @@
 The XS Card app now includes direct phone contact integration, allowing users to add contacts directly to their phone's contact list instead of exporting files.
 
 ## Current Status
-- **Test Mode**: Currently enabled for Expo Go compatibility
+- **Test Mode**: Currently disabled (production mode active)
 - **Production Mode**: Requires native build with react-native-contacts
 
-## Test Mode (Current)
+## Test Mode Configuration
+Test mode is now centrally managed in `src/config/testMode.ts`:
 - Shows preview dialogs of what would be added to contacts
 - No actual contacts are added to the phone
 - Works in Expo Go for development/testing
@@ -33,10 +34,10 @@ Add to `android/app/src/main/AndroidManifest.xml`:
 <uses-permission android:name="android.permission.WRITE_CONTACTS" />
 ```
 
-### 4. Enable Production Mode
-In `src/utils/contactExport.ts`, change:
+### 4. Configure Test Mode (if needed)
+In `src/config/testMode.ts`, change:
 ```typescript
-const TEST_MODE = true; // Change to false
+export const TEST_MODE = false; // true for test mode, false for production
 ```
 
 ### 5. Build Native App
@@ -67,10 +68,25 @@ npx react-native run-android
 - Handles permissions automatically
 - Includes contact notes with "Met at" information
 - Supports phone numbers and email addresses
+- Centralized test mode configuration
 
-## Fallback for Expo Go
-When running in Expo Go (TEST_MODE = true):
+## Test Mode vs Production Mode
+
+### Test Mode (TEST_MODE = true)
 - Shows detailed preview of what would be added
 - Simulates the add contact flow
 - No actual contacts are modified
-- Helps with development and testing 
+- Works in Expo Go
+- Helps with development and testing
+
+### Production Mode (TEST_MODE = false)
+- Full native contact integration
+- Actually adds contacts to phone
+- Requires react-native-contacts dependency
+- Needs native build (not Expo Go)
+- Real permission requests and handling
+
+## Migration Notes
+- **TODO**: Remove TEST_MODE entirely once full native builds are standard
+- All test mode logic is centralized in `src/config/testMode.ts`
+- Easy to toggle between test and production modes during development 
