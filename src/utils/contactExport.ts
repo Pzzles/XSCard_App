@@ -1,154 +1,188 @@
-import { Alert } from 'react-native';
-import { 
-  Contact, 
-  generateVCard, 
-  generateMultipleVCards, 
-  generateFileName, 
-  generateBatchFileName 
-} from './vCardGenerator';
+import { Alert, Platform } from 'react-native';
+import { Contact } from './vCardGenerator';
 
 // Test mode flag - set to true for Expo Go testing
-const TEST_MODE = false;
+const TEST_MODE = true; // Keep as true for Expo Go compatibility
 
-// Dynamic imports for native modules (only in production)
-let RNFS: any = null;
-let Share: any = null;
+// Dynamic import for react-native-contacts
+let Contacts: any = null;
 
-const loadNativeModules = async () => {
-  if (!TEST_MODE && !RNFS && !Share) {
+const loadContactsModule = async () => {
+  if (!TEST_MODE && !Contacts) {
     try {
-      RNFS = require('react-native-fs');
-      Share = require('react-native-share').default;
+      Contacts = require('react-native-contacts');
     } catch (error) {
-      console.error('Failed to load native modules:', error);
-      throw new Error('Native modules not available. Please use a development build.');
+      console.error('Failed to load react-native-contacts:', error);
+      throw new Error('Contact integration not available. Please use a development build.');
     }
   }
 };
 
+// Convert our Contact interface to react-native-contacts format
+const convertToNativeContact = (contact: Contact) => {
+  return {
+    givenName: contact.name,
+    familyName: contact.surname,
+    phoneNumbers: contact.phone ? [{
+      label: 'mobile',
+      number: contact.phone,
+    }] : [],
+    emailAddresses: contact.email ? [{
+      label: 'work',
+      email: contact.email,
+    }] : [],
+    note: `Met at: ${contact.howWeMet}`,
+  };
+};
+
 export const exportSingleContact = async (contact: Contact): Promise<void> => {
   try {
-    const vCardData = generateVCard(contact);
-    const fileName = generateFileName(contact);
-    
     if (TEST_MODE) {
-      // Test mode: Show what would be exported
-      console.log('📱 TEST MODE: Export Single Contact');
-      console.log('📁 File Name:', fileName);
-      console.log('📄 vCard Data:', vCardData);
+      // Test mode: Show what would be added to contacts
+      console.log('📱 TEST MODE: Add Contact to Phone');
+      console.log('📞 Contact Details:', contact);
       
       Alert.alert(
-        '📱 TEST MODE: Export Success!',
-        `Contact: ${contact.name} ${contact.surname}\n\nFile: ${fileName}\n\nIn production, this would export a vCard file that can be imported to any phone's contacts.`,
-        [{ text: 'View vCard Data', onPress: () => {
-          Alert.alert('vCard Content', vCardData);
-        }}, { text: 'OK' }]
+        '📱 TEST MODE: Add to Contacts',
+        `This would add "${contact.name} ${contact.surname}" directly to your phone's contacts app.\n\n` +
+        `Phone: ${contact.phone}\n` +
+        `Email: ${contact.email || 'None'}\n` +
+        `Note: Met at ${contact.howWeMet}\n\n` +
+        `In production, this opens your phone's contact app with the details pre-filled.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Simulate Add', onPress: () => {
+            Alert.alert('✅ Success!', `${contact.name} ${contact.surname} would be added to your contacts.`);
+          }}
+        ]
       );
       return;
     }
     
-    // Production mode: Load native modules and perform actual file operations
-    await loadNativeModules();
+    // Production mode: Use react-native-contacts
+    await loadContactsModule();
     
-    const filePath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
-    
-    await RNFS.writeFile(filePath, vCardData, 'utf8');
-    
-    const shareOptions = {
-      title: `Export Contact - ${contact.name} ${contact.surname}`,
-      message: `Contact information for ${contact.name} ${contact.surname}`,
-      url: `file://${filePath}`,
-      type: 'text/vcard',
-      filename: fileName,
-      saveToFiles: true,
-    };
-    
-    await Share.open(shareOptions);
-    
-    setTimeout(async () => {
-      try {
-        const fileExists = await RNFS.exists(filePath);
-        if (fileExists) {
-          await RNFS.unlink(filePath);
-        }
-      } catch (cleanupError) {
-        console.warn('Failed to cleanup temporary file:', cleanupError);
+    // Check permissions first
+    const permission = await Contacts.checkPermission();
+    if (permission === 'undefined' || permission === 'denied') {
+      const requestResult = await Contacts.requestPermission();
+      if (requestResult === 'denied') {
+        Alert.alert(
+          'Permission Required',
+          'Please allow access to contacts to add this person to your phone.',
+          [{ text: 'OK' }]
+        );
+        return;
       }
-    }, 5000);
+    }
+    
+    const nativeContact = convertToNativeContact(contact);
+    
+    // Add contact to phone
+    await Contacts.addContact(nativeContact);
+    
+    Alert.alert(
+      '✅ Contact Added!',
+      `${contact.name} ${contact.surname} has been added to your phone's contacts.`,
+      [{ text: 'OK' }]
+    );
     
   } catch (error) {
-    console.error('Error exporting single contact:', error);
-    throw new Error('Failed to export contact. Please try again.');
+    console.error('Error adding contact to phone:', error);
+    Alert.alert(
+      'Error',
+      'Failed to add contact to your phone. Please try again.',
+      [{ text: 'OK' }]
+    );
   }
 };
 
 export const exportAllContacts = async (contacts: Contact[]): Promise<void> => {
   try {
     if (contacts.length === 0) {
-      throw new Error('No contacts to export');
+      Alert.alert('No Contacts', 'No contacts to add to your phone.');
+      return;
     }
     
-    const vCardData = generateMultipleVCards(contacts);
-    const fileName = generateBatchFileName(contacts.length);
-    
     if (TEST_MODE) {
-      // Test mode: Show what would be exported
-      console.log('📱 TEST MODE: Export All Contacts');
-      console.log('📊 Contact Count:', contacts.length);
-      console.log('📁 File Name:', fileName);
-      console.log('📄 vCard Data Preview:', vCardData.substring(0, 500) + '...');
-      
+      // Test mode: Show what would be added
       const contactNames = contacts.map(c => `• ${c.name} ${c.surname}`).join('\n');
       
       Alert.alert(
-        '📱 TEST MODE: Bulk Export Success!',
-        `Exported ${contacts.length} contacts:\n\n${contactNames}\n\nFile: ${fileName}\n\nIn production, this would create a single vCard file with all contacts.`,
-        [{ text: 'View vCard Preview', onPress: () => {
-          Alert.alert('vCard Content Preview', vCardData.substring(0, 800) + '\n\n... and more');
-        }}, { text: 'OK' }]
+        '📱 TEST MODE: Add All Contacts',
+        `This would add ${contacts.length} contacts directly to your phone:\n\n${contactNames}\n\n` +
+        `In production, each contact opens your phone's contact app for confirmation.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Simulate Add All', onPress: () => {
+            Alert.alert('✅ Success!', `All ${contacts.length} contacts would be added to your phone.`);
+          }}
+        ]
       );
       return;
     }
     
-    // Production mode: Load native modules and perform actual file operations
-    await loadNativeModules();
+    // Production mode: Add each contact individually
+    await loadContactsModule();
     
-    const filePath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
-    
-    await RNFS.writeFile(filePath, vCardData, 'utf8');
-    
-    const shareOptions = {
-      title: `Export All Contacts (${contacts.length})`,
-      message: `Exporting ${contacts.length} contacts from XS Card`,
-      url: `file://${filePath}`,
-      type: 'text/vcard',
-      filename: fileName,
-      saveToFiles: true,
-    };
-    
-    await Share.open(shareOptions);
-    
-    setTimeout(async () => {
-      try {
-        const fileExists = await RNFS.exists(filePath);
-        if (fileExists) {
-          await RNFS.unlink(filePath);
-        }
-      } catch (cleanupError) {
-        console.warn('Failed to cleanup temporary file:', cleanupError);
+    // Check permissions first
+    const permission = await Contacts.checkPermission();
+    if (permission === 'undefined' || permission === 'denied') {
+      const requestResult = await Contacts.requestPermission();
+      if (requestResult === 'denied') {
+        Alert.alert(
+          'Permission Required',
+          'Please allow access to contacts to add these people to your phone.',
+          [{ text: 'OK' }]
+        );
+        return;
       }
-    }, 5000);
+    }
+    
+    let successCount = 0;
+    let failCount = 0;
+    
+    for (const contact of contacts) {
+      try {
+        const nativeContact = convertToNativeContact(contact);
+        await Contacts.addContact(nativeContact);
+        successCount++;
+      } catch (error) {
+        console.error(`Failed to add contact ${contact.name} ${contact.surname}:`, error);
+        failCount++;
+      }
+    }
+    
+    if (successCount > 0) {
+      Alert.alert(
+        '✅ Contacts Added!',
+        `Successfully added ${successCount} contact${successCount > 1 ? 's' : ''} to your phone.` +
+        (failCount > 0 ? ` ${failCount} failed to add.` : ''),
+        [{ text: 'OK' }]
+      );
+    } else {
+      Alert.alert(
+        'Error',
+        'Failed to add contacts to your phone. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
     
   } catch (error) {
-    console.error('Error exporting all contacts:', error);
-    throw new Error('Failed to export contacts. Please try again.');
+    console.error('Error adding contacts to phone:', error);
+    Alert.alert(
+      'Error',
+      'Failed to add contacts to your phone. Please try again.',
+      [{ text: 'OK' }]
+    );
   }
 };
 
 export const exportSelectedContacts = async (contacts: Contact[]): Promise<void> => {
   try {
     if (contacts.length === 0) {
-      throw new Error('No contacts selected for export');
+      Alert.alert('No Contacts', 'No contacts selected to add to your phone.');
+      return;
     }
     
     if (contacts.length === 1) {
@@ -158,13 +192,16 @@ export const exportSelectedContacts = async (contacts: Contact[]): Promise<void>
     return await exportAllContacts(contacts);
     
   } catch (error) {
-    console.error('Error exporting selected contacts:', error);
-    throw new Error('Failed to export selected contacts. Please try again.');
+    console.error('Error adding selected contacts to phone:', error);
+    Alert.alert(
+      'Error',
+      'Failed to add selected contacts to your phone. Please try again.',
+      [{ text: 'OK' }]
+    );
   }
 };
 
 // Helper function to toggle test mode
 export const setTestMode = (enabled: boolean) => {
-  // In a real app, you could store this in AsyncStorage or make it configurable
-  console.log(`🔄 Export test mode ${enabled ? 'ENABLED' : 'DISABLED'}`);
+  console.log(`🔄 Contact integration test mode ${enabled ? 'ENABLED' : 'DISABLED'}`);
 }; 

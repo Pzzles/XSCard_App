@@ -447,19 +447,18 @@ export default function ContactsScreen() {
     try {
       if (TEST_MODE) {
         // Test mode: Direct implementation to avoid native module imports
-        const vCardData = generateVCard(contact);
-        const fileName = generateFileName(contact);
-        
-        console.log('📱 TEST MODE: Export Single Contact');
-        console.log('📁 File Name:', fileName);
-        console.log('📄 vCard Data:', vCardData);
+        console.log('📱 TEST MODE: Add Contact to Phone');
+        console.log('📞 Contact Details:', contact);
         
         Alert.alert(
-          '📱 TEST MODE: Export Success!',
-          `Contact: ${contact.name} ${contact.surname}\n\nFile: ${fileName}\n\nIn production, this would export a vCard file that can be imported to any phone's contacts.`,
-          [{ text: 'View vCard Data', onPress: () => {
-            Alert.alert('vCard Content', vCardData);
-          }}, { text: 'OK' }]
+          '📱 TEST MODE: Add to Contacts',
+          `This would add "${contact.name} ${contact.surname}" directly to your phone's contacts app.\n\nPhone: ${contact.phone}\nEmail: ${contact.email || 'None'}\nNote: Met at ${contact.howWeMet}\n\nIn production, this opens your phone's contact app with the details pre-filled.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Simulate Add', onPress: () => {
+              Alert.alert('✅ Success!', `${contact.name} ${contact.surname} would be added to your contacts.`);
+            }}
+          ]
         );
         return;
       }
@@ -467,38 +466,32 @@ export default function ContactsScreen() {
       // Production mode
       const exportModule = require('../../utils/contactExport');
       await exportModule.exportSingleContact(contact);
-      Alert.alert('Success', `Contact "${contact.name} ${contact.surname}" exported successfully!`);
     } catch (error) {
-      console.error('Export contact error:', error);
-      Alert.alert('Error', 'Failed to export contact. Please try again.');
+      console.error('Add contact error:', error);
+      Alert.alert('Error', 'Failed to add contact to your phone. Please try again.');
     }
   };
 
   const handleExportAllContacts = async () => {
     try {
       if (filteredContacts.length === 0) {
-        Alert.alert('No Contacts', 'No contacts available to export.');
+        Alert.alert('No Contacts', 'No contacts available to add to your phone.');
         return;
       }
       
       if (TEST_MODE) {
         // Test mode: Direct implementation to avoid native module imports
-        const vCardData = generateMultipleVCards(filteredContacts);
-        const fileName = generateBatchFileName(filteredContacts.length);
-        
-        console.log('📱 TEST MODE: Export All Contacts');
-        console.log('📊 Contact Count:', filteredContacts.length);
-        console.log('📁 File Name:', fileName);
-        console.log('📄 vCard Data Preview:', vCardData.substring(0, 500) + '...');
-        
         const contactNames = filteredContacts.map(c => `• ${c.name} ${c.surname}`).join('\n');
         
         Alert.alert(
-          '📱 TEST MODE: Bulk Export Success!',
-          `Exported ${filteredContacts.length} contacts:\n\n${contactNames}\n\nFile: ${fileName}\n\nIn production, this would create a single vCard file with all contacts.`,
-          [{ text: 'View vCard Preview', onPress: () => {
-            Alert.alert('vCard Content Preview', vCardData.substring(0, 800) + '\n\n... and more');
-          }}, { text: 'OK' }]
+          '📱 TEST MODE: Add All Contacts',
+          `This would add ${filteredContacts.length} contacts directly to your phone:\n\n${contactNames}\n\nIn production, each contact opens your phone's contact app for confirmation.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Simulate Add All', onPress: () => {
+              Alert.alert('✅ Success!', `All ${filteredContacts.length} contacts would be added to your phone.`);
+            }}
+          ]
         );
         return;
       }
@@ -506,10 +499,9 @@ export default function ContactsScreen() {
       // Production mode
       const exportModule = require('../../utils/contactExport');
       await exportModule.exportAllContacts(filteredContacts);
-      Alert.alert('Success', `${filteredContacts.length} contacts exported successfully!`);
     } catch (error) {
-      console.error('Export all contacts error:', error);
-      Alert.alert('Error', 'Failed to export contacts. Please try again.');
+      console.error('Add all contacts error:', error);
+      Alert.alert('Error', 'Failed to add contacts to your phone. Please try again.');
     }
   };
 
@@ -523,7 +515,7 @@ export default function ContactsScreen() {
           <View style={styles.testModeBanner}>
             <MaterialIcons name="science" size={20} color="#FFA500" />
             <Text style={styles.testModeText}>
-              📱 TEST MODE: Export feature will show previews (no actual files created)
+              📱 TEST MODE: Add to contacts feature will show previews (no actual contacts added)
             </Text>
           </View>
         )}
@@ -595,8 +587,8 @@ export default function ContactsScreen() {
                 style={dynamicStyles.exportAllButton}
                 onPress={handleExportAllContacts}
               >
-                <MaterialIcons name="download" size={20} color={COLORS.white} />
-                <Text style={styles.exportAllButtonText}>Export All</Text>
+                <MaterialIcons name="person-add" size={20} color={COLORS.white} />
+                <Text style={styles.exportAllButtonText}>Add All to Phone</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -852,8 +844,8 @@ export default function ContactsScreen() {
                         setSelectedContactIndex(-1);
                       }}
                     >
-                      <MaterialIcons name="download" size={24} color={COLORS.white} />
-                      <Text style={styles.actionButtonText}>Export Contact</Text>
+                      <MaterialIcons name="person-add" size={24} color={COLORS.white} />
+                      <Text style={styles.actionButtonText}>Add to Phone</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
