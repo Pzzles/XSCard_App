@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard, ScrollView } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard, ScrollView, Animated } from 'react-native';
 import { COLORS } from '../../constants/colors';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -8,6 +8,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ErrorPopup from '../../components/popups/ErrorPopup';
+import { setKeepLoggedInPreference, storeAuthData, updateLastLoginTime } from '../../utils/authStorage';
+import { ErrorHandler, ERROR_CODES, handleAuthError, handleNetworkError, createAppError } from '../../utils/errorHandler';
 
 type SignInScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'SignIn'>;
 
@@ -23,12 +25,38 @@ export default function SignInScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [keepLoggedIn, setKeepLoggedIn] = useState(true); // Default to true for better UX
   const [errors, setErrors] = useState({
     email: '',
     password: '',
   });
   const [errorMessage, setErrorMessage] = useState('');
   const [showError, setShowError] = useState(false);
+
+  // Animated values for smooth toggle
+  const toggleAnimation = useRef(new Animated.Value(1)).current; // Start at 1 (on position)
+  const backgroundColorAnimation = useRef(new Animated.Value(1)).current; // Start at 1 (active color)
+
+  useEffect(() => {
+    // Animate toggle when keepLoggedIn changes
+    Animated.parallel([
+      Animated.spring(toggleAnimation, {
+        toValue: keepLoggedIn ? 1 : 0,
+        tension: 100,
+        friction: 8,
+        useNativeDriver: false,
+      }),
+      Animated.timing(backgroundColorAnimation, {
+        toValue: keepLoggedIn ? 1 : 0,
+        duration: 150,
+        useNativeDriver: false,
+      }),
+    ]).start();
+  }, [keepLoggedIn]);
+
+  const handleTogglePress = () => {
+    setKeepLoggedIn(!keepLoggedIn);
+  };
 
   // const validateEmail = (email: string) => {
   //   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -73,46 +101,81 @@ export default function SignInScreen() {
     }
 
     setIsLoading(true);
-    try {
-      // Check for admin credentials first
-      if (email === ADMIN_CREDENTIALS.email && password === ADMIN_CREDENTIALS.password) {
-        await AsyncStorage.setItem('userRole', 'admin');
-        navigation.navigate('AdminDashboard');
-        return;
-      }
 
-      // Regular user authentication
+    try {
       const response = await fetch(buildUrl(ENDPOINTS.SIGN_IN), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          email,
-          password,
-        }),
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        // Store the token and user data, making sure to include the uid as id
+        console.log('SignIn: Authentication successful, storing data...');
+        
+        // Store the token and user data using our enhanced storage system
         const token = `Bearer ${data.token}`;
-        await AsyncStorage.setItem('userToken', token);
         const userData = {
           ...data.user,
           id: data.user.uid,
           name: data.user.name || '',
           email: data.user.email || ''
         };
-        await AsyncStorage.setItem('userData', JSON.stringify(userData));
+
+        // Use our Phase 1 storage system to store all auth data
+        await storeAuthData({
+          userToken: token,
+          userData: userData,
+          userRole: userData.plan === 'admin' ? 'admin' : 'user',
+          keepLoggedIn,
+          lastLoginTime: Date.now(),
+        });
+
+        // Update last login time
+        await updateLastLoginTime();
+
+        console.log('SignIn: Data stored successfully, keepLoggedIn:', keepLoggedIn);
         navigation.replace('MainApp');
       } else {
-        setErrorMessage(data.message || 'Sign in failed');
+        // Handle authentication failures with proper error handling
+        if (response.status === 401) {
+          const error = createAppError(ERROR_CODES.AUTHENTICATION_FAILED, new Error(data.message || 'Invalid credentials'));
+          await handleAuthError(error);
+          setErrorMessage(error.userMessage);
+        } else if (response.status >= 500) {
+          const error = createAppError(ERROR_CODES.SERVER_ERROR, new Error(data.message || 'Server error'));
+          await ErrorHandler.handleError(error, {
+            retryAction: async () => {
+              await handleSignIn();
+            },
+            maxRetries: 2
+          });
+          setErrorMessage(error.userMessage);
+        } else {
+          const error = createAppError(ERROR_CODES.API_ERROR, new Error(data.message || 'Sign in failed'));
+          await ErrorHandler.handleError(error);
+          setErrorMessage(error.userMessage);
+        }
         setShowError(true);
       }
     } catch (error) {
-      setErrorMessage('Network error. Please check your connection.');
+      console.error('SignIn: Authentication error:', error);
+      
+      // Handle network errors with retry capability
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        await handleNetworkError(error, async () => {
+          await handleSignIn();
+        });
+        setErrorMessage('Please check your internet connection and try again.');
+      } else {
+        // Handle other errors
+        const appError = createAppError(ERROR_CODES.UNKNOWN_ERROR, error as Error);
+        await ErrorHandler.handleError(appError);
+        setErrorMessage(appError.userMessage);
+      }
       setShowError(true);
     } finally {
       setIsLoading(false);
@@ -183,6 +246,48 @@ export default function SignInScreen() {
       >
         <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
       </TouchableOpacity>
+
+      {/* Keep me logged in toggle */}
+      <View style={styles.keepLoggedInContainer}>
+        <TouchableOpacity 
+          style={styles.toggleTouchArea}
+          onPress={handleTogglePress}
+          activeOpacity={0.8}
+        >
+          <Animated.View 
+            style={[
+              styles.toggleSwitch,
+              {
+                backgroundColor: backgroundColorAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ['#FFFFFF', COLORS.primary],
+                }),
+                borderColor: backgroundColorAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ['#E0E0E0', COLORS.primary],
+                }),
+              }
+            ]}
+          >
+            <Animated.View style={[
+              styles.toggleThumb,
+              {
+                transform: [{
+                  translateX: toggleAnimation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, 28], // More precise calculation: 60 - 24 - 8 (accounting for padding)
+                  })
+                }],
+                backgroundColor: backgroundColorAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ['#E0E0E0', '#FFFFFF'],
+                }),
+              }
+            ]} />
+          </Animated.View>
+          <Text style={styles.keepLoggedInText}>Keep me logged in</Text>
+        </TouchableOpacity>
+      </View>
 
       <TouchableOpacity 
         style={[styles.signInButton, isLoading && styles.disabledButton]}
@@ -287,5 +392,38 @@ const styles = StyleSheet.create({
   forgotPasswordText: {
     color: COLORS.primary,
     fontSize: 12,
+  },
+  // New styles for Keep me logged in toggle
+  keepLoggedInContainer: {
+    marginTop: 10,
+    marginBottom: 10,
+    alignItems: 'flex-start',
+  },
+  toggleTouchArea: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
+  toggleSwitch: {
+    width: 60,
+    height: 32,
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+    borderRadius: 16,
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 3,
+    marginBottom: 8,
+  },
+  toggleThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#E0E0E0',
+    alignSelf: 'flex-start',
+  },
+  keepLoggedInText: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '500',
   },
 });

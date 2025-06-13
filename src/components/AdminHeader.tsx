@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Modal } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Modal, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../constants/colors';
 import { useNavigation } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { AdminTabParamList } from '../types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL, authenticatedFetch } from '../utils/api';
+import { API_BASE_URL, authenticatedFetch, performServerLogout } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 
 type AdminHeaderNavigationProp = BottomTabNavigationProp<AdminTabParamList>;
 
@@ -17,6 +18,7 @@ type AdminHeaderProps = {
 export default function AdminHeader({ title }: AdminHeaderProps) {
   const navigation = useNavigation<any>();
   const [isMenuVisible, setIsMenuVisible] = useState(false);
+  const { logout } = useAuth(); // Use our centralized auth context
 
   const handleNavigate = (screen: string) => {
     setIsMenuVisible(false);
@@ -32,39 +34,47 @@ export default function AdminHeader({ title }: AdminHeaderProps) {
 
   const handleLogout = async () => {
     try {
-      // Get token from AsyncStorage
-      const token = await AsyncStorage.getItem('userToken');
+      console.log('AdminHeader: Starting logout process...');
+      setIsMenuVisible(false); // Close menu immediately
       
-      if (token) {
-        try {
-          // Call backend logout endpoint using authenticatedFetch
-          await fetch(`${API_BASE_URL}/logout`, {
-            method: 'POST',
-            headers: {
-              'Authorization': token,
-              'Content-Type': 'application/json'
-            }
-          });
-          console.log('Successfully logged out on server');
-        } catch (error) {
-          console.error('Error during server logout:', error);
-          // Continue with local logout even if server logout fails
-        }
+      // Perform server logout first (non-blocking)
+      try {
+        await performServerLogout();
+      } catch (serverError) {
+        console.log('AdminHeader: Server logout failed, continuing with local logout:', serverError);
+        // Continue with local logout even if server logout fails
       }
       
-      // Clear local storage and navigate regardless of server response
-      await AsyncStorage.clear();
+      // Use our centralized logout from AuthContext
+      await logout();
+      
+      console.log('AdminHeader: Logout completed, navigating to SignIn');
+      
+      // Navigate to SignIn
       navigation.reset({
         index: 0,
         routes: [{ name: 'SignIn' as keyof AdminTabParamList }],
       });
+      
     } catch (error) {
-      console.error('Error during logout:', error);
+      console.error('AdminHeader: Error during logout:', error);
+      
       // If everything fails, still try to navigate to sign in
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'SignIn' as keyof AdminTabParamList }],
-      });
+      Alert.alert(
+        'Logout Error', 
+        'There was an issue logging out. You will be redirected to the sign-in screen.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'SignIn' as keyof AdminTabParamList }],
+              });
+            }
+          }
+        ]
+      );
     }
   };
 

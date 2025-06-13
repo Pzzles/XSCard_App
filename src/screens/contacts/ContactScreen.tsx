@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, TextInput,
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
-import { API_BASE_URL, ENDPOINTS, buildUrl, authenticatedFetch, getUserId } from '../../utils/api';
+import { API_BASE_URL, ENDPOINTS, buildUrl, authenticatedFetch, getUserId, authenticatedFetchWithRefresh, forceLogoutExpiredToken } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -64,6 +64,9 @@ export default function ContactsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Phase 4A: Test token expiration function
+  const [isTestingExpiration, setIsTestingExpiration] = useState(false);
+  
   const { colorScheme } = useColorScheme();
 
   // Create a ref to store the swipeables
@@ -110,11 +113,11 @@ export default function ContactsScreen() {
         return;
       }
 
-      const contactResponse = await authenticatedFetch(ENDPOINTS.GET_CONTACTS + `/${userId}`);
+      const contactResponse = await authenticatedFetchWithRefresh(ENDPOINTS.GET_CONTACTS + `/${userId}`);
       const data = await contactResponse.json();
 
       // Get user data to check plan
-      const userResponse = await authenticatedFetch(ENDPOINTS.GET_USER + `/${userId}`);
+      const userResponse = await authenticatedFetchWithRefresh(ENDPOINTS.GET_USER + `/${userId}`);
       const userData = await userResponse.json();
       
       if (data && Array.isArray(data.contactList)) {
@@ -168,7 +171,7 @@ export default function ContactsScreen() {
                   throw new Error('User ID not found');
                 }
 
-                const response = await authenticatedFetch(
+                const response = await authenticatedFetchWithRefresh(
                   `${ENDPOINTS.DELETE_CONTACT}/${userId}/contact/${index}`,
                   { 
                     method: 'DELETE',
@@ -503,6 +506,109 @@ export default function ContactsScreen() {
     }
   };
 
+  // Phase 4A: Test token expiration function
+  const testTokenExpiration = async () => {
+    if (isTestingExpiration) return;
+    
+    try {
+      setIsTestingExpiration(true);
+      
+      // Random delay between 10-60 seconds
+      const randomDelay = Math.floor(Math.random() * 50000) + 10000; // 10-60 seconds
+      const delayInSeconds = Math.round(randomDelay / 1000);
+      
+      console.log(`[ContactScreen] Starting token expiration test - will expire in ${delayInSeconds} seconds`);
+      Alert.alert(
+        'Token Refresh Test Started',
+        `Your token will expire in ${delayInSeconds} seconds. Continue using the app normally. The app should automatically refresh the token when it expires.`,
+        [{ text: 'OK' }]
+      );
+      
+      // Wait for random delay
+      setTimeout(async () => {
+        try {
+          const currentToken = await AsyncStorage.getItem('userToken');
+          if (currentToken) {
+            // Call the backend test endpoint using authenticatedFetchWithRefresh
+            // This will trigger automatic logout if the token is expired
+            const response = await authenticatedFetchWithRefresh(ENDPOINTS.TEST_EXPIRED_TOKEN, {
+              method: 'POST'
+            });
+            
+            if (response.ok) {
+              console.log('[ContactScreen] Token expiration test triggered successfully');
+              Alert.alert(
+                'Token Expired!',
+                'Your token has been expired. Try using any app feature now - the app should automatically refresh your token and continue working.',
+                [{ text: 'OK' }]
+              );
+            } else {
+              console.error('[ContactScreen] Failed to trigger token expiration');
+            }
+          }
+        } catch (error: unknown) {
+          console.error('[ContactScreen] Error in token expiration test:', error);
+          // The authenticatedFetchWithRefresh function will automatically handle logout
+          // if the token is expired, so we don't need to do anything special here
+        } finally {
+          setIsTestingExpiration(false);
+        }
+      }, randomDelay);
+      
+    } catch (error) {
+      console.error('[ContactScreen] Error starting token expiration test:', error);
+      setIsTestingExpiration(false);
+    }
+  };
+
+  // Phase 4B: Test token refresh success function
+  const [isTestingRefreshSuccess, setIsTestingRefreshSuccess] = useState(false);
+  
+  const testTokenRefreshSuccess = async () => {
+    if (isTestingRefreshSuccess) return;
+    
+    try {
+      setIsTestingRefreshSuccess(true);
+      
+      console.log('[ContactScreen] Starting token refresh success test');
+      Alert.alert(
+        'Token Refresh Success Test',
+        'This will simulate an old token (55 minutes) and test automatic refresh. Your next API call should refresh the token seamlessly.',
+        [{ text: 'OK' }]
+      );
+      
+      // Call the backend test endpoint
+      const response = await authenticatedFetchWithRefresh(ENDPOINTS.TEST_TOKEN_REFRESH_SUCCESS, {
+        method: 'POST'
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('[ContactScreen] Token refresh success test setup complete:', data);
+        
+        // Simulate old token by setting lastLoginTime to 55 minutes ago
+        const fiftyFiveMinutesAgo = Date.now() - (55 * 60 * 1000);
+        await AsyncStorage.setItem('lastLoginTime', fiftyFiveMinutesAgo.toString());
+        
+        console.log('[ContactScreen] lastLoginTime set to 55 minutes ago');
+        
+        Alert.alert(
+          'Test Ready!',
+          'Your token now appears to be 55 minutes old. Try using any app feature (refresh contacts, delete contact, etc.) and watch the console for refresh logs.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        console.error('[ContactScreen] Failed to setup token refresh success test');
+        Alert.alert('Error', 'Failed to setup test');
+      }
+    } catch (error: unknown) {
+      console.error('[ContactScreen] Error in token refresh success test:', error);
+      Alert.alert('Error', 'Test setup failed');
+    } finally {
+      setIsTestingRefreshSuccess(false);
+    }
+  };
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={styles.container}>
@@ -606,6 +712,38 @@ export default function ContactsScreen() {
               <TouchableOpacity style={dynamicStyles.shareCardButton} onPress={() => handleShare()}>
                 <MaterialIcons name="share" size={24} color={COLORS.white} />
                 <Text style={styles.shareCardButtonText}>Share my card</Text>
+              </TouchableOpacity>
+              
+              {/* Phase 4A: Test Token Expiration Button */}
+              <TouchableOpacity 
+                onPress={testTokenExpiration} 
+                style={[styles.testButton]}
+                disabled={isTestingExpiration}
+              >
+                {isTestingExpiration ? (
+                  <ActivityIndicator size="small" color={COLORS.white} />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons name="bug" size={20} color={COLORS.white} />
+                    <Text style={styles.testButtonText}>Test Token Refresh (Logout)</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {/* Phase 4B: Test Token Refresh Success Button */}
+              <TouchableOpacity 
+                onPress={testTokenRefreshSuccess} 
+                style={[styles.testButton, { backgroundColor: '#4CAF50' }]}
+                disabled={isTestingRefreshSuccess}
+              >
+                {isTestingRefreshSuccess ? (
+                  <ActivityIndicator size="small" color={COLORS.white} />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons name="refresh" size={20} color={COLORS.white} />
+                    <Text style={styles.testButtonText}>Test Refresh Success</Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
           ) : (
@@ -1305,5 +1443,17 @@ const styles = StyleSheet.create({
     marginTop: -5,
     marginBottom: 10,
     alignItems: 'flex-end',
+  },
+  testButton: {
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: COLORS.primary,
+    marginTop: 10,
+    alignItems: 'center',
+  },
+  testButtonText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

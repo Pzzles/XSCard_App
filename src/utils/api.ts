@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ErrorHandler, ERROR_CODES, handleAuthError, handleNetworkError, createAppError } from './errorHandler';
 
 // Add these types near the top of the file
 export interface PasscreatorResponse {
@@ -11,12 +12,33 @@ export interface PasscreatorResponse {
     colorScheme?: string; // Add default color support
 }
 
+// New interfaces for authentication
+export interface TokenRefreshResponse {
+    success: boolean;
+    token: string;
+    expiresIn: number;
+    message?: string;
+}
+
+export interface TokenValidationResponse {
+    valid: boolean;
+    expiresAt?: number;
+    message?: string;
+}
+
+// Global navigation reference for automatic logout
+let globalNavigationRef: any = null;
+
+export const setGlobalNavigationRef = (navigationRef: any) => {
+  globalNavigationRef = navigationRef;
+};
+
 // Helper function to get the appropriate base URL
 const getBaseUrl = () => {
 
-   return 'https://xscard-app.onrender.com';
-    // return 'http://localhost:8383';
-  //return 'http://192.168.8.185:8383';
+  // return 'https://xscard-app.onrender.com';
+   //  return 'http://localhost:8383';
+  return 'http://192.168.68.101:8383';
 
 };
 
@@ -50,6 +72,12 @@ export const ENDPOINTS = {
     CANCEL_SUBSCRIPTION: '/subscription/cancel',
     FORGOT_PASSWORD: '/forgot-password',
     RESET_PASSWORD: '/reset-password',
+    // New authentication endpoints for Phase 4
+    REFRESH_TOKEN: '/refresh-token',
+    VALIDATE_TOKEN: '/validate-token',
+    TEST_EXPIRED_TOKEN: '/test-expired-token', // Phase 4A Testing
+    TEST_TOKEN_REFRESH_SUCCESS: '/test-token-refresh-success', // Phase 4B Testing
+    LOGOUT: '/logout',
 };
 
 export const buildUrl = (endpoint: string) => `${API_BASE_URL}${endpoint}`;
@@ -81,20 +109,337 @@ export const getUserId = async (): Promise<string | null> => {
 export const authenticatedFetch = async (endpoint: string, options: RequestInit = {}) => {
   try {
     const token = await AsyncStorage.getItem('userToken');
-    const headers = {
-      'Content-Type': 'application/json',
+    
+    // Build headers - only set Content-Type if not FormData
+    const headers: Record<string, string> = {
       'Authorization': `${token}`, // Token from login is used here
+    };
+    
+    // Only add Content-Type for non-FormData requests
+    if (!(options.body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+    }
+    
+    // Merge with any provided headers
+    const finalHeaders = {
+      ...headers,
       ...options.headers,
     };
 
     const response = await fetch(buildUrl(endpoint), {
       ...options, 
-      headers,
+      headers: finalHeaders,
     });
 
     return response;
   } catch (error) {
     console.error('Authenticated fetch error:', error);
     throw error;
+  }
+};
+
+// NEW: Token refresh function (implementation placeholder for Phase 4)
+export const refreshAuthToken = async (): Promise<string> => {
+  try {
+    const currentToken = await AsyncStorage.getItem('userToken');
+    
+    if (!currentToken) {
+      const error = createAppError(ERROR_CODES.TOKEN_INVALID, new Error('No token to refresh'));
+      await handleAuthError(error);
+      throw error;
+    }
+
+    console.log('[Token Refresh] Attempting to refresh token...');
+    
+    // Phase 4B: Request token refresh from backend
+    const response = await fetch(buildUrl(ENDPOINTS.REFRESH_TOKEN), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': currentToken,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('[Token Refresh] Backend refresh failed:', response.status, errorData);
+      
+      // Handle specific error cases with proper error types
+      if (response.status === 401) {
+        const error = createAppError(ERROR_CODES.TOKEN_INVALID, new Error('Current token is invalid and cannot be refreshed'));
+        await handleAuthError(error, () => forceLogoutExpiredToken());
+        throw error;
+      }
+      
+      const error = createAppError(ERROR_CODES.TOKEN_REFRESH_FAILED, new Error(errorData.message || 'Token refresh failed'));
+      await handleAuthError(error);
+      throw error;
+    }
+
+    const data = await response.json();
+    
+    if (data.success && data.token) {
+      // Store the new token with Bearer prefix
+      const newTokenWithBearer = `Bearer ${data.token}`;
+      await AsyncStorage.setItem('userToken', newTokenWithBearer);
+      
+      console.log('[Token Refresh] Token refreshed successfully');
+      
+      // Update last login time to track token age
+      await AsyncStorage.setItem('lastLoginTime', Date.now().toString());
+      
+      return newTokenWithBearer;
+    } else {
+      const error = createAppError(ERROR_CODES.TOKEN_REFRESH_FAILED, new Error(data.message || 'Token refresh failed - invalid response'));
+      await handleAuthError(error);
+      throw error;
+    }
+  } catch (error) {
+    console.error('[Token Refresh] Error refreshing auth token:', error);
+    
+    // If it's already an AppError, re-throw it
+    if (error && typeof error === 'object' && 'code' in error) {
+      throw error;
+    }
+    
+    // Otherwise, wrap it in a proper error
+    const appError = createAppError(ERROR_CODES.TOKEN_REFRESH_FAILED, error as Error);
+    await handleAuthError(appError);
+    throw appError;
+  }
+};
+
+// NEW: Token validation function - Phase 4A Implementation
+export const validateAuthToken = async (): Promise<boolean> => {
+  try {
+    const currentToken = await AsyncStorage.getItem('userToken');
+    
+    if (!currentToken) {
+      console.log('[Token Validation] No token found');
+      return false;
+    }
+
+    console.log('[Token Validation] Validating token with backend...');
+    
+    const response = await fetch(buildUrl(ENDPOINTS.VALIDATE_TOKEN), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': currentToken,
+      },
+    });
+
+    if (!response.ok) {
+      console.log(`[Token Validation] Backend validation failed: ${response.status}`);
+      
+      // Handle specific validation failures
+      if (response.status === 401) {
+        const error = createAppError(ERROR_CODES.TOKEN_EXPIRED, new Error('Token validation failed - token expired'));
+        await ErrorHandler.handleError(error, { showUserMessage: false, logError: true });
+      }
+      
+      return false;
+    }
+
+    const data = await response.json();
+    console.log('[Token Validation] Backend validation successful:', data.message);
+    return data.valid;
+  } catch (error) {
+    console.error('[Token Validation] Error validating auth token:', error);
+    
+    // Handle network errors gracefully
+    await handleNetworkError(error, async () => {
+      await validateAuthToken();
+    });
+    
+    return false;
+  }
+};
+
+// NEW: Enhanced authenticated fetch with token refresh capability
+export const authenticatedFetchWithRefresh = async (endpoint: string, options: RequestInit = {}) => {
+  try {
+    // Phase 4B: Check if token needs refresh before making the request
+    const needsRefresh = await shouldRefreshToken();
+    if (needsRefresh) {
+      console.log('[Auth Fetch] Token appears old, attempting refresh before request...');
+      try {
+        await refreshAuthToken();
+        console.log('[Auth Fetch] Proactive token refresh successful');
+      } catch (refreshError) {
+        console.error('[Auth Fetch] Proactive token refresh failed:', refreshError);
+        // Continue with original request - if it fails, we'll try refresh again
+      }
+    }
+    
+    // First attempt with current token
+    let response = await authenticatedFetch(endpoint, options);
+    
+    // If token is expired or invalid (401), handle appropriately
+    if (response.status === 401) {
+      console.log('[Auth Fetch] Received 401 - token appears expired');
+      
+      // Phase 4B: Attempt token refresh before logout
+      try {
+        console.log('[Auth Fetch] Attempting token refresh...');
+        await refreshAuthToken();
+        
+        console.log('[Auth Fetch] Token refresh successful, retrying original request...');
+        
+        // Retry the original request with the new token
+        response = await authenticatedFetch(endpoint, options);
+        
+        if (response.status === 401) {
+          // If still getting 401 after refresh, the refresh didn't work
+          console.log('[Auth Fetch] Still getting 401 after refresh, forcing logout');
+          const error = createAppError(ERROR_CODES.AUTHENTICATION_FAILED, new Error('Authentication failed after token refresh'));
+          await handleAuthError(error, () => forceLogoutExpiredToken());
+          throw error;
+        }
+        
+        console.log('[Auth Fetch] Request successful after token refresh');
+        return response;
+        
+      } catch (refreshError) {
+        console.error('[Auth Fetch] Token refresh failed:', refreshError);
+        
+        // If refresh fails, fall back to logout
+        console.log('[Auth Fetch] Falling back to logout due to refresh failure');
+        const error = createAppError(ERROR_CODES.AUTHENTICATION_FAILED, refreshError as Error);
+        await handleAuthError(error, () => forceLogoutExpiredToken());
+        throw error;
+      }
+    }
+
+    // Handle other HTTP errors
+    if (!response.ok) {
+      if (response.status >= 500) {
+        const error = createAppError(ERROR_CODES.SERVER_ERROR, new Error(`Server error: ${response.status}`));
+        await ErrorHandler.handleError(error, {
+          retryAction: async () => {
+            const retryResponse = await authenticatedFetch(endpoint, options);
+            if (!retryResponse.ok) {
+              throw new Error(`Retry failed: ${retryResponse.status}`);
+            }
+          },
+          maxRetries: 2
+        });
+      } else if (response.status === 403) {
+        const error = createAppError(ERROR_CODES.PERMISSION_DENIED, new Error('Permission denied'));
+        await ErrorHandler.handleError(error, { showUserMessage: true });
+      } else if (response.status === 404) {
+        const error = createAppError(ERROR_CODES.RESOURCE_NOT_FOUND, new Error('Resource not found'));
+        await ErrorHandler.handleError(error, { showUserMessage: true });
+      }
+    }
+
+    return response;
+  } catch (error) {
+    console.error('[Auth Fetch] Error:', error);
+    
+    // Handle network errors with retry
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      await handleNetworkError(error, async () => {
+        await authenticatedFetchWithRefresh(endpoint, options);
+      });
+    }
+    
+    throw error;
+  }
+};
+
+// NEW: Check if token needs refresh (based on expiry time)
+export const shouldRefreshToken = async (): Promise<boolean> => {
+  try {
+    const token = await AsyncStorage.getItem('userToken');
+    const lastLoginTimeStr = await AsyncStorage.getItem('lastLoginTime');
+    
+    if (!token || !lastLoginTimeStr) {
+      console.log('[Should Refresh] No token or login time found');
+      return false;
+    }
+
+    const lastLoginTime = parseInt(lastLoginTimeStr, 10);
+    const now = Date.now();
+    const tokenAge = now - lastLoginTime;
+    
+    // Firebase tokens expire in 1 hour (3600 seconds)
+    // Refresh if token is older than 50 minutes (3000 seconds) to be safe
+    const fiftyMinutes = 50 * 60 * 1000; // 50 minutes in milliseconds
+    
+    const needsRefresh = tokenAge > fiftyMinutes;
+    
+    if (needsRefresh) {
+      console.log(`[Should Refresh] Token is ${Math.round(tokenAge / 60000)} minutes old, needs refresh`);
+    } else {
+      console.log(`[Should Refresh] Token is ${Math.round(tokenAge / 60000)} minutes old, still valid`);
+    }
+    
+    return needsRefresh;
+  } catch (error) {
+    console.error('[Should Refresh] Error checking if token needs refresh:', error);
+    return false;
+  }
+};
+
+// NEW: Logout function that calls backend
+export const performServerLogout = async (): Promise<void> => {
+  try {
+    const token = await AsyncStorage.getItem('userToken');
+    
+    if (token) {
+      // Call backend logout endpoint
+      await fetch(buildUrl(ENDPOINTS.LOGOUT), {
+        method: 'POST',
+        headers: {
+          'Authorization': token,
+          'Content-Type': 'application/json'
+        }
+      });
+      console.log('Successfully logged out on server');
+    }
+  } catch (error) {
+    console.error('Error during server logout:', error);
+    // Don't throw error - continue with local logout even if server logout fails
+  }
+};
+
+// NEW: Force logout when token is expired - Phase 4A Implementation
+export const forceLogoutExpiredToken = async (navigationCallback?: () => void): Promise<void> => {
+  try {
+    console.log('[Force Logout] Token expired - forcing logout...');
+    
+    // Clear all auth data from AsyncStorage
+    await AsyncStorage.multiRemove([
+      'userToken',
+      'userData', 
+      'authData',
+      'keepLoggedIn',
+      'lastLoginTime'
+    ]);
+    
+    console.log('[Force Logout] Auth data cleared successfully');
+    
+    // Try to navigate to login screen
+    if (navigationCallback) {
+      console.log('[Force Logout] Using provided navigation callback');
+      navigationCallback();
+    } else if (globalNavigationRef) {
+      console.log('[Force Logout] Using global navigation reference');
+      globalNavigationRef.reset({
+        index: 0,
+        routes: [{ name: 'Auth' }],
+      });
+    } else {
+      console.log('[Force Logout] No navigation available - auth data cleared, user will need to restart app');
+    }
+  } catch (error) {
+    console.error('[Force Logout] Error during forced logout:', error);
+    // Even if there's an error, we should still try to clear what we can
+    try {
+      await AsyncStorage.clear();
+    } catch (clearError) {
+      console.error('[Force Logout] Failed to clear storage:', clearError);
+    }
   }
 };

@@ -1,54 +1,63 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
+import { StyleSheet, Text, View, AppState, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { COLORS } from './src/constants/colors';
 import AuthNavigator from './src/navigation/AuthNavigator';
-import { ColorSchemeProvider } from './src/context/ColorSchemeContext';
+import TabNavigator from './src/navigation/TabNavigator';
+import { AuthProvider } from './src/context/AuthContext';
+import { AuthManager } from './src/utils/authManager';
+import { setGlobalNavigationRef } from './src/utils/api';
+
+const Stack = createStackNavigator();
 
 export default function App() {
+  const appState = useRef(AppState.currentState);
+  const navigationRef = useRef<any>(null);
+
+  useEffect(() => {
+    // Set up global navigation reference for automatic logout
+    if (navigationRef.current) {
+      setGlobalNavigationRef(navigationRef.current);
+    }
+  }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      console.log('App state changed:', appState.current, '->', nextAppState);
+      
+      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+        console.log('App has come to the foreground!');
+        AuthManager.handleAppForeground();
+      } else if (appState.current === 'active' && nextAppState.match(/inactive|background/)) {
+        console.log('App has gone to the background!');
+        AuthManager.handleAppBackground();
+      }
+
+      appState.current = nextAppState;
+    });
+
+    return () => subscription?.remove();
+  }, []);
+
   return (
-    <ColorSchemeProvider>
-      <SafeAreaProvider>
-        <StatusBar style="dark" backgroundColor={COLORS.white} />
-        <NavigationContainer
-          theme={{
-            dark: false,
-            colors: {
-              primary: COLORS.primary,
-              background: COLORS.background,
-              card: COLORS.white,
-              text: COLORS.black,
-              border: COLORS.gray + '20',
-              notification: COLORS.primary,
-            },
-            fonts: {
-              regular: {
-                fontFamily: 'System',
-                fontWeight: '400',
-              },
-              medium: {
-                fontFamily: 'System',
-                fontWeight: '500',
-              },
-              bold: {
-                fontFamily: 'System',
-                fontWeight: '700',
-              },
-              heavy: {
-                fontFamily: 'System',
-                fontWeight: '900',
-              },
-            },
-          }}
-          onStateChange={(state) => {
-            // Optional: Add navigation state logging for debugging
-            console.log('New navigation state:', state);
-          }}
-        >
-          <AuthNavigator />
-        </NavigationContainer>
-      </SafeAreaProvider>
-    </ColorSchemeProvider>
+    <AuthProvider>
+      <NavigationContainer ref={navigationRef}>
+        <StatusBar style="auto" />
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Auth" component={AuthNavigator} />
+          <Stack.Screen name="MainApp" component={TabNavigator} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </AuthProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

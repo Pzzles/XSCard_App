@@ -6,7 +6,7 @@ import { Animated } from 'react-native';
 import { COLORS, CARD_COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { authenticatedFetch, getUserId, API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
+import { API_BASE_URL, ENDPOINTS, buildUrl, authenticatedFetch, getUserId, authenticatedFetchWithRefresh } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { EditCardScreenRouteProp, RootStackParamList } from '../../types/navigation';
@@ -105,7 +105,7 @@ export default function EditCard() {
         return;
       }
 
-      const response = await authenticatedFetch(ENDPOINTS.GET_CARD + `/${userId}`);
+      const response = await authenticatedFetchWithRefresh(ENDPOINTS.GET_CARD + `/${userId}`);
       const responseData = await response.json();
       
       // Handle new response structure
@@ -251,7 +251,7 @@ export default function EditCard() {
       console.log('Full card data:', JSON.stringify(cardData, null, 2));
 
       // Send update request
-      const response = await authenticatedFetch(
+      const response = await authenticatedFetchWithRefresh(
         `${ENDPOINTS.UPDATE_CARD.replace(':id', userId)}?cardIndex=${cardIndex}`,
         {
           method: 'PATCH',
@@ -904,7 +904,7 @@ export default function EditCard() {
                   return;
                 }
 
-                const response = await authenticatedFetch(
+                const response = await authenticatedFetchWithRefresh(
                   `${ENDPOINTS.DELETE_CARD.replace(':id', userId)}?cardIndex=${cardIndex}`,
                   {
                     method: 'DELETE'

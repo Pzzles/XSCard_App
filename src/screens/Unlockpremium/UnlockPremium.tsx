@@ -14,22 +14,22 @@ import { CommonActions } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL, ENDPOINTS, authenticatedFetch, getUserId } from '../../utils/api';
+import { API_BASE_URL, ENDPOINTS, authenticatedFetch, getUserId, performServerLogout, authenticatedFetchWithRefresh } from '../../utils/api';
+import { useAuth } from '../../context/AuthContext';
 
-type RootStackParamList = {
+type UnlockPremiumStackParamList = {
   UnlockPremium: undefined;
-  Login: undefined;
-  SignInScreen: undefined;
-  // ... other screens
+  SignIn: undefined;
 };
 
-const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList, 'UnlockPremium'>) => {
+const UnlockPremium = ({ navigation }: NativeStackScreenProps<UnlockPremiumStackParamList, 'UnlockPremium'>) => {
   const [selectedPlan, setSelectedPlan] = useState('annually');
   const [userPlan, setUserPlan] = useState<string>('free');
   const [isProcessing, setIsProcessing] = useState(false);
   const [userEmail, setUserEmail] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [currency, setCurrency] = useState<'ZAR' | 'USD'>('ZAR');
+  const { logout } = useAuth(); // Use our centralized auth context
 
   // Define pricing for both currencies
   const pricing = {
@@ -69,7 +69,7 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
 
   const checkSubscriptionStatus = async () => {
     try {
-      const response = await authenticatedFetch(ENDPOINTS.SUBSCRIPTION_STATUS, {
+      const response = await authenticatedFetchWithRefresh(ENDPOINTS.SUBSCRIPTION_STATUS, {
         method: 'GET',
       });
       
@@ -129,12 +129,23 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
     </View>
   );
 
-  // Add a logout function
+  // Updated logout function using centralized AuthContext
   const logoutUser = async () => {
     try {
-      // Clear all user data from AsyncStorage
-      await AsyncStorage.removeItem('userData');
-      await AsyncStorage.removeItem('userToken');
+      console.log('UnlockPremium: Starting logout process...');
+      
+      // Perform server logout first (non-blocking)
+      try {
+        await performServerLogout();
+      } catch (serverError) {
+        console.log('UnlockPremium: Server logout failed, continuing with local logout:', serverError);
+        // Continue with local logout even if server logout fails
+      }
+      
+      // Use our centralized logout from AuthContext
+      await logout();
+      
+      console.log('UnlockPremium: Logout completed, navigating to SignIn');
       
       // Use CommonActions to reset navigation to the initial route
       navigation.dispatch(
@@ -145,8 +156,25 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
       );
       
     } catch (error) {
-      console.error('Error during logout:', error);
-      Alert.alert('Error', 'Failed to log out. Please try again.');
+      console.error('UnlockPremium: Error during logout:', error);
+      
+      Alert.alert(
+        'Logout Error', 
+        'There was an issue logging out. You will be redirected to the sign-in screen.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              navigation.dispatch(
+                CommonActions.reset({
+                  index: 0,
+                  routes: [{ name: 'SignIn' }],
+                })
+              );
+            }
+          }
+        ]
+      );
     }
   };
 
@@ -165,7 +193,7 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
           onPress: async () => {
             try {
               setIsLoading(true);
-              const response = await authenticatedFetch(ENDPOINTS.CANCEL_SUBSCRIPTION, {
+              const response = await authenticatedFetchWithRefresh(ENDPOINTS.CANCEL_SUBSCRIPTION, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json'
@@ -212,7 +240,7 @@ const UnlockPremium = ({ navigation }: NativeStackScreenProps<RootStackParamList
       const currentPricing = pricing[currency];
       const amount = selectedPlan === 'annually' ? currentPricing.annually.total : currentPricing.monthly.total;
 
-      const response = await authenticatedFetch(ENDPOINTS.INITIALIZE_PAYMENT, {
+      const response = await authenticatedFetchWithRefresh(ENDPOINTS.INITIALIZE_PAYMENT, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

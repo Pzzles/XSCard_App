@@ -6,7 +6,8 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useColorScheme } from '../context/ColorSchemeContext';
-import { API_BASE_URL, authenticatedFetch } from '../utils/api';
+import { API_BASE_URL, authenticatedFetch, performServerLogout } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 
 // Update this type to match your actual navigation type
 type RootStackParamList = {
@@ -32,6 +33,7 @@ export default function Header({ title, rightIcon, showAddButton = false }: Head
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const [isMenuVisible, setIsMenuVisible] = useState(false);
   const { colorScheme } = useColorScheme();
+  const { logout } = useAuth(); // Use our centralized auth context
 
   // Add this useEffect to get the user's plan
   useEffect(() => {
@@ -60,39 +62,47 @@ export default function Header({ title, rightIcon, showAddButton = false }: Head
 
   const handleLogout = async () => {
     try {
-      // Get token from AsyncStorage
-      const token = await AsyncStorage.getItem('userToken');
+      console.log('Header: Starting logout process...');
+      setIsMenuVisible(false); // Close menu immediately
       
-      if (token) {
-        try {
-          // Call backend logout endpoint using api utilities
-          await fetch(`${API_BASE_URL}/logout`, {
-            method: 'POST',
-            headers: {
-              'Authorization': token,
-              'Content-Type': 'application/json'
-            }
-          });
-          console.log('Successfully logged out on server');
-        } catch (error) {
-          console.error('Error during server logout:', error);
-          // Continue with local logout even if server logout fails
-        }
+      // Perform server logout first (non-blocking)
+      try {
+        await performServerLogout();
+      } catch (serverError) {
+        console.log('Header: Server logout failed, continuing with local logout:', serverError);
+        // Continue with local logout even if server logout fails
       }
       
-      // Clear local storage and navigate regardless of server response
-      await AsyncStorage.clear();
+      // Use our centralized logout from AuthContext
+      await logout();
+      
+      console.log('Header: Logout completed, navigating to SignIn');
+      
+      // Navigate to SignIn
       navigation.reset({
         index: 0,
         routes: [{ name: 'SignIn' }],
       });
+      
     } catch (error) {
-      console.error('Error during logout:', error);
+      console.error('Header: Error during logout:', error);
+      
       // If everything fails, still try to navigate to sign in
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'SignIn' }],
-      });
+      Alert.alert(
+        'Logout Error', 
+        'There was an issue logging out. You will be redirected to the sign-in screen.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'SignIn' }],
+              });
+            }
+          }
+        ]
+      );
     }
   };
 

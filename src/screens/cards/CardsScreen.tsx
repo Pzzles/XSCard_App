@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, Image, TouchableOpacity, Animated, ScrollView, 
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
-import { API_BASE_URL, ENDPOINTS, buildUrl, authenticatedFetch, getUserId } from '../../utils/api';
+import { API_BASE_URL, ENDPOINTS, buildUrl, authenticatedFetch, getUserId, authenticatedFetchWithRefresh, forceLogoutExpiredToken } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
@@ -113,6 +113,116 @@ export default function CardsScreen() {
   // Add this state to track current page
   const [currentPage, setCurrentPage] = useState(0);
 
+  // Phase 4A: Test token expiration function
+  const [isTestingExpiration, setIsTestingExpiration] = useState(false);
+  
+  const testTokenExpiration = async () => {
+    if (isTestingExpiration) return;
+    
+    try {
+      setIsTestingExpiration(true);
+      
+      // Random delay between 10-60 seconds
+      const randomDelay = Math.floor(Math.random() * 50000) + 10000; // 10-60 seconds
+      const delayInSeconds = Math.round(randomDelay / 1000);
+      
+      console.log(`[CardsScreen] Starting token expiration test - will expire in ${delayInSeconds} seconds`);
+      Alert.alert(
+        'Token Refresh Test Started',
+        `Your token will expire in ${delayInSeconds} seconds. Continue using the app normally. The app should automatically refresh the token when it expires.`,
+        [{ text: 'OK' }]
+      );
+      
+      // Wait for random delay
+      setTimeout(async () => {
+        try {
+          const currentToken = await AsyncStorage.getItem('userToken');
+          if (currentToken) {
+            // Call the backend test endpoint using authenticatedFetchWithRefresh
+            // This will trigger automatic logout if the token is expired
+            const response = await authenticatedFetchWithRefresh(ENDPOINTS.TEST_EXPIRED_TOKEN, {
+              method: 'POST'
+            });
+            
+            if (response.ok) {
+              console.log('[CardsScreen] Token expiration test triggered successfully');
+              Alert.alert(
+                'Token Expired!',
+                'Your token has been expired. Try using any app feature now - the app should automatically refresh your token and continue working.',
+                [{ text: 'OK' }]
+              );
+            } else {
+              console.error('[CardsScreen] Failed to trigger token expiration');
+            }
+          }
+        } catch (error: unknown) {
+          console.error('[CardsScreen] Error in token expiration test:', error);
+          // The authenticatedFetchWithRefresh function will automatically handle logout
+          // if the token is expired, so we don't need to do anything special here
+        } finally {
+          setIsTestingExpiration(false);
+        }
+      }, randomDelay);
+      
+    } catch (error) {
+      console.error('[CardsScreen] Error starting token expiration test:', error);
+      setIsTestingExpiration(false);
+    }
+  };
+
+  // Phase 4B: Test token refresh success function
+  const [isTestingRefreshSuccess, setIsTestingRefreshSuccess] = useState(false);
+  
+  const testTokenRefreshSuccess = async () => {
+    if (isTestingRefreshSuccess) return;
+    
+    try {
+      setIsTestingRefreshSuccess(true);
+      
+      console.log('[CardsScreen] Starting token refresh success test');
+      Alert.alert(
+        'Token Refresh Success Test',
+        'This will simulate an old token (55 minutes) and test automatic refresh. Your next API call should refresh the token seamlessly.',
+        [{ text: 'OK' }]
+      );
+      
+      // Call the backend test endpoint
+      console.log('[CardsScreen] Calling endpoint:', ENDPOINTS.TEST_TOKEN_REFRESH_SUCCESS);
+      const response = await authenticatedFetchWithRefresh(ENDPOINTS.TEST_TOKEN_REFRESH_SUCCESS, {
+        method: 'POST'
+      });
+      
+      console.log('[CardsScreen] Response status:', response.status);
+      console.log('[CardsScreen] Response ok:', response.ok);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('[CardsScreen] Token refresh success test setup complete:', data);
+        
+        // Simulate old token by setting lastLoginTime to 55 minutes ago
+        const fiftyFiveMinutesAgo = Date.now() - (55 * 60 * 1000);
+        await AsyncStorage.setItem('lastLoginTime', fiftyFiveMinutesAgo.toString());
+        
+        console.log('[CardsScreen] lastLoginTime set to 55 minutes ago');
+        
+        Alert.alert(
+          'Test Ready!',
+          'Your token now appears to be 55 minutes old. Try using any app feature (refresh cards, view contacts, etc.) and watch the console for refresh logs.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        const errorText = await response.text();
+        console.error('[CardsScreen] Failed to setup token refresh success test. Status:', response.status, 'Response:', errorText);
+        Alert.alert('Error', `Failed to setup test. Status: ${response.status}`);
+      }
+    } catch (error: unknown) {
+      console.error('[CardsScreen] Error in token refresh success test:', error);
+      Alert.alert('Error', `Test setup failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsTestingRefreshSuccess(false);
+    }
+  };
+
   // Add this function to handle scroll events
   const handleScroll = (event: any) => {
     const offsetX = event.nativeEvent.contentOffset.x;
@@ -148,7 +258,7 @@ export default function CardsScreen() {
         try {
           const userId = await getUserId();
           if (userId) {
-            const response = await authenticatedFetch(ENDPOINTS.GET_CARD + `/${userId}`);
+            const response = await authenticatedFetchWithRefresh(ENDPOINTS.GET_CARD + `/${userId}`);
             const cardsData = await response.json();
             console.log('FOCUS CHECK - Cards API response:', JSON.stringify(cardsData, null, 2));
             
@@ -180,7 +290,7 @@ export default function CardsScreen() {
       }
 
       // Uses authenticated request to fetch cards
-      const cardResponse = await authenticatedFetch(ENDPOINTS.GET_CARD + `/${userId}`);
+      const cardResponse = await authenticatedFetchWithRefresh(ENDPOINTS.GET_CARD + `/${userId}`);
       const responseData = await cardResponse.json();
 
       // Handle new response structure
@@ -434,8 +544,8 @@ export default function CardsScreen() {
 
       console.log('Making wallet request to:', endpoint);
 
-      // Use authenticatedFetch which automatically handles the token
-      const response = await authenticatedFetch(endpoint, {
+      // Use authenticatedFetchWithRefresh which automatically handles the token
+      const response = await authenticatedFetchWithRefresh(endpoint, {
         method: 'POST'
       });
 
@@ -494,10 +604,10 @@ export default function CardsScreen() {
   };
 
   // Update the dynamic styles for the share button
-  const dynamicStyles = StyleSheet.create({
+  const getDynamicStyles = (cardColorScheme: string) => StyleSheet.create({
     sendButton: {
       flexDirection: 'row',
-      backgroundColor: colorScheme,
+      backgroundColor: cardColorScheme,
       paddingVertical: 10,
       paddingHorizontal: 20,
       borderRadius: 25,
@@ -514,7 +624,7 @@ export default function CardsScreen() {
     },
     shareButton: {
       flexDirection: 'row',
-      backgroundColor: colorScheme,
+      backgroundColor: cardColorScheme,
       paddingVertical: 12,
       paddingHorizontal: 24,
       borderRadius: 25,
@@ -528,14 +638,14 @@ export default function CardsScreen() {
     input: {
       width: '80%',
       height: 40,
-      borderColor: colorScheme,
+      borderColor: cardColorScheme,
       borderWidth: 1,
       marginBottom: 20,
       padding: 10,
     },
     contactBorder: {
       borderWidth: 1,
-      borderColor: colorScheme,
+      borderColor: cardColorScheme,
       borderRadius: 8,
       padding: 10,
       marginBottom: 15,
@@ -570,7 +680,7 @@ export default function CardsScreen() {
       alignSelf: 'center',  // Center horizontally
       width: '55%',  // Re60ore original width
       borderWidth: 2,
-      borderColor: colorScheme,
+      borderColor: cardColorScheme,
       gap: 8,
     },
   });
@@ -634,7 +744,7 @@ export default function CardsScreen() {
             <ScrollView showsVerticalScrollIndicator={false}>
               <View style={styles.cardContent}>
                 {/* QR Code */}
-                <View style={dynamicStyles.qrContainer}>
+                <View style={getDynamicStyles(card.colorScheme || colorScheme).qrContainer}>
                   {qrCode ? (
                     <Image
                       style={styles.qrCode}
@@ -733,7 +843,7 @@ export default function CardsScreen() {
                 {/* Share and Wallet Buttons */}
                 <TouchableOpacity 
                   onPress={() => setIsShareModalVisible(true)} 
-                  style={[dynamicStyles.shareButton]}
+                  style={[getDynamicStyles(card.colorScheme || colorScheme).shareButton]}
                 >
                   <MaterialIcons name="share" size={24} color={COLORS.white} />
                   <Text style={styles.shareButtonText}>Share</Text>
@@ -741,18 +851,50 @@ export default function CardsScreen() {
 
                 <TouchableOpacity 
                   onPress={handleAddToWallet} 
-                  style={[dynamicStyles.walletButton]}
+                  style={[getDynamicStyles(card.colorScheme || colorScheme).walletButton]}
                   disabled={isWalletLoading}
                 >
                   {isWalletLoading ? (
-                    <ActivityIndicator size="small" color={colorScheme} />
+                    <ActivityIndicator size="small" color={card.colorScheme || colorScheme} />
                   ) : (
                     <>
-                      <MaterialCommunityIcons name="wallet" size={24} color={colorScheme} />
-                      <Text style={[styles.walletButtonText, { color: colorScheme }]}>
+                      <MaterialCommunityIcons name="wallet" size={24} color={card.colorScheme || colorScheme} />
+                      <Text style={[styles.walletButtonText, { color: card.colorScheme || colorScheme }]}>
 
                         Add to {Platform.OS === 'ios' ? 'Apple' : 'Google'} Wallet
                       </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                {/* Phase 4A: Test Token Expiration Button */}
+                <TouchableOpacity 
+                  onPress={testTokenExpiration} 
+                  style={[styles.testButton]}
+                  disabled={isTestingExpiration}
+                >
+                  {isTestingExpiration ? (
+                    <ActivityIndicator size="small" color={COLORS.white} />
+                  ) : (
+                    <>
+                      <MaterialCommunityIcons name="bug" size={20} color={COLORS.white} />
+                      <Text style={styles.testButtonText}>Test Token Refresh (Logout)</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                {/* Phase 4B: Test Token Refresh Success Button */}
+                <TouchableOpacity 
+                  onPress={testTokenRefreshSuccess} 
+                  style={[styles.testButton, { backgroundColor: '#4CAF50' }]}
+                  disabled={isTestingRefreshSuccess}
+                >
+                  {isTestingRefreshSuccess ? (
+                    <ActivityIndicator size="small" color={COLORS.white} />
+                  ) : (
+                    <>
+                      <MaterialCommunityIcons name="refresh" size={20} color={COLORS.white} />
+                      <Text style={styles.testButtonText}>Test Refresh Success</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -841,7 +983,7 @@ export default function CardsScreen() {
 
             <View style={styles.optionsContainer}>
               <TouchableOpacity
-                style={[styles.optionButton, { backgroundColor: colorScheme }]}
+                style={[styles.optionButton, { backgroundColor: userData?.cards?.[currentPage]?.colorScheme || colorScheme }]}
                 onPress={async () => {
                   await Clipboard.setStringAsync(modalData);
                   setIsOptionsModalVisible(false);
@@ -855,7 +997,7 @@ export default function CardsScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.optionButton, { backgroundColor: colorScheme }]}
+                style={[styles.optionButton, { backgroundColor: userData?.cards?.[currentPage]?.colorScheme || colorScheme }]}
                 onPress={() => {
                   const url = modalType === 'email' ? `mailto:${modalData}` : `tel:${modalData}`;
                   Linking.openURL(url).catch(() => {
@@ -1139,5 +1281,21 @@ qrCode: {
   },
   headerIconContainer: {
     textAlignVertical: 'center',
+  },
+  testButton: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.secondary,
+    padding: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  testButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: 'bold',
+    fontFamily: 'Montserrat-Bold',
+    marginLeft: 5,
   },
 });

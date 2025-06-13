@@ -9,6 +9,7 @@ import { AuthStackParamList } from '../../types';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
 import ErrorPopup from '../../components/popups/ErrorPopup';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ErrorHandler, ERROR_CODES, handleAuthError, handleNetworkError, createAppError, handleStorageError } from '../../utils/errorHandler';
 
 type SignUpScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'SignUp'>;
 
@@ -119,21 +120,63 @@ export default function SignUpScreen() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to create account');
+        
+        // Handle specific signup errors
+        if (response.status === 409) {
+          // User already exists
+          const error = createAppError(ERROR_CODES.VALIDATION_ERROR, new Error(errorData.message || 'Email already exists'));
+          await ErrorHandler.handleError(error);
+          setErrorMessage(error.userMessage);
+        } else if (response.status >= 500) {
+          // Server error with retry
+          const error = createAppError(ERROR_CODES.SERVER_ERROR, new Error(errorData.message || 'Server error'));
+          await ErrorHandler.handleError(error, {
+            retryAction: async () => {
+              await handleSignUp();
+            },
+            maxRetries: 2
+          });
+          setErrorMessage(error.userMessage);
+        } else {
+          // Other API errors
+          const error = createAppError(ERROR_CODES.API_ERROR, new Error(errorData.message || 'Failed to create account'));
+          await ErrorHandler.handleError(error);
+          setErrorMessage(error.userMessage);
+        }
+        setShowError(true);
+        return;
       }
 
       const data = await response.json();
       const userId = data.userId;
 
-      // Store temporary auth state
-      await AsyncStorage.setItem('tempUserId', userId);
-      await AsyncStorage.setItem('tempUserEmail', email);
+      // Store temporary auth state with error handling
+      try {
+        await AsyncStorage.setItem('tempUserId', userId);
+        await AsyncStorage.setItem('tempUserEmail', email);
+      } catch (storageError) {
+        await handleStorageError(storageError);
+        // Continue anyway - user can still proceed
+      }
       
       // Navigate to complete profile
       navigation.navigate('CompleteProfile', { userId });
       
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Network error. Please check your connection.');
+      console.error('SignUp: Error during signup:', error);
+      
+      // Handle network errors with retry capability
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        await handleNetworkError(error, async () => {
+          await handleSignUp();
+        });
+        setErrorMessage('Please check your internet connection and try again.');
+      } else {
+        // Handle other errors
+        const appError = createAppError(ERROR_CODES.UNKNOWN_ERROR, error as Error);
+        await ErrorHandler.handleError(appError);
+        setErrorMessage(appError.userMessage);
+      }
       setShowError(true);
     } finally {
       setIsLoading(false);

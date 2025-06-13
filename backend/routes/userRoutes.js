@@ -35,6 +35,10 @@ router.get('/reset-user-info', userController.getResetUserInfo);
 router.use(authenticateUser);
 
 // Protected routes
+router.post('/validate-token', userController.validateToken);
+router.post('/refresh-token', userController.refreshToken); // Phase 4B Token Refresh
+router.post('/test-expired-token', userController.testExpiredToken); // Phase 4A Testing
+router.post('/test-token-refresh-success', userController.testTokenRefreshSuccess); // Phase 4B Testing
 router.post('/logout', userController.logout);
 router.post('/resend-verification/:uid', userController.resendVerification);
 router.get('/Users', userController.getAllUsers);

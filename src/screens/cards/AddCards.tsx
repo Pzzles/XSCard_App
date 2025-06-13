@@ -6,7 +6,7 @@ import Header from '../../components/Header';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../../types';
-import { authenticatedFetch, ENDPOINTS, getUserId, buildUrl, API_BASE_URL } from '../../utils/api';
+import { authenticatedFetch, authenticatedFetchWithRefresh, ENDPOINTS, getUserId, buildUrl, API_BASE_URL } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { pickImage, requestPermissions } from '../../utils/imageUtils';
@@ -115,9 +115,8 @@ export default function AddCards() {
       }
 
       const userId = await getUserId();
-      const token = await AsyncStorage.getItem('userToken');
 
-      if (!userId || !token) {
+      if (!userId) {
         Alert.alert('Error', 'Please login first');
         return;
       }
@@ -150,11 +149,9 @@ export default function AddCards() {
         } as any);
       }
 
-      const response = await fetch(buildUrl(ENDPOINTS.ADD_CARD), {
+      // Use authenticatedFetchWithRefresh for proper token handling
+      const response = await authenticatedFetchWithRefresh(ENDPOINTS.ADD_CARD, {
         method: 'POST',
-        headers: {
-          'Authorization': `${token}`,
-        },
         body: form,
       });
 

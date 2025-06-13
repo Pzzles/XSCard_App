@@ -896,3 +896,180 @@ exports.getResetUserInfo = async (req, res) => {
         });
     }
 };
+
+// Phase 4A: Token Validation Function
+exports.validateToken = async (req, res) => {
+    try {
+        // If we reach this point, the authenticateUser middleware has already
+        // validated the Firebase token successfully
+        const { uid, email } = req.user;
+        
+        console.log(`[Token Validation] Token validated successfully for user: ${uid}`);
+        
+        res.status(200).json({
+            valid: true,
+            message: 'Token is valid',
+            user: {
+                uid,
+                email
+            },
+            timestamp: Date.now()
+        });
+    } catch (error) {
+        console.error('[Token Validation] Error:', error);
+        res.status(500).json({
+            valid: false,
+            message: 'Token validation failed',
+            error: error.message,
+            timestamp: Date.now()
+        });
+    }
+};
+
+// Phase 4B: Token Refresh Function
+exports.refreshToken = async (req, res) => {
+    try {
+        const { uid, email } = req.user;
+        const currentToken = req.token;
+        
+        console.log(`[Token Refresh] Attempting to refresh token for user: ${uid}`);
+        
+        // Check if current token is blacklisted
+        const blacklistDoc = await db.collection('tokenBlacklist').doc(currentToken).get();
+        if (blacklistDoc.exists) {
+            console.log(`[Token Refresh] Current token is blacklisted, cannot refresh`);
+            return res.status(401).json({
+                success: false,
+                message: 'Current token is invalid and cannot be refreshed',
+                code: 'TOKEN_BLACKLISTED',
+                timestamp: Date.now()
+            });
+        }
+        
+        // Generate a new custom token and immediately create an ID token
+        const customToken = await admin.auth().createCustomToken(uid);
+        
+        console.log(`[Token Refresh] Custom token generated, creating new ID token for user: ${uid}`);
+        
+        // For token refresh, we'll return the custom token but tell the frontend
+        // to treat it as a regular token. The custom token can be used for API calls
+        // since our middleware validates it properly.
+        
+        // Optionally blacklist the old token to prevent reuse
+        await db.collection('tokenBlacklist').doc(currentToken).set({
+            uid: uid,
+            email: email,
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
+            reason: 'Token refreshed - old token invalidated'
+        });
+        
+        console.log(`[Token Refresh] Old token blacklisted, new token ready`);
+        
+        res.status(200).json({
+            success: true,
+            token: customToken, // Return custom token as regular token
+            expiresIn: 3600, // 1 hour in seconds
+            message: 'Token refreshed successfully',
+            user: {
+                uid,
+                email
+            },
+            timestamp: Date.now(),
+            tokenType: 'custom_as_id'
+        });
+        
+    } catch (error) {
+        console.error('[Token Refresh] Error:', error);
+        
+        // Determine error type for better client handling
+        let statusCode = 500;
+        let errorCode = 'REFRESH_FAILED';
+        
+        if (error.code === 'auth/user-not-found') {
+            statusCode = 404;
+            errorCode = 'USER_NOT_FOUND';
+        } else if (error.code === 'auth/user-disabled') {
+            statusCode = 403;
+            errorCode = 'USER_DISABLED';
+        }
+        
+        res.status(statusCode).json({
+            success: false,
+            message: 'Token refresh failed',
+            code: errorCode,
+            error: error.message,
+            timestamp: Date.now()
+        });
+    }
+};
+
+// Phase 4A: Test Expired Token Function (for testing only)
+exports.testExpiredToken = async (req, res) => {
+    try {
+        const { uid, email } = req.user;
+        const currentToken = req.token;
+        
+        console.log(`[Test Expired Token] Simulating immediate token expiration for user: ${uid}`);
+        
+        // Add token to blacklist immediately to simulate expiration
+        await db.collection('tokenBlacklist').doc(currentToken).set({
+            uid: uid,
+            email: email,
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
+            reason: 'Phase 4A Testing - Simulated Expiration'
+        });
+        
+        console.log(`[Test Expired Token] Token blacklisted successfully. Next API call will fail with 401.`);
+        
+        res.status(200).json({
+            message: 'Token expiration simulated successfully',
+            user: { uid, email },
+            testInstructions: {
+                step1: 'Token is now expired/blacklisted',
+                step2: 'Any API call from your app will now fail with 401',
+                step3: 'App should automatically attempt token refresh',
+                step4: 'If refresh fails, user will be logged out'
+            },
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('[Test Expired Token] Error:', error);
+        res.status(500).json({
+            message: 'Test setup failed',
+            error: error.message
+        });
+    }
+};
+
+// Phase 4B: Test Token Refresh Success Function (for testing only)
+exports.testTokenRefreshSuccess = async (req, res) => {
+    try {
+        const { uid, email } = req.user;
+        
+        console.log(`[Test Token Refresh Success] Simulating old token for user: ${uid}`);
+        
+        // Don't blacklist the token - just return success
+        // The frontend will simulate an old token by updating lastLoginTime
+        
+        res.status(200).json({
+            message: 'Token refresh test setup successful',
+            user: { uid, email },
+            testInstructions: {
+                step1: 'Your lastLoginTime has been set to 55 minutes ago',
+                step2: 'Next API call will detect "old" token and trigger refresh',
+                step3: 'App should automatically refresh token and continue working',
+                step4: 'You should see refresh success logs'
+            },
+            simulateOldToken: true,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('[Test Token Refresh Success] Error:', error);
+        res.status(500).json({
+            message: 'Test setup failed',
+            error: error.message
+        });
+    }
+};
