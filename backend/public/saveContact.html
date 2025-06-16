@@ -581,7 +581,7 @@
 
         .secondary-action-btn:hover {
             background: var(--secondary);
-            color: white;
+            color: var(--white);
         }
 
         /* Animations */
@@ -756,10 +756,14 @@
             -webkit-appearance: none;
             appearance: none;
             box-sizing: border-box;
-        }
-
-        .submit-btn:hover {
+        }        .submit-btn:hover {
             opacity: 0.9;
+        }
+        
+        .submit-btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.7;
+            pointer-events: none;
         }
 
         .app-description-container {
@@ -1016,6 +1020,24 @@
                 font-size: 20px;
                 width: 28px;
             }
+        }        /* Required field indicators */
+        .required-indicator {
+            color: var(--primary);
+            margin-left: 3px;
+            font-size: 12px;
+            opacity: 0.7;
+            position: relative;
+            top: -1px;
+        }        /* Floating label adjustments for required indicators */
+        .floating-label label.required::after {
+            content: "*";
+            color: var(--primary);
+            margin-left: 3px;
+            font-size: 12px;
+            opacity: 0.7;
+            vertical-align: super;
+            position: relative;
+            top: -2px;
         }
     </style>
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
@@ -1063,40 +1085,42 @@
                     <h3>Contact Saved!</h3>
                     <p>Please share your contacts with me</p>
                 </div>
-                
-                <div class="form-row">
+                  <div class="form-row">
                     <div class="form-group">
                         <div class="floating-label">
                             <input type="text" id="scannerName" placeholder=" ">
-                            <label for="scannerName">First name</label>
+                            <label for="scannerName" class="required">First name</label>
                         </div>
                     </div>
                     <div class="form-group">
                         <div class="floating-label">
                             <input type="text" id="scannerSurname" placeholder=" ">
-                            <label for="scannerSurname">Last name</label>
+                            <label for="scannerSurname" class="required">Last name</label>
                         </div>
                     </div>
                 </div>
-                
-                <div class="form-group">
+                  <div class="form-group">
                     <div class="floating-label">
                         <input type="email" id="scannerEmail" placeholder=" ">
-                        <label for="scannerEmail">Email</label>
+                        <label for="scannerEmail" class="required">Email</label>
                     </div>
                 </div>
                 
                 <div class="form-group">
                     <div class="floating-label">
                         <input type="tel" id="scannerPhone" placeholder=" ">
-                        <label for="scannerPhone">Phone number</label>
+                        <label for="scannerPhone" class="required">Phone number</label>
                     </div>
-                </div>
-                
-                <div class="form-group">
+                </div><div class="form-group">
                     <div class="floating-label">
                         <input type="text" id="howWeMet" placeholder=" ">
-                        <label for="howWeMet">How we met</label>
+                        <label for="howWeMet" class="required">How we met</label>
+                    </div>
+                </div>                <!-- Company field -->
+                <div class="form-group">
+                    <div class="floating-label">
+                        <input type="text" id="scannerCompany" placeholder=" ">
+                        <label for="scannerCompany">Company</label>
                     </div>
                 </div>
                 
@@ -1368,11 +1392,13 @@ END:VCARD`;
                 
                 // Start save container slide out (move main content up)
                 saveContainer.classList.add('sliding-out-up');
-                
-                // After save container starts sliding out, show exchange form
+                  // After save container starts sliding out, show exchange form
                 setTimeout(() => {
                     exchangeForm.classList.remove('hidden');
                     exchangeForm.classList.add('sliding-in');
+                    
+                    // Reset company field state when form is shown
+                    resetCompanyField();
                     
                     // Focus after animation
                     setTimeout(() => {
@@ -1408,27 +1434,62 @@ END:VCARD`;
                 // Clean up save container animation classes
                 saveContainer.classList.remove('sliding-in-down');
             }, 400);
-        }
-        
-        // Function to handle exchange submit (NO vCard download since already done)
+        }        // Function to handle exchange submit (NO vCard download since already done)
         async function handleExchangeSubmit() {
-            if (!userData) {
-                alert('No user data available!');
+            // Get the submit button and prevent multiple submissions
+            const submitBtn = document.querySelector('#exchangeForm .submit-btn');
+            
+            // Check if already submitting
+            if (submitBtn.disabled) {
+                console.log('Submit already in progress, ignoring duplicate submission');
                 return;
             }
-
-            // Save contact to database (mutual exchange)
-            const savedToDb = await saveContactToDatabase();
-            if (!savedToDb) return;
-
-            // Track the exchange scan after successful database save
-            trackScan('exchange');
-
-            // Hide modal overlay and show enhanced success overlay
-            const modalOverlay = document.getElementById('modalOverlay');
-            modalOverlay.classList.remove('active');
             
-            showEnhancedSuccessOverlay();
+            // Disable button immediately and show loading state
+            submitBtn.disabled = true;
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<span class="material-icons">hourglass_empty</span> Sending...';
+            submitBtn.style.opacity = '0.7';
+            submitBtn.style.pointerEvents = 'none'; // Extra protection
+            
+            try {
+                if (!userData) {
+                    alert('No user data available!');
+                    return;
+                }
+
+                // Save contact to database (mutual exchange)
+                const savedToDb = await saveContactToDatabase();
+                if (!savedToDb) {
+                    // Re-enable button if save failed
+                    resetSubmitButton(submitBtn, originalText);
+                    return;
+                }
+
+                // Track the exchange scan after successful database save
+                trackScan('exchange');
+
+                // Hide modal overlay and show enhanced success overlay
+                const modalOverlay = document.getElementById('modalOverlay');
+                modalOverlay.classList.remove('active');
+                
+                showEnhancedSuccessOverlay();
+                
+            } catch (error) {
+                console.error('Error in handleExchangeSubmit:', error);
+                alert('Failed to send contact. Please try again.');
+                
+                // Re-enable button on error
+                resetSubmitButton(submitBtn, originalText);
+            }
+        }
+        
+        // Helper function to reset submit button state
+        function resetSubmitButton(submitBtn, originalText) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
+            submitBtn.style.opacity = '1';
+            submitBtn.style.pointerEvents = 'auto';
         }
 
         // Enhanced success overlay function
@@ -1513,11 +1574,13 @@ END:VCARD`;
             
             // Start save container slide out (move main content up)
             saveContainer.classList.add('sliding-out-up');
-            
-            // After save container starts sliding out, show exchange form
+              // After save container starts sliding out, show exchange form
             setTimeout(() => {
                 exchangeForm.classList.remove('hidden');
                 exchangeForm.classList.add('sliding-in');
+                
+                // Reset company field state when form is shown
+                resetCompanyField();
                 
                 setTimeout(() => {
                     document.getElementById('scannerName').focus();
@@ -1669,13 +1732,12 @@ END:VCARD`;
                 console.error('Error:', error);
                 document.getElementById('userData').innerHTML = '<p>Error loading contact details</p>';
             }
-        }
-
-        async function saveContactToDatabase() {
+        }        async function saveContactToDatabase() {
             const scannerName = document.getElementById('scannerName').value;
             const scannerSurname = document.getElementById('scannerSurname').value;
             const scannerPhone = document.getElementById('scannerPhone').value;
             const scannerEmail = document.getElementById('scannerEmail').value;
+            const scannerCompany = document.getElementById('scannerCompany').value;
             const howWeMet = document.getElementById('howWeMet').value;
 
             // Only require name, surname and how we met
@@ -1692,6 +1754,7 @@ END:VCARD`;
                     surname: scannerSurname,
                     phone: scannerPhone,
                     email: scannerEmail, // Include email exactly as in your working example
+                    company: scannerCompany, // Add company field
                     howWeMet: howWeMet
                 }
             };
@@ -1836,8 +1899,23 @@ Please send them a TestFlight invite.`,
                 appIcon2.textContent = 'apple';
                 appLinkText2.textContent = 'Get TestFlight';
                 appDescription2.textContent = 'XS Card is currently in beta testing - Get early access by installing TestFlight, we will send you an invite shortly after.';
+            }        });
+
+        // Function to reset company field state
+        function resetCompanyField() {
+            const companyInput = document.getElementById('scannerCompany');
+            const submitBtn = document.querySelector('#exchangeForm .submit-btn');
+            
+            // Clear the input value
+            if (companyInput) {
+                companyInput.value = '';
             }
-        });
+            
+            // Reset submit button state using helper function
+            if (submitBtn) {
+                resetSubmitButton(submitBtn, '<span class="material-icons">send</span> Send Contact');
+            }
+        }
     </script>
 </body>
 </html>

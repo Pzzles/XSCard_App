@@ -774,76 +774,9 @@ export default function Calendar() {
     location: '',
     attendees: [],
     startTime: '',
-    endTime: '',
-  });
+    endTime: '',  });
   const [todayString, setTodayString] = useState(getTodayDateString());
   
-  // Phase 4A: Test token expiration function
-  const [isTestingExpiration, setIsTestingExpiration] = useState(false);
-  
-  const testTokenExpiration = async () => {
-    if (isTestingExpiration) return;
-    
-    try {
-      setIsTestingExpiration(true);
-      
-      // Random delay between 10-60 seconds
-      const randomDelay = Math.floor(Math.random() * 50000) + 10000; // 10-60 seconds
-      const delayInSeconds = Math.round(randomDelay / 1000);
-      
-      console.log(`[Calendar] Starting token expiration test - will expire in ${delayInSeconds} seconds`);
-      Alert.alert(
-        'Token Refresh Test Started',
-        `Your token will expire in ${delayInSeconds} seconds. Continue using the app normally. The app should automatically refresh the token when it expires.`,
-        [{ text: 'OK' }]
-      );
-      
-      // Wait for random delay
-      setTimeout(async () => {
-        try {
-          const currentToken = await AsyncStorage.getItem('userToken');
-          if (currentToken) {
-            console.log('[Calendar] Making request to:', buildUrl(ENDPOINTS.TEST_EXPIRED_TOKEN));
-            console.log('[Calendar] Using token:', currentToken ? 'Token present' : 'No token');
-            
-            // Call the backend test endpoint using authenticatedFetchWithRefresh
-            // This will trigger automatic logout if the token is expired
-            const response = await authenticatedFetchWithRefresh(ENDPOINTS.TEST_EXPIRED_TOKEN, {
-              method: 'POST'
-            });
-            
-            console.log('[Calendar] Response status:', response.status);
-            console.log('[Calendar] Response ok:', response.ok);
-            
-            if (response.ok) {
-              console.log('[Calendar] Token expiration test triggered successfully');
-              Alert.alert(
-                'Token Expired!',
-                'Your token has been expired. Try using any app feature now - the app should automatically refresh your token and continue working.',
-                [{ text: 'OK' }]
-              );
-            } else {
-              const errorText = await response.text();
-              console.error('[Calendar] Failed to trigger token expiration. Status:', response.status, 'Response:', errorText);
-            }
-          } else {
-            console.error('[Calendar] No token found in AsyncStorage');
-          }
-        } catch (error: unknown) {
-          console.error('[Calendar] Error in token expiration test:', error);
-          // The authenticatedFetchWithRefresh function will automatically handle logout
-          // if the token is expired, so we don't need to do anything special here
-        } finally {
-          setIsTestingExpiration(false);
-        }
-      }, randomDelay);
-      
-    } catch (error) {
-      console.error('[Calendar] Error starting token expiration test:', error);
-      setIsTestingExpiration(false);
-    }
-  };
-
   const timeSlots = [
     '09:00', '10:00', '11:00', '12:00',
     '13:00', '14:00', '15:00', '16:00',
@@ -1418,26 +1351,9 @@ const renderEventDate = (dateStr: string) => {
           >
             <Text style={[
               styles.createEventText,
-              selectedDate && styles.createEventTextActive
-            ]}>
+              selectedDate && styles.createEventTextActive            ]}>
               + Create Events
             </Text>
-          </TouchableOpacity>
-
-          {/* Phase 4A: Test Token Expiration Button */}
-          <TouchableOpacity 
-            onPress={testTokenExpiration} 
-            style={[styles.testButton]}
-            disabled={isTestingExpiration}
-          >
-            {isTestingExpiration ? (
-              <ActivityIndicator size="small" color={COLORS.white} />
-            ) : (
-              <>
-                <MaterialCommunityIcons name="bug" size={20} color={COLORS.white} />
-                <Text style={styles.testButtonText}>Test Token Refresh</Text>
-              </>
-            )}
           </TouchableOpacity>
         </View>
       </ScrollView>

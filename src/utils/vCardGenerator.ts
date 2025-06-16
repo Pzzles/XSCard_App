@@ -3,6 +3,7 @@ export interface Contact {
   surname: string;
   phone: string;
   email?: string;
+  company?: string;
   howWeMet: string;
   createdAt: string;
 }
@@ -13,7 +14,8 @@ VERSION:3.0
 FN:${contact.name} ${contact.surname}
 N:${contact.surname};${contact.name};;;
 EMAIL:${contact.email || ''}
-TEL;TYPE=CELL:${contact.phone || ''}
+TEL;TYPE=CELL:${contact.phone || ''}${contact.company ? `
+ORG:${contact.company}` : ''}
 NOTE:Met at: ${contact.howWeMet}${contact.createdAt ? `\nAdded: ${contact.createdAt}` : ''}
 END:VCARD`;
 

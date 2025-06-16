@@ -29,7 +29,8 @@ const convertToNativeContact = (contact: Contact) => {
       label: 'work',
       email: contact.email,
     }] : [],
-    note: `Met at: ${contact.howWeMet}`,
+    organizationName: contact.company || undefined,
+    note: `${contact.company ? `Company: ${contact.company}\n` : ''}Met at: ${contact.howWeMet}`,
   };
 };
 

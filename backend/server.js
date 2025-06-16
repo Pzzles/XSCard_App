@@ -115,12 +115,12 @@ app.post('/AddContact', async (req, res) => {
                     <h2>New Contact Added</h2>
                     <p><strong>${contactInfo.name} ${contactInfo.surname}</strong> recently received your XS Card and has sent you their details:</p>
                     <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 10px 0;">
-                        <p><strong>Contact Details:</strong></p>
-                        <ul style="list-style: none; padding-left: 0;">
+                        <p><strong>Contact Details:</strong></p>                        <ul style="list-style: none; padding-left: 0;">
                             <li><strong>Name:</strong> ${contactInfo.name}</li>
                             <li><strong>Surname:</strong> ${contactInfo.surname}</li>
                             <li><strong>Phone Number:</strong> ${contactInfo.phone || 'Not provided'}</li>
                             <li><strong>Email:</strong> ${contactInfo.email || 'Not provided'}</li>
+                            ${contactInfo.company ? `<li><strong>Company:</strong> ${contactInfo.company}</li>` : ''}
                             <li><strong>How You Met:</strong> ${contactInfo.howWeMet || 'Not provided'}</li>
                         </ul>
                     </div>

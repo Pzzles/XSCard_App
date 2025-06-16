@@ -23,6 +23,7 @@ interface Contact {
   surname: string;
   phone: string; // Changed from number to phone to match DB
   email?: string; // Add email field as optional
+  company?: string; // Add company field as optional
   howWeMet: string;
   createdAt: string; // Will now be in format "Date: February 25, 2025 at 6:25 PM"
 }
@@ -60,13 +61,9 @@ export default function ContactsScreen() {
   const [modalTitle, setModalTitle] = useState('');
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [showLimitModal, setShowLimitModal] = useState(false);
-  const [remainingContacts, setRemainingContacts] = useState<number | 'unlimited'>(FREE_PLAN_CONTACT_LIMIT);
-  const [refreshing, setRefreshing] = useState(false);
+  const [remainingContacts, setRemainingContacts] = useState<number | 'unlimited'>(FREE_PLAN_CONTACT_LIMIT);  const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Phase 4A: Test token expiration function
-  const [isTestingExpiration, setIsTestingExpiration] = useState(false);
-  
   const { colorScheme } = useColorScheme();
 
   // Create a ref to store the swipeables
@@ -225,9 +222,8 @@ export default function ContactsScreen() {
         if (!storedUserData) return;
         
         const userData = JSON.parse(storedUserData);
-        const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
-        const message = contact 
-          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.phone}${contact.email ? `\nEmail: ${contact.email}` : ''}\nMet at: ${contact.howWeMet}`
+        const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;        const message = contact 
+          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.phone}${contact.email ? `\nEmail: ${contact.email}` : ''}${contact.company ? `\nCompany: ${contact.company}` : ''}\nMet at: ${contact.howWeMet}`
           : `Check out my digital business card! ${shareUrl}`;
           
         Linking.openURL(`whatsapp://send?text=${encodeURIComponent(message)}`).catch(() => {
@@ -245,9 +241,8 @@ export default function ContactsScreen() {
         if (!storedUserData) return;
         
         const userData = JSON.parse(storedUserData);
-        const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;
-        const message = contact 
-          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.phone}${contact.email ? `\nEmail: ${contact.email}` : ''}\nMet at: ${contact.howWeMet}`
+        const shareUrl = `${API_BASE_URL}/saveContact.html?userId=${userData.id}`;        const message = contact 
+          ? `Contact Information:\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.phone}${contact.email ? `\nEmail: ${contact.email}` : ''}${contact.company ? `\nCompany: ${contact.company}` : ''}\nMet at: ${contact.howWeMet}`
           : `Check out my business card: ${shareUrl}`;
 
         Linking.openURL(`tg://msg?text=${encodeURIComponent(message)}`).catch(() => {
@@ -271,9 +266,8 @@ export default function ContactsScreen() {
           const userData = JSON.parse(storedUserData);
           let emailUrl = '';
           
-          if (contact) {
-            // Case: Sharing a contact's information
-            const formattedMessage = `Hello,\n\nI wanted to share this contact information with you:\n\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.phone}${contact.email ? `\nEmail: ${contact.email}` : ''}\nMet at: ${contact.howWeMet}\n\nBest regards,\n${userData.name || ''} ${userData.surname || ''}${userData.email ? `\n${userData.email}` : ''}`;
+          if (contact) {            // Case: Sharing a contact's information
+            const formattedMessage = `Hello,\n\nI wanted to share this contact information with you:\n\nName: ${contact.name} ${contact.surname}\nPhone: ${contact.phone}${contact.email ? `\nEmail: ${contact.email}` : ''}${contact.company ? `\nCompany: ${contact.company}` : ''}\nMet at: ${contact.howWeMet}\n\nBest regards,\n${userData.name || ''} ${userData.surname || ''}${userData.email ? `\n${userData.email}` : ''}`;
             
             emailUrl = `mailto:?${userData.email ? `reply-to=${encodeURIComponent(userData.email)}&cc=${encodeURIComponent(userData.email)}&` : ''}subject=${encodeURIComponent(`Contact Information - ${contact.name} ${contact.surname}`)}&body=${encodeURIComponent(formattedMessage)}`;
           } else {
@@ -453,7 +447,7 @@ export default function ContactsScreen() {
         
         Alert.alert(
           '📱 TEST MODE: Add to Contacts',
-          `This would add "${contact.name} ${contact.surname}" directly to your phone's contacts app.\n\nPhone: ${contact.phone}\nEmail: ${contact.email || 'None'}\nNote: Met at ${contact.howWeMet}\n\nIn production, this opens your phone's contact app with the details pre-filled.`,
+          `This would add "${contact.name} ${contact.surname}" directly to your phone's contacts app.\n\nPhone: ${contact.phone}\nEmail: ${contact.email || 'None'}${contact.company ? `\nCompany: ${contact.company}` : ''}\nNote: Met at ${contact.howWeMet}\n\nIn production, this opens your phone's contact app with the details pre-filled.`,
           [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Simulate Add', onPress: () => {
@@ -499,115 +493,12 @@ export default function ContactsScreen() {
       
       // Production mode
       const exportModule = require('../../utils/contactExport');
-      await exportModule.exportAllContacts(filteredContacts);
-    } catch (error) {
+      await exportModule.exportAllContacts(filteredContacts);    } catch (error) {
       console.error('Add all contacts error:', error);
       Alert.alert('Error', 'Failed to add contacts to your phone. Please try again.');
     }
   };
 
-  // Phase 4A: Test token expiration function
-  const testTokenExpiration = async () => {
-    if (isTestingExpiration) return;
-    
-    try {
-      setIsTestingExpiration(true);
-      
-      // Random delay between 10-60 seconds
-      const randomDelay = Math.floor(Math.random() * 50000) + 10000; // 10-60 seconds
-      const delayInSeconds = Math.round(randomDelay / 1000);
-      
-      console.log(`[ContactScreen] Starting token expiration test - will expire in ${delayInSeconds} seconds`);
-      Alert.alert(
-        'Token Refresh Test Started',
-        `Your token will expire in ${delayInSeconds} seconds. Continue using the app normally. The app should automatically refresh the token when it expires.`,
-        [{ text: 'OK' }]
-      );
-      
-      // Wait for random delay
-      setTimeout(async () => {
-        try {
-          const currentToken = await AsyncStorage.getItem('userToken');
-          if (currentToken) {
-            // Call the backend test endpoint using authenticatedFetchWithRefresh
-            // This will trigger automatic logout if the token is expired
-            const response = await authenticatedFetchWithRefresh(ENDPOINTS.TEST_EXPIRED_TOKEN, {
-              method: 'POST'
-            });
-            
-            if (response.ok) {
-              console.log('[ContactScreen] Token expiration test triggered successfully');
-              Alert.alert(
-                'Token Expired!',
-                'Your token has been expired. Try using any app feature now - the app should automatically refresh your token and continue working.',
-                [{ text: 'OK' }]
-              );
-            } else {
-              console.error('[ContactScreen] Failed to trigger token expiration');
-            }
-          }
-        } catch (error: unknown) {
-          console.error('[ContactScreen] Error in token expiration test:', error);
-          // The authenticatedFetchWithRefresh function will automatically handle logout
-          // if the token is expired, so we don't need to do anything special here
-        } finally {
-          setIsTestingExpiration(false);
-        }
-      }, randomDelay);
-      
-    } catch (error) {
-      console.error('[ContactScreen] Error starting token expiration test:', error);
-      setIsTestingExpiration(false);
-    }
-  };
-
-  // Phase 4B: Test token refresh success function
-  const [isTestingRefreshSuccess, setIsTestingRefreshSuccess] = useState(false);
-  
-  const testTokenRefreshSuccess = async () => {
-    if (isTestingRefreshSuccess) return;
-    
-    try {
-      setIsTestingRefreshSuccess(true);
-      
-      console.log('[ContactScreen] Starting token refresh success test');
-      Alert.alert(
-        'Token Refresh Success Test',
-        'This will simulate an old token (55 minutes) and test automatic refresh. Your next API call should refresh the token seamlessly.',
-        [{ text: 'OK' }]
-      );
-      
-      // Call the backend test endpoint
-      const response = await authenticatedFetchWithRefresh(ENDPOINTS.TEST_TOKEN_REFRESH_SUCCESS, {
-        method: 'POST'
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('[ContactScreen] Token refresh success test setup complete:', data);
-        
-        // Simulate old token by setting lastLoginTime to 55 minutes ago
-        const fiftyFiveMinutesAgo = Date.now() - (55 * 60 * 1000);
-        await AsyncStorage.setItem('lastLoginTime', fiftyFiveMinutesAgo.toString());
-        
-        console.log('[ContactScreen] lastLoginTime set to 55 minutes ago');
-        
-        Alert.alert(
-          'Test Ready!',
-          'Your token now appears to be 55 minutes old. Try using any app feature (refresh contacts, delete contact, etc.) and watch the console for refresh logs.',
-          [{ text: 'OK' }]
-        );
-      } else {
-        console.error('[ContactScreen] Failed to setup token refresh success test');
-        Alert.alert('Error', 'Failed to setup test');
-      }
-    } catch (error: unknown) {
-      console.error('[ContactScreen] Error in token refresh success test:', error);
-      Alert.alert('Error', 'Test setup failed');
-    } finally {
-      setIsTestingRefreshSuccess(false);
-    }
-  };
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -708,43 +599,9 @@ export default function ContactsScreen() {
               <Text style={styles.emptyStateTitle}>No contact yet</Text>
               <Text style={styles.emptyStateDescription}>
                 When you share your card and they share their details back, it will appear here
-              </Text>
-              <TouchableOpacity style={dynamicStyles.shareCardButton} onPress={() => handleShare()}>
+              </Text>              <TouchableOpacity style={dynamicStyles.shareCardButton} onPress={() => handleShare()}>
                 <MaterialIcons name="share" size={24} color={COLORS.white} />
-                <Text style={styles.shareCardButtonText}>Share my card</Text>
-              </TouchableOpacity>
-              
-              {/* Phase 4A: Test Token Expiration Button */}
-              <TouchableOpacity 
-                onPress={testTokenExpiration} 
-                style={[styles.testButton]}
-                disabled={isTestingExpiration}
-              >
-                {isTestingExpiration ? (
-                  <ActivityIndicator size="small" color={COLORS.white} />
-                ) : (
-                  <>
-                    <MaterialCommunityIcons name="bug" size={20} color={COLORS.white} />
-                    <Text style={styles.testButtonText}>Test Token Refresh (Logout)</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-
-              {/* Phase 4B: Test Token Refresh Success Button */}
-              <TouchableOpacity 
-                onPress={testTokenRefreshSuccess} 
-                style={[styles.testButton, { backgroundColor: '#4CAF50' }]}
-                disabled={isTestingRefreshSuccess}
-              >
-                {isTestingRefreshSuccess ? (
-                  <ActivityIndicator size="small" color={COLORS.white} />
-                ) : (
-                  <>
-                    <MaterialCommunityIcons name="refresh" size={20} color={COLORS.white} />
-                    <Text style={styles.testButtonText}>Test Refresh Success</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+                <Text style={styles.shareCardButtonText}>Share my card</Text>              </TouchableOpacity>
             </View>
           ) : (
             <ScrollView 
@@ -783,14 +640,18 @@ export default function ContactsScreen() {
                         <View style={styles.contactInfo}>
                           <Text style={styles.contactName}>
                             {contact.name} {contact.surname}
-                          </Text>
-                          <View style={styles.contactSubInfo}>
+                          </Text>                          <View style={styles.contactSubInfo}>
                             <Text style={styles.contactPhone}>
                               {contact.phone || 'No phone number'}
                             </Text>
                             {contact.email && (
                               <Text style={styles.contactEmail}>
                                 {contact.email || 'No email address'}
+                              </Text>
+                            )}
+                            {contact.company && (
+                              <Text style={styles.contactCompany}>
+                                {contact.company}
                               </Text>
                             )}
                             <Text style={styles.contactHowWeMet}>
@@ -961,12 +822,21 @@ export default function ContactsScreen() {
                     />
                     <Text style={styles.modalContactName}>
                       {selectedContactForOptions.name} {selectedContactForOptions.surname}
-                    </Text>
-                    <Text style={styles.modalContactPhone}>
+                    </Text>                    <Text style={styles.modalContactPhone}>
                       {selectedContactForOptions.phone}
                     </Text>
+                    {selectedContactForOptions.email && (
+                      <Text style={styles.modalContactSubtitle}>
+                        {selectedContactForOptions.email}
+                      </Text>
+                    )}
+                    {selectedContactForOptions.company && (
+                      <Text style={styles.modalContactSubtitle}>
+                        {selectedContactForOptions.company}
+                      </Text>
+                    )}
                     <Text style={styles.modalContactSubtitle}>
-                      {selectedContactForOptions.howWeMet}
+                      Met at: {selectedContactForOptions.howWeMet}
                     </Text>
                   </View>
 

@@ -195,13 +195,13 @@ exports.saveContactInfo = async (req, res) => {
         // Force-type the email field as string to avoid any type conversions
         const contactEmail = String(contactInfo.email || '');
         console.log('Processed email value:', contactEmail);
-        
-        // Create contact with explicit field assignment - no object spread which could lose properties
+          // Create contact with explicit field assignment - no object spread which could lose properties
         const newContact = {
             name: String(contactInfo.name || ''),
             surname: String(contactInfo.surname || ''),
             phone: String(contactInfo.phone || ''),
             email: contactEmail, // Explicitly assign email
+            company: String(contactInfo.company || ''), // Add company field
             howWeMet: String(contactInfo.howWeMet || ''),
             createdAt: admin.firestore.Timestamp.now()
         };
@@ -232,12 +232,12 @@ exports.saveContactInfo = async (req, res) => {
                     <h2>New Contact Added</h2>
                     <p><strong>${contactInfo.name} ${contactInfo.surname}</strong> recently received your XS Card and has sent you their details:</p>
                     <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 10px 0;">
-                        <p><strong>Contact Details:</strong></p>
-                        <ul style="list-style: none; padding-left: 0;">
+                        <p><strong>Contact Details:</strong></p>                        <ul style="list-style: none; padding-left: 0;">
                             <li><strong>Name:</strong> ${contactInfo.name}</li>
                             <li><strong>Surname:</strong> ${contactInfo.surname}</li>
                             <li><strong>Phone Number:</strong> ${contactInfo.phone}</li>
                             <li><strong>Email:</strong> ${contactInfo.email || 'Not provided'}</li>
+                            ${contactInfo.company ? `<li><strong>Company:</strong> ${contactInfo.company}</li>` : ''}
                             <li><strong>How You Met:</strong> ${contactInfo.howWeMet}</li>
                         </ul>
                     </div>

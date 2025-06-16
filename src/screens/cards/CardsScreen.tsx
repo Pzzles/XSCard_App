@@ -109,119 +109,9 @@ export default function CardsScreen() {
 
   // Update the cards state definition
   const [cards, setCards] = useState<Card[]>([]);
-
   // Add this state to track current page
   const [currentPage, setCurrentPage] = useState(0);
 
-  // Phase 4A: Test token expiration function
-  const [isTestingExpiration, setIsTestingExpiration] = useState(false);
-  
-  const testTokenExpiration = async () => {
-    if (isTestingExpiration) return;
-    
-    try {
-      setIsTestingExpiration(true);
-      
-      // Random delay between 10-60 seconds
-      const randomDelay = Math.floor(Math.random() * 50000) + 10000; // 10-60 seconds
-      const delayInSeconds = Math.round(randomDelay / 1000);
-      
-      console.log(`[CardsScreen] Starting token expiration test - will expire in ${delayInSeconds} seconds`);
-      Alert.alert(
-        'Token Refresh Test Started',
-        `Your token will expire in ${delayInSeconds} seconds. Continue using the app normally. The app should automatically refresh the token when it expires.`,
-        [{ text: 'OK' }]
-      );
-      
-      // Wait for random delay
-      setTimeout(async () => {
-        try {
-          const currentToken = await AsyncStorage.getItem('userToken');
-          if (currentToken) {
-            // Call the backend test endpoint using authenticatedFetchWithRefresh
-            // This will trigger automatic logout if the token is expired
-            const response = await authenticatedFetchWithRefresh(ENDPOINTS.TEST_EXPIRED_TOKEN, {
-              method: 'POST'
-            });
-            
-            if (response.ok) {
-              console.log('[CardsScreen] Token expiration test triggered successfully');
-              Alert.alert(
-                'Token Expired!',
-                'Your token has been expired. Try using any app feature now - the app should automatically refresh your token and continue working.',
-                [{ text: 'OK' }]
-              );
-            } else {
-              console.error('[CardsScreen] Failed to trigger token expiration');
-            }
-          }
-        } catch (error: unknown) {
-          console.error('[CardsScreen] Error in token expiration test:', error);
-          // The authenticatedFetchWithRefresh function will automatically handle logout
-          // if the token is expired, so we don't need to do anything special here
-        } finally {
-          setIsTestingExpiration(false);
-        }
-      }, randomDelay);
-      
-    } catch (error) {
-      console.error('[CardsScreen] Error starting token expiration test:', error);
-      setIsTestingExpiration(false);
-    }
-  };
-
-  // Phase 4B: Test token refresh success function
-  const [isTestingRefreshSuccess, setIsTestingRefreshSuccess] = useState(false);
-  
-  const testTokenRefreshSuccess = async () => {
-    if (isTestingRefreshSuccess) return;
-    
-    try {
-      setIsTestingRefreshSuccess(true);
-      
-      console.log('[CardsScreen] Starting token refresh success test');
-      Alert.alert(
-        'Token Refresh Success Test',
-        'This will simulate an old token (55 minutes) and test automatic refresh. Your next API call should refresh the token seamlessly.',
-        [{ text: 'OK' }]
-      );
-      
-      // Call the backend test endpoint
-      console.log('[CardsScreen] Calling endpoint:', ENDPOINTS.TEST_TOKEN_REFRESH_SUCCESS);
-      const response = await authenticatedFetchWithRefresh(ENDPOINTS.TEST_TOKEN_REFRESH_SUCCESS, {
-        method: 'POST'
-      });
-      
-      console.log('[CardsScreen] Response status:', response.status);
-      console.log('[CardsScreen] Response ok:', response.ok);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('[CardsScreen] Token refresh success test setup complete:', data);
-        
-        // Simulate old token by setting lastLoginTime to 55 minutes ago
-        const fiftyFiveMinutesAgo = Date.now() - (55 * 60 * 1000);
-        await AsyncStorage.setItem('lastLoginTime', fiftyFiveMinutesAgo.toString());
-        
-        console.log('[CardsScreen] lastLoginTime set to 55 minutes ago');
-        
-        Alert.alert(
-          'Test Ready!',
-          'Your token now appears to be 55 minutes old. Try using any app feature (refresh cards, view contacts, etc.) and watch the console for refresh logs.',
-          [{ text: 'OK' }]
-        );
-      } else {
-        const errorText = await response.text();
-        console.error('[CardsScreen] Failed to setup token refresh success test. Status:', response.status, 'Response:', errorText);
-        Alert.alert('Error', `Failed to setup test. Status: ${response.status}`);
-      }
-    } catch (error: unknown) {
-      console.error('[CardsScreen] Error in token refresh success test:', error);
-      Alert.alert('Error', `Test setup failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsTestingRefreshSuccess(false);
-    }
-  };
 
   // Add this function to handle scroll events
   const handleScroll = (event: any) => {
@@ -847,9 +737,7 @@ export default function CardsScreen() {
                 >
                   <MaterialIcons name="share" size={24} color={COLORS.white} />
                   <Text style={styles.shareButtonText}>Share</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
+                </TouchableOpacity>                <TouchableOpacity 
                   onPress={handleAddToWallet} 
                   style={[getDynamicStyles(card.colorScheme || colorScheme).walletButton]}
                   disabled={isWalletLoading}
@@ -860,41 +748,8 @@ export default function CardsScreen() {
                     <>
                       <MaterialCommunityIcons name="wallet" size={24} color={card.colorScheme || colorScheme} />
                       <Text style={[styles.walletButtonText, { color: card.colorScheme || colorScheme }]}>
-
                         Add to {Platform.OS === 'ios' ? 'Apple' : 'Google'} Wallet
                       </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-
-                {/* Phase 4A: Test Token Expiration Button */}
-                <TouchableOpacity 
-                  onPress={testTokenExpiration} 
-                  style={[styles.testButton]}
-                  disabled={isTestingExpiration}
-                >
-                  {isTestingExpiration ? (
-                    <ActivityIndicator size="small" color={COLORS.white} />
-                  ) : (
-                    <>
-                      <MaterialCommunityIcons name="bug" size={20} color={COLORS.white} />
-                      <Text style={styles.testButtonText}>Test Token Refresh (Logout)</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-
-                {/* Phase 4B: Test Token Refresh Success Button */}
-                <TouchableOpacity 
-                  onPress={testTokenRefreshSuccess} 
-                  style={[styles.testButton, { backgroundColor: '#4CAF50' }]}
-                  disabled={isTestingRefreshSuccess}
-                >
-                  {isTestingRefreshSuccess ? (
-                    <ActivityIndicator size="small" color={COLORS.white} />
-                  ) : (
-                    <>
-                      <MaterialCommunityIcons name="refresh" size={20} color={COLORS.white} />
-                      <Text style={styles.testButtonText}>Test Refresh Success</Text>
                     </>
                   )}
                 </TouchableOpacity>
