@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Image, Platform, KeyboardAvoidingView, BackHandler, PanResponder, GestureResponderEvent, LayoutChangeEvent, Dimensions, SafeAreaView } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Image, Platform, KeyboardAvoidingView, BackHandler, PanResponder, GestureResponderEvent, LayoutChangeEvent, Dimensions, SafeAreaView, Linking } from 'react-native';
 import { Modal as RNModal } from 'react-native';
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Animated } from 'react-native';
@@ -309,41 +309,89 @@ export default function EditCard() {
   // Improved implementation for iOS compatibility
   const pickImage = async (source: 'camera' | 'gallery') => {
     try {
-      // First, check and request permissions
+      console.log(`[Image Picker] Starting ${source} selection...`);
+      
+      // First, check and request permissions with more detailed handling
+      let permissionStatus;
+      
       if (source === 'camera') {
+        console.log('[Image Picker] Requesting camera permissions...');
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        permissionStatus = status;
+        console.log('[Image Picker] Camera permission status:', status);
+        
         if (status !== 'granted') {
-          Alert.alert('Camera access needed', 'Please grant camera permissions to use this feature.');
+          Alert.alert(
+            'Camera Permission Required', 
+            'Please enable camera access in your device settings to use this feature.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Open Settings', onPress: () => {
+                if (Platform.OS === 'ios') {
+                  Linking.openURL('app-settings:');
+                } else {
+                  Linking.openSettings();
+                }
+              }}
+            ]
+          );
           return;
         }
       } else {
+        console.log('[Image Picker] Requesting media library permissions...');
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        permissionStatus = status;
+        console.log('[Image Picker] Media library permission status:', status);
+        
         if (status !== 'granted') {
-          Alert.alert('Gallery access needed', 'Please grant photo library permissions to use this feature.');
+          Alert.alert(
+            'Photo Library Permission Required', 
+            'Please enable photo library access in your device settings to use this feature.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Open Settings', onPress: () => {
+                if (Platform.OS === 'ios') {
+                  Linking.openURL('app-settings:');
+                } else {
+                  Linking.openSettings();
+                }
+              }}
+            ]
+          );
           return;
         }
       }
 
-      // Simplified configuration options that work better on iOS
-      const options = {
-        quality: 0.8,
+      // Add a small delay to ensure permissions are properly set
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // More robust configuration options
+      const options: ImagePicker.ImagePickerOptions = {
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        aspect: [1, 1] as [number, number]
+        aspect: [1, 1] as [number, number],
+        quality: 0.8,
+        allowsMultipleSelection: false,
       };
 
-      let result;
+      console.log(`[Image Picker] Launching ${source} picker with options:`, options);
+
+      let result: ImagePicker.ImagePickerResult;
+      
       if (source === 'camera') {
         result = await ImagePicker.launchCameraAsync(options);
       } else {
         result = await ImagePicker.launchImageLibraryAsync(options);
       }
 
-      console.log('Image picker result:', result);
+      console.log('[Image Picker] Result received:', result.canceled ? 'User canceled' : 'Image selected');
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
+        console.log('[Image Picker] Processing selected image...');
         const userId = await getUserId();
         if (!userId) {
-          setError('User ID not found');
+          console.error('[Image Picker] User ID not found');
+          Alert.alert('Error', 'User ID not found');
           return;
         }
 
@@ -356,80 +404,143 @@ export default function EditCard() {
         } as any);
         formData.append('imageType', 'profileImage');
 
+        console.log('[Image Picker] Starting upload...');
+
         // Upload the image
-        try {
-          const response = await fetch(
-            buildUrl(ENDPOINTS.UPDATE_CARD.replace(':id', userId)) + `?cardIndex=${cardIndex}`,
-            {
-              method: 'PATCH',
-              body: formData,
-              headers: {
-                'Content-Type': 'multipart/form-data',
-                'Authorization': await AsyncStorage.getItem('userToken') || '',
-              },
-            }
-          );
-
-          if (!response.ok) {
-            throw new Error(`Upload failed with status ${response.status}`);
+        const response = await fetch(
+          buildUrl(ENDPOINTS.UPDATE_CARD.replace(':id', userId)) + `?cardIndex=${cardIndex}`,
+          {
+            method: 'PATCH',
+            body: formData,
+            headers: {
+              'Content-Type': 'multipart/form-data',
+              'Authorization': await AsyncStorage.getItem('userToken') || '',
+            },
           }
+        );
 
-          const data = await response.json();
-          setFormData(prev => ({
-            ...prev,
-            profileImage: data.updatedCard.profileImage
-          }));
-
-          Alert.alert('Success', 'Profile picture updated successfully');
-        } catch (uploadError) {
-          console.error('Upload error:', uploadError);
-          Alert.alert('Upload Failed', 'Could not upload the image. Please try again.');
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('[Image Picker] Upload failed:', response.status, errorText);
+          throw new Error(`Upload failed with status ${response.status}: ${errorText}`);
         }
+
+        const data = await response.json();
+        console.log('[Image Picker] Upload successful:', data.updatedCard?.profileImage ? 'Image URL received' : 'No image URL in response');
+        
+        setFormData(prev => ({
+          ...prev,
+          profileImage: data.updatedCard.profileImage
+        }));
+
+        Alert.alert('Success', 'Profile picture updated successfully');
+      } else {
+        console.log('[Image Picker] User canceled selection');
       }
     } catch (error) {
-      console.error('Image picker error:', error);
-      Alert.alert('Error', 'There was a problem with the image picker');
+      console.error('[Image Picker] Error during image selection/upload:', error);
+      
+      // More specific error messages
+      if (error instanceof Error) {
+        if (error.message.includes('Permission')) {
+          Alert.alert('Permission Error', 'Unable to access camera or photo library. Please check your device settings.');
+        } else if (error.message.includes('Upload failed')) {
+          Alert.alert('Upload Error', 'Failed to upload the image. Please try again.');
+        } else {
+          Alert.alert('Error', `Image selection failed: ${error.message}`);
+        }
+      } else {
+        Alert.alert('Error', 'There was a problem with the image picker. Please try again.');
+      }
     }
   };
 
   // Improved implementation for logo picker with iOS compatibility
   const pickLogo = async (source: 'camera' | 'gallery') => {
     try {
-      // First, check and request permissions
+      console.log(`[Logo Picker] Starting ${source} selection...`);
+      
+      // First, check and request permissions with more detailed handling
+      let permissionStatus;
+      
       if (source === 'camera') {
+        console.log('[Logo Picker] Requesting camera permissions...');
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        permissionStatus = status;
+        console.log('[Logo Picker] Camera permission status:', status);
+        
         if (status !== 'granted') {
-          Alert.alert('Camera access needed', 'Please grant camera permissions to use this feature.');
+          Alert.alert(
+            'Camera Permission Required', 
+            'Please enable camera access in your device settings to use this feature.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Open Settings', onPress: () => {
+                if (Platform.OS === 'ios') {
+                  Linking.openURL('app-settings:');
+                } else {
+                  Linking.openSettings();
+                }
+              }}
+            ]
+          );
           return;
         }
       } else {
+        console.log('[Logo Picker] Requesting media library permissions...');
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        permissionStatus = status;
+        console.log('[Logo Picker] Media library permission status:', status);
+        
         if (status !== 'granted') {
-          Alert.alert('Gallery access needed', 'Please grant photo library permissions to use this feature.');
+          Alert.alert(
+            'Photo Library Permission Required', 
+            'Please enable photo library access in your device settings to use this feature.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Open Settings', onPress: () => {
+                if (Platform.OS === 'ios') {
+                  Linking.openURL('app-settings:');
+                } else {
+                  Linking.openSettings();
+                }
+              }}
+            ]
+          );
           return;
         }
       }
 
-      // Simplified configuration options that work better on iOS
-      const options = {
-        quality: 0.8,
+      // Add a small delay to ensure permissions are properly set
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // More robust configuration options
+      const options: ImagePicker.ImagePickerOptions = {
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        aspect: [4, 3] as [number, number]
+        aspect: [4, 2] as [number, number],
+        quality: 0.8,
+        allowsMultipleSelection: false,
       };
 
-      let result;
+      console.log(`[Logo Picker] Launching ${source} picker with options:`, options);
+
+      let result: ImagePicker.ImagePickerResult;
+      
       if (source === 'camera') {
         result = await ImagePicker.launchCameraAsync(options);
       } else {
         result = await ImagePicker.launchImageLibraryAsync(options);
       }
 
-      console.log('Logo picker result:', result);
+      console.log('[Logo Picker] Result received:', result.canceled ? 'User canceled' : 'Logo selected');
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
+        console.log('[Logo Picker] Processing selected logo...');
         const userId = await getUserId();
         if (!userId) {
-          setError('User ID not found');
+          console.error('[Logo Picker] User ID not found');
+          Alert.alert('Error', 'User ID not found');
           return;
         }
 
@@ -442,40 +553,55 @@ export default function EditCard() {
         } as any);
         formData.append('imageType', 'companyLogo');
 
+        console.log('[Logo Picker] Starting upload...');
+
         // Upload the image
-        try {
-          const response = await fetch(
-            buildUrl(ENDPOINTS.UPDATE_CARD.replace(':id', userId)) + `?cardIndex=${cardIndex}`,
-            {
-              method: 'PATCH',
-              body: formData,
-              headers: {
-                'Content-Type': 'multipart/form-data',
-                'Authorization': await AsyncStorage.getItem('userToken') || '',
-              },
-            }
-          );
-
-          if (!response.ok) {
-            throw new Error(`Upload failed with status ${response.status}`);
+        const response = await fetch(
+          buildUrl(ENDPOINTS.UPDATE_CARD.replace(':id', userId)) + `?cardIndex=${cardIndex}`,
+          {
+            method: 'PATCH',
+            body: formData,
+            headers: {
+              'Content-Type': 'multipart/form-data',
+              'Authorization': await AsyncStorage.getItem('userToken') || '',
+            },
           }
+        );
 
-          const data = await response.json();
-          setFormData(prev => ({
-            ...prev,
-            companyLogo: data.updatedCard.companyLogo
-          }));
-
-          Alert.alert('Success', 'Logo updated successfully');
-          setZoomLevel(1.0); // Reset zoom level when new logo is uploaded
-        } catch (uploadError) {
-          console.error('Upload error:', uploadError);
-          Alert.alert('Upload Failed', 'Could not upload the logo. Please try again.');
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('[Logo Picker] Upload failed:', response.status, errorText);
+          throw new Error(`Upload failed with status ${response.status}: ${errorText}`);
         }
+
+        const data = await response.json();
+        console.log('[Logo Picker] Upload successful:', data.updatedCard?.companyLogo ? 'Logo URL received' : 'No logo URL in response');
+        
+        setFormData(prev => ({
+          ...prev,
+          companyLogo: data.updatedCard.companyLogo
+        }));
+
+        Alert.alert('Success', 'Logo updated successfully');
+        setZoomLevel(1.0); // Reset zoom level when new logo is uploaded
+      } else {
+        console.log('[Logo Picker] User canceled selection');
       }
     } catch (error) {
-      console.error('Logo picker error:', error);
-      Alert.alert('Error', 'There was a problem with the image picker');
+      console.error('[Logo Picker] Error during logo selection/upload:', error);
+      
+      // More specific error messages
+      if (error instanceof Error) {
+        if (error.message.includes('Permission')) {
+          Alert.alert('Permission Error', 'Unable to access camera or photo library. Please check your device settings.');
+        } else if (error.message.includes('Upload failed')) {
+          Alert.alert('Upload Error', 'Failed to upload the logo. Please try again.');
+        } else {
+          Alert.alert('Error', `Logo selection failed: ${error.message}`);
+        }
+      } else {
+        Alert.alert('Error', 'There was a problem with the logo picker. Please try again.');
+      }
     }
   };
 

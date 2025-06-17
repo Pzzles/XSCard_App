@@ -521,8 +521,8 @@ export default function CardsScreen() {
       alignItems: 'center',
       justifyContent: 'center',
       marginVertical: 10,
-      alignSelf: 'center',  // Center horizontally
-      width: '55%',  // Updated to match wallet button width
+      marginHorizontal: 10, // Add horizontal margins like saveContact
+      alignSelf: 'stretch', // Use full width instead of centering
       gap: 8,
     },
     input: {
@@ -567,8 +567,8 @@ export default function CardsScreen() {
       alignItems: 'center',
       justifyContent: 'center',
       marginVertical: 10,
-      alignSelf: 'center',  // Center horizontally
-      width: '55%',  // Re60ore original width
+      marginHorizontal: 10, // Add horizontal margins like saveContact
+      alignSelf: 'stretch', // Use full width instead of centering
       borderWidth: 2,
       borderColor: cardColorScheme,
       gap: 8,

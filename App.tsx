@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, AppState, Platform } from 'react-native';
+import { StyleSheet, Text, View, AppState, Platform, LogBox } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
@@ -8,6 +8,12 @@ import TabNavigator from './src/navigation/TabNavigator';
 import { AuthProvider } from './src/context/AuthContext';
 import { AuthManager } from './src/utils/authManager';
 import { setGlobalNavigationRef } from './src/utils/api';
+
+// Suppress specific warnings
+LogBox.ignoreLogs([
+  'Text strings must be rendered within a <Text> component',
+  'Warning: Text strings must be rendered within a <Text> component',
+]);
 
 const Stack = createStackNavigator();
 

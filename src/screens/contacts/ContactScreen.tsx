@@ -377,7 +377,7 @@ export default function ContactsScreen() {
       paddingVertical: 8,
       paddingHorizontal: 12,
       marginLeft: 10,
-      borderRadius: 12,
+      borderRadius: 25,
       backgroundColor: colorScheme,
       shadowColor: '#000',
       shadowOffset: {
@@ -387,11 +387,6 @@ export default function ContactsScreen() {
       shadowOpacity: 0.15,
       shadowRadius: 3,
       elevation: 3,
-    },
-    exportAllButtonText: {
-      color: COLORS.white,
-      fontSize: 16,
-      fontWeight: '600',
     },
   };
 
@@ -539,7 +534,9 @@ export default function ContactsScreen() {
                   style={[
                     styles.progressBar, 
                     { 
-                      width: `${(remainingContacts / FREE_PLAN_CONTACT_LIMIT) * 100}%`,
+                      width: typeof remainingContacts === 'number' 
+                        ? `${(remainingContacts / FREE_PLAN_CONTACT_LIMIT) * 100}%`
+                        : '0%',
                       backgroundColor: remainingContacts === 0 
                         ? COLORS.error 
                         : remainingContacts === 1 
@@ -1098,7 +1095,7 @@ const styles = StyleSheet.create({
   sendButton: {
     backgroundColor: COLORS.primary,
     padding: 15,
-    borderRadius: 8,
+    borderRadius: 25,
     alignItems: 'center',
   },
   sendButtonText: {
@@ -1139,7 +1136,7 @@ const styles = StyleSheet.create({
   modalButton: {
     paddingVertical: 10,
     paddingHorizontal: 20,
-    borderRadius: 8,
+    borderRadius: 25,
     minWidth: 100,
     alignItems: 'center',
   },
@@ -1207,7 +1204,7 @@ const styles = StyleSheet.create({
   upgradeButton: {
     paddingVertical: 6,
     paddingHorizontal: 14,
-    borderRadius: 15,
+    borderRadius: 25,
     alignSelf: 'flex-end',
   },
   upgradeButtonText: {
@@ -1284,7 +1281,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 25,
     width: '100%',
     shadowColor: '#000',
     shadowOffset: {
