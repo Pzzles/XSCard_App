@@ -16,7 +16,10 @@
     "supportsTablet": true,
     "bundleIdentifier": "com.p.zzles.xscard",
     "buildNumber": "1.0.2",
-    "icon": "./assets/icons/icon.png" 
+    "icon": "./assets/icons/icon.png",
+    "infoPlist": {
+      "NSContactsUsageDescription": "This app needs access to contacts to save business card information directly to your phone's contacts."
+    }
   },
     "android": {
       "adaptiveIcon": {
@@ -25,7 +28,9 @@
       },
       "package": "com.p.zzles.xscard",
       "permissions": [
-        "INTERNET"
+        "INTERNET",
+        "READ_CONTACTS",
+        "WRITE_CONTACTS"
       ]
     },
     "web": {

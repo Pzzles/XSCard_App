@@ -12,7 +12,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useColorScheme } from '../../context/ColorSchemeContext';
 import { generateVCard, generateFileName, generateMultipleVCards, generateBatchFileName } from '../../utils/vCardGenerator';
-import { TEST_MODE } from '../../config/testMode';
+import ContactExportWebView from '../../components/contacts/ContactExportWebView';
 
 // Define constant for free plan contact limit
 const FREE_PLAN_CONTACT_LIMIT = 3;
@@ -63,6 +63,11 @@ export default function ContactsScreen() {
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [remainingContacts, setRemainingContacts] = useState<number | 'unlimited'>(FREE_PLAN_CONTACT_LIMIT);  const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Add WebView export states
+  const [isExportWebViewVisible, setIsExportWebViewVisible] = useState(false);
+  const [exportContact, setExportContact] = useState<Contact | undefined>(undefined);
+  const [exportContacts, setExportContacts] = useState<Contact[] | undefined>(undefined);
 
   const { colorScheme } = useColorScheme();
 
@@ -432,83 +437,50 @@ export default function ContactsScreen() {
     setIsContactOptionsVisible(true);
   };
 
-  // Export handler functions
+  // Export handler functions - Updated to use WebView
   const handleExportContact = async (contact: Contact) => {
     try {
-      if (TEST_MODE) {
-        // Test mode: Direct implementation to avoid native module imports
-        console.log('📱 TEST MODE: Add Contact to Phone');
-        console.log('📞 Contact Details:', contact);
-        
-        Alert.alert(
-          '📱 TEST MODE: Add to Contacts',
-          `This would add "${contact.name} ${contact.surname}" directly to your phone's contacts app.\n\nPhone: ${contact.phone}\nEmail: ${contact.email || 'None'}${contact.company ? `\nCompany: ${contact.company}` : ''}\nNote: Met at ${contact.howWeMet}\n\nIn production, this opens your phone's contact app with the details pre-filled.`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Simulate Add', onPress: () => {
-              Alert.alert('✅ Success!', `${contact.name} ${contact.surname} would be added to your contacts.`);
-            }}
-          ]
-        );
-        return;
-      }
-      
-      // Production mode
-      const exportModule = require('../../utils/contactExport');
-      await exportModule.exportSingleContact(contact);
+      setExportContact(contact);
+      setExportContacts(undefined);
+      setIsExportWebViewVisible(true);
     } catch (error) {
-      console.error('Add contact error:', error);
-      Alert.alert('Error', 'Failed to add contact to your phone. Please try again.');
+      console.error('Export contact error:', error);
+      Alert.alert('Error', 'Failed to prepare contact export. Please try again.');
     }
   };
 
   const handleExportAllContacts = async () => {
     try {
       if (filteredContacts.length === 0) {
-        Alert.alert('No Contacts', 'No contacts available to add to your phone.');
+        Alert.alert('No Contacts', 'No contacts available to export.');
         return;
       }
       
-      if (TEST_MODE) {
-        // Test mode: Direct implementation to avoid native module imports
-        const contactNames = filteredContacts.map(c => `• ${c.name} ${c.surname}`).join('\n');
-        
-        Alert.alert(
-          '📱 TEST MODE: Add All Contacts',
-          `This would add ${filteredContacts.length} contacts directly to your phone:\n\n${contactNames}\n\nIn production, each contact opens your phone's contact app for confirmation.`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Simulate Add All', onPress: () => {
-              Alert.alert('✅ Success!', `All ${filteredContacts.length} contacts would be added to your phone.`);
-            }}
-          ]
-        );
-        return;
-      }
-      
-      // Production mode
-      const exportModule = require('../../utils/contactExport');
-      await exportModule.exportAllContacts(filteredContacts);    } catch (error) {
-      console.error('Add all contacts error:', error);
-      Alert.alert('Error', 'Failed to add contacts to your phone. Please try again.');
+      setExportContact(undefined);
+      setExportContacts(filteredContacts);
+      setIsExportWebViewVisible(true);
+    } catch (error) {
+      console.error('Export all contacts error:', error);
+      Alert.alert('Error', 'Failed to prepare contacts export. Please try again.');
     }
   };
 
+  // Handle WebView export success
+  const handleExportSuccess = (message: string) => {
+    Alert.alert('✅ Export Successful!', message);
+  };
+
+  // Handle WebView export close
+  const handleExportClose = () => {
+    setIsExportWebViewVisible(false);
+    setExportContact(undefined);
+    setExportContacts(undefined);
+  };
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={styles.container}>
         <Header title="Contacts" />
-        
-        {/* Test Mode Banner */}
-        {TEST_MODE && (
-          <View style={styles.testModeBanner}>
-            <MaterialIcons name="science" size={20} color="#FFA500" />
-            <Text style={styles.testModeText}>
-              📱 TEST MODE: Add to contacts feature will show previews (no actual contacts added)
-            </Text>
-          </View>
-        )}
         
         {/* Only show remaining contacts for free users */}
         {remainingContacts !== 'unlimited' && (
@@ -667,6 +639,15 @@ export default function ContactsScreen() {
             </ScrollView>
           )}
         </View>
+
+        {/* Contact Export WebView */}
+        <ContactExportWebView
+          visible={isExportWebViewVisible}
+          contact={exportContact}
+          contacts={exportContacts}
+          onClose={handleExportClose}
+          onSuccess={handleExportSuccess}
+        />
 
         <Modal
           visible={isShareModalVisible}
@@ -1228,20 +1209,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: 160,
   },
-  testModeBanner: {
-    padding: 10,
-    backgroundColor: '#FFA500',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  testModeText: {
-    color: COLORS.white,
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginLeft: 8,
-    textAlign: 'center',
-  },
   selectedContactHeader: {
     alignItems: 'center',
     marginBottom: 24,
@@ -1310,17 +1277,5 @@ const styles = StyleSheet.create({
     marginTop: -5,
     marginBottom: 10,
     alignItems: 'flex-end',
-  },
-  testButton: {
-    padding: 10,
-    borderRadius: 8,
-    backgroundColor: COLORS.primary,
-    marginTop: 10,
-    alignItems: 'center',
-  },
-  testButtonText: {
-    color: COLORS.white,
-    fontSize: 14,
-    fontWeight: '600',
   },
 });
