@@ -36,7 +36,7 @@ export const setGlobalNavigationRef = (navigationRef: any) => {
 // Helper function to get the appropriate base URL
 const getBaseUrl = () => {
 
-   return 'http://192.168.2.237:8383'; // Use your actual backend URL here
+   return 'https://xscard-app.onrender.com';
   //   return 'http://localhost:8383';
  //return 'http://192.168.68.101:8383';
 

@@ -1922,13 +1922,6 @@ Please send them a TestFlight invite.`,
             console.log('URL parameters:', Object.fromEntries(urlParams));
             
             if (action === 'downloadContact') {
-                // Hide the main content and show download message
-                document.body.style.background = '#f0f0f0';
-                const container = document.querySelector('.container');
-                if (container) {
-                    container.style.display = 'none';
-                }
-                
                 // Single contact export
                 const contactData = {
                     name: urlParams.get('name') || '',
@@ -1941,18 +1934,11 @@ Please send them a TestFlight invite.`,
                 
                 console.log('Contact data:', contactData);
                 
-                // Show download page and trigger download immediately
-                showDownloadPage();
+                // Show enhanced contact preview page and trigger download immediately
+                showContactExportPage(contactData);
                 setTimeout(() => downloadContactFile(contactData), 100);
                 
             } else if (action === 'downloadMultiple') {
-                // Hide the main content and show download message
-                document.body.style.background = '#f0f0f0';
-                const container = document.querySelector('.container');
-                if (container) {
-                    container.style.display = 'none';
-                }
-                
                 // Multiple contacts export
                 try {
                     const contactsJson = urlParams.get('contacts');
@@ -1964,7 +1950,7 @@ Please send them a TestFlight invite.`,
                         const contacts = JSON.parse(decodeURIComponent(contactsJson));
                         console.log('Contacts data:', contacts);
                         
-                        showDownloadPage();
+                        showMultipleContactsExportPage(contacts, count);
                         setTimeout(() => downloadMultipleContactsFile(contacts, count), 100);
                     }
                 } catch (error) {
@@ -1974,7 +1960,148 @@ Please send them a TestFlight invite.`,
             }
         }
         
-        // Show a download page instead of the main content
+        // Show enhanced contact export page that matches the main saveContact.html design
+        function showContactExportPage(contact) {
+            document.body.innerHTML = `
+                <div class="container">
+                    <!-- XS Card Logo Header -->
+                    <div class="xs-logo-header">
+                        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 40'%3E%3Ctext x='50' y='25' font-family='Arial,sans-serif' font-size='16' font-weight='bold' text-anchor='middle' fill='white'%3EXS Card%3C/svg%3E" alt="XS Card" class="xs-logo">
+                    </div>
+
+                    <div class="logo-container">
+                        <div class="logo-frame">
+                            <div style="background: linear-gradient(135deg, var(--primary), var(--secondary)); width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; border-radius: 12px;">
+                                <div style="font-size: 48px;">📱</div>
+                            </div>
+                        </div>
+                        <div class="profile-overlay">
+                            <div class="profile-container">
+                                <div style="background-color: var(--secondary); height: 100%; width: 100%; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 24px; color: white; font-weight: bold;">
+                                    ${contact.name.charAt(0)}${contact.surname.charAt(0)}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="contact-info">
+                        <h2 class="name">${contact.name} ${contact.surname}</h2>
+                        ${contact.company ? `<p class="company">${contact.company}</p>` : ''}
+                        
+                        ${contact.email ? `
+                        <div class="contact-section">
+                            <span class="material-icons contact-icon">email</span>
+                            <span class="contact-text">${contact.email}</span>
+                        </div>
+                        ` : ''}
+                        
+                        ${contact.phone ? `
+                        <div class="contact-section">
+                            <span class="material-icons contact-icon">phone</span>
+                            <span class="contact-text">${contact.phone}</span>
+                        </div>
+                        ` : ''}
+                        
+                        ${contact.howWeMet ? `
+                        <div class="contact-section">
+                            <span class="material-icons contact-icon">place</span>
+                            <span class="contact-text">Met at: ${contact.howWeMet}</span>
+                        </div>
+                        ` : ''}
+                    </div>
+
+                    <div class="form-container" style="text-align: center; padding: 30px 20px;">
+                        <div style="margin-bottom: 20px;">
+                            <div style="
+                                width: 60px;
+                                height: 60px;
+                                border: 3px solid var(--secondary);
+                                border-top-color: var(--primary);
+                                border-radius: 50%;
+                                animation: spin 1s linear infinite;
+                                margin: 0 auto 20px auto;
+                            "></div>
+                        </div>
+                        <h3 style="color: var(--secondary); margin: 0 0 10px 0; font-size: 20px;">Preparing Contact...</h3>
+                        <p style="color: #666; margin: 0; font-size: 16px;">Your contact file will download automatically</p>
+                    </div>
+                </div>
+                
+                <style>
+                    @keyframes spin {
+                        to { transform: rotate(360deg); }
+                    }
+                </style>
+            `;
+        }
+
+        // Show enhanced multiple contacts export page
+        function showMultipleContactsExportPage(contacts, count) {
+            document.body.innerHTML = `
+                <div class="container">
+                    <!-- XS Card Logo Header -->
+                    <div class="xs-logo-header">
+                        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 40'%3E%3Ctext x='50' y='25' font-family='Arial,sans-serif' font-size='16' font-weight='bold' text-anchor='middle' fill='white'%3EXS Card%3C/svg%3E" alt="XS Card" class="xs-logo">
+                    </div>
+
+                    <div class="logo-container">
+                        <div class="logo-frame">
+                            <div style="background: linear-gradient(135deg, var(--primary), var(--secondary)); width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column; border-radius: 12px; color: white; text-align: center;">
+                                <div style="font-size: 48px; margin-bottom: 10px;">👥</div>
+                                <div style="font-size: 24px; font-weight: bold;">${count}</div>
+                                <div style="font-size: 14px;">Contacts</div>
+                            </div>
+                        </div>
+                        <div class="profile-overlay">
+                            <div class="profile-container">
+                                <div style="background-color: var(--secondary); height: 100%; width: 100%; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 20px; color: white; font-weight: bold;">
+                                    XS
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="contact-info">
+                        <h2 class="name">Contact Export</h2>
+                        <p class="position">Exporting ${count} contacts</p>
+                        
+                        <div class="contact-section">
+                            <span class="material-icons contact-icon">people</span>
+                            <span class="contact-text">${count} contacts selected</span>
+                        </div>
+                        
+                        <div class="contact-section">
+                            <span class="material-icons contact-icon">download</span>
+                            <span class="contact-text">Single .vcf file</span>
+                        </div>
+                    </div>
+
+                    <div class="form-container" style="text-align: center; padding: 30px 20px;">
+                        <div style="margin-bottom: 20px;">
+                            <div style="
+                                width: 60px;
+                                height: 60px;
+                                border: 3px solid var(--secondary);
+                                border-top-color: var(--primary);
+                                border-radius: 50%;
+                                animation: spin 1s linear infinite;
+                                margin: 0 auto 20px auto;
+                            "></div>
+                        </div>
+                        <h3 style="color: var(--secondary); margin: 0 0 10px 0; font-size: 20px;">Preparing Contacts...</h3>
+                        <p style="color: #666; margin: 0; font-size: 16px;">Your contacts file will download automatically</p>
+                    </div>
+                </div>
+                
+                <style>
+                    @keyframes spin {
+                        to { transform: rotate(360deg); }
+                    }
+                </style>
+            `;
+        }
+
+        // Show a download page instead of the main content (LEGACY - kept for backward compatibility)
         function showDownloadPage() {
             document.body.innerHTML = `
                 <div style="
@@ -2022,6 +2149,7 @@ Please send them a TestFlight invite.`,
                 </style>
             `;
         }
+
           // Function to download single contact as vCard file
         function downloadContactFile(contact) {
             console.log('Starting download for contact:', contact);
@@ -2067,7 +2195,9 @@ END:VCARD`;
                 console.error('Download error:', error);
                 alert('Error downloading contact: ' + error.message);
             }
-        }        // Function to download multiple contacts as single vCard file
+        }
+
+        // Function to download multiple contacts as single vCard file
         function downloadMultipleContactsFile(contacts, count) {
             console.log('Starting download for multiple contacts:', contacts.length);
             
@@ -2126,47 +2256,235 @@ END:VCARD
 
         // Show download success message
         function showDownloadMessage(message) {
-            // Create and show a nice success message
-            const messageDiv = document.createElement('div');
-            messageDiv.style.cssText = `
+            // Enhanced success overlay that matches the main page design
+            const successOverlay = document.createElement('div');
+            successOverlay.style.cssText = `
                 position: fixed;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                background: #4CAF50;
-                color: white;
-                padding: 20px 30px;
-                border-radius: 10px;
-                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-                z-index: 10000;
-                text-align: center;
-                font-size: 16px;
-                max-width: 300px;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: linear-gradient(135deg, rgba(255, 75, 110, 0.95), rgba(27, 43, 91, 0.95));
+                backdrop-filter: blur(10px);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 20px;
+                z-index: 1000;
+                animation: overlayFadeIn 0.4s ease-out;
             `;
             
-            messageDiv.innerHTML = `
-                <div style="margin-bottom: 10px;">✅</div>
-                <div>${message}</div>
-                <div style="margin-top: 10px; font-size: 14px;">
-                    To add to your phone:<br>
-                    1. Open the downloaded .vcf file<br>
-                    2. Choose "Import to Contacts"
+            successOverlay.innerHTML = `
+                <div style="
+                    background: white;
+                    border-radius: 24px;
+                    padding: 40px 30px;
+                    max-width: 400px;
+                    width: 100%;
+                    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+                    text-align: center;
+                    animation: cardSlideUp 0.5s ease-out 0.1s both;
+                ">
+                    <!-- Success Header -->
+                    <div style="margin-bottom: 30px;">
+                        <div style="margin-bottom: 20px;">
+                            <div style="width: 80px; height: 80px; margin: 0 auto;">
+                                <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" style="width: 80px; height: 80px;">
+                                    <circle cx="26" cy="26" r="25" fill="none" stroke="#4CAF50" stroke-width="2" stroke-dasharray="166" stroke-dashoffset="166" style="animation: checkmarkCircle 0.6s cubic-bezier(0.65, 0, 0.45, 1) 0.2s both;"/>
+                                    <path fill="none" stroke="#4CAF50" stroke-width="2" d="M14.1 27.2l7.1 7.2 16.7-16.8" stroke-dasharray="48" stroke-dashoffset="48" style="animation: checkmarkCheck 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.6s both;"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <h2 style="font-size: 28px; font-weight: 700; color: var(--secondary); margin: 0 0 8px 0;">Download Complete!</h2>
+                        <p style="font-size: 16px; color: #666; margin: 0;">${message}</p>
+                    </div>
+
+                    <!-- Instructions -->
+                    <div style="
+                        background: #f8f9fa;
+                        border-radius: 16px;
+                        padding: 20px;
+                        margin: 25px 0;
+                        text-align: left;
+                    ">
+                        <div style="display: flex; align-items: center; margin-bottom: 15px;">
+                            <div style="font-size: 24px; margin-right: 15px; width: 32px; text-align: center;">📱</div>
+                            <div>
+                                <div style="font-size: 14px; color: #666; font-weight: 500; margin: 0;">Next Steps</div>
+                                <div style="font-size: 16px; color: var(--secondary); font-weight: 600; margin: 2px 0 0 0;">Add to your phone</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; margin-bottom: 15px;">
+                            <div style="font-size: 24px; margin-right: 15px; width: 32px; text-align: center;">1️⃣</div>
+                            <div>
+                                <div style="font-size: 14px; color: #666; font-weight: 500; margin: 0;">Step 1</div>
+                                <div style="font-size: 16px; color: var(--secondary); font-weight: 600; margin: 2px 0 0 0;">Open the downloaded .vcf file</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center;">
+                            <div style="font-size: 24px; margin-right: 15px; width: 32px; text-align: center;">2️⃣</div>
+                            <div>
+                                <div style="font-size: 14px; color: #666; font-weight: 500; margin: 0;">Step 2</div>
+                                <div style="font-size: 16px; color: var(--secondary); font-weight: 600; margin: 2px 0 0 0;">Choose "Import to Contacts"</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Completion Notice -->
+                    <div style="
+                        background: linear-gradient(135deg, #e8f5e8, #f0f8f0);
+                        border: 1px solid #d4edda;
+                        border-radius: 12px;
+                        padding: 16px;
+                        margin: 20px 0;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    ">
+                        <div style="font-size: 20px; margin-right: 10px;">✨</div>
+                        <p style="margin: 0; font-size: 14px; color: #155724; font-weight: 500;">
+                            Your contact has been successfully exported!
+                        </p>
+                    </div>
+
+                    <!-- Smart close notice -->
+                    <div id="smartCloseNotice" style="
+                        background: #e3f2fd;
+                        border: 1px solid #90caf9;
+                        border-radius: 8px;
+                        padding: 12px;
+                        margin: 15px 0;
+                        font-size: 14px;
+                        color: #0d47a1;
+                        display: none;
+                    ">
+                        <span>👋 Welcome back! Click "Done" when you've finished importing the contact.</span>
+                    </div>
+
+                    <!-- Action Button -->
+                    <div style="margin-top: 25px;">
+                        <button onclick="closePageNow()" style="
+                            background: linear-gradient(135deg, var(--primary), #ff6b8a);
+                            color: white;
+                            border: none;
+                            border-radius: 50px;
+                            padding: 16px 24px;
+                            font-size: 18px;
+                            font-weight: 600;
+                            cursor: pointer;
+                            box-shadow: 0 4px 15px rgba(255, 75, 110, 0.3);
+                            transition: all 0.3s ease;
+                            -webkit-appearance: none;
+                            appearance: none;
+                        " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(255, 75, 110, 0.4)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(255, 75, 110, 0.3)'">
+                            ✅ Done
+                        </button>
+                    </div>
                 </div>
             `;
             
-            document.body.appendChild(messageDiv);
+            document.body.appendChild(successOverlay);
             
-            // Auto remove after 4 seconds
-            setTimeout(() => {
-                if (messageDiv.parentNode) {
-                    messageDiv.parentNode.removeChild(messageDiv);
+            // Smart close detection using Page Visibility API
+            let hasLeftPage = false;
+            let returnedToPage = false;
+            
+            // Function to handle visibility change
+            const handleVisibilityChange = () => {
+                if (document.hidden) {
+                    // User left the page (likely to import contact)
+                    hasLeftPage = true;
+                    console.log('User left page - likely importing contact');
+                } else if (hasLeftPage && !returnedToPage) {
+                    // User returned to page after leaving
+                    returnedToPage = true;
+                    console.log('User returned to page - may have finished importing');
+                    
+                    // Show the smart notice
+                    const notice = document.getElementById('smartCloseNotice');
+                    if (notice) {
+                        notice.style.display = 'block';
+                        
+                        // Add a subtle pulse animation to the Done button
+                        const doneButton = successOverlay.querySelector('button');
+                        if (doneButton) {
+                            doneButton.style.animation = 'pulse 2s infinite';
+                            doneButton.innerHTML = '✅ Done - Click to Close';
+                        }
+                    }
                 }
-                // Optional: close window if opened from app
+            };
+            
+            // Add CSS for pulse animation
+            if (!document.getElementById('pulseAnimation')) {
+                const style = document.createElement('style');
+                style.id = 'pulseAnimation';
+                style.textContent = `
+                    @keyframes pulse {
+                        0% { box-shadow: 0 4px 15px rgba(255, 75, 110, 0.3); }
+                        50% { box-shadow: 0 4px 25px rgba(255, 75, 110, 0.6); }
+                        100% { box-shadow: 0 4px 15px rgba(255, 75, 110, 0.3); }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+            
+            // Listen for page visibility changes
+            if (typeof document.hidden !== 'undefined') {
+                document.addEventListener('visibilitychange', handleVisibilityChange);
+                }
+            
+            // Function to close the page/browser
+            window.closePageNow = function() {
+                // Remove the visibility change listener
+                document.removeEventListener('visibilitychange', handleVisibilityChange);
+                
+                // Try multiple methods to close the page
+                try {
+                    // Method 1: Close window if it was opened by a script
                 if (window.opener) {
-                    setTimeout(() => window.close(), 1000);
+                        window.close();
+                        return;
+                    }
+                    
+                    // Method 2: Try to close normally
+                    window.close();
+                    
+                    // Method 3: If window.close() doesn't work, redirect to a blank page
+                    setTimeout(() => {
+                        // Check if the window is still open
+                        if (!window.closed) {
+                            // On mobile browsers, redirect to about:blank
+                            window.location.href = 'about:blank';
+                        }
+                    }, 100);
+                    
+                } catch (error) {
+                    console.log('Unable to close window automatically:', error);
+                    // Fallback: Hide the content and show a message
+                    document.body.innerHTML = `
+                        <div style="
+                            display: flex;
+                            flex-direction: column;
+                            align-items: center;
+                            justify-content: center;
+                            min-height: 100vh;
+                            background: var(--secondary);
+                            color: white;
+                            font-family: Arial, sans-serif;
+                            text-align: center;
+                            padding: 20px;
+                        ">
+                            <div style="font-size: 48px; margin-bottom: 20px;">✅</div>
+                            <h2 style="margin: 0 0 20px 0;">Export Complete!</h2>
+                            <p style="margin: 0; opacity: 0.8;">You can now close this tab</p>
+                        </div>
+                    `;
                 }
-            }, 4000);
-        }        // Initialize on page load - run immediately and on DOMContentLoaded
+            };
+        }
+
+        // Initialize on page load - run immediately and on DOMContentLoaded
         checkContactExportRequest();
         document.addEventListener('DOMContentLoaded', function() {
             checkContactExportRequest();
