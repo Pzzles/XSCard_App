@@ -12,7 +12,6 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useColorScheme } from '../../context/ColorSchemeContext';
 import { generateVCard, generateFileName, generateMultipleVCards, generateBatchFileName } from '../../utils/vCardGenerator';
-import ContactExportWebView from '../../components/contacts/ContactExportWebView';
 
 // Define constant for free plan contact limit
 const FREE_PLAN_CONTACT_LIMIT = 3;
@@ -63,12 +62,6 @@ export default function ContactsScreen() {
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [remainingContacts, setRemainingContacts] = useState<number | 'unlimited'>(FREE_PLAN_CONTACT_LIMIT);  const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-
-  // Add WebView export states
-  const [isExportWebViewVisible, setIsExportWebViewVisible] = useState(false);
-  const [exportContact, setExportContact] = useState<Contact | undefined>(undefined);
-  const [exportContacts, setExportContacts] = useState<Contact[] | undefined>(undefined);
-
   const { colorScheme } = useColorScheme();
 
   // Create a ref to store the swipeables
@@ -436,19 +429,38 @@ export default function ContactsScreen() {
     setSelectedContactIndex(index);
     setIsContactOptionsVisible(true);
   };
-
-  // Export handler functions - Updated to use WebView
+  // Export handler functions - Browser-based (works in Expo Go!)
   const handleExportContact = async (contact: Contact) => {
     try {
-      setExportContact(contact);
-      setExportContacts(undefined);
-      setIsExportWebViewVisible(true);
+      // Create contact URL for browser download
+      const contactParams = new URLSearchParams({
+        name: contact.name,
+        surname: contact.surname,
+        phone: contact.phone || '',
+        email: contact.email || '',
+        company: contact.company || '',
+        howWeMet: contact.howWeMet,
+        action: 'downloadContact'
+      });
+
+      const contactUrl = `${API_BASE_URL}/saveContact.html?${contactParams.toString()}`;
+      
+      Alert.alert(
+        'Export Contact',
+        `Export "${contact.name} ${contact.surname}" as a contact file?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Export', 
+            onPress: () => Linking.openURL(contactUrl)
+          }
+        ]
+      );
     } catch (error) {
       console.error('Export contact error:', error);
-      Alert.alert('Error', 'Failed to prepare contact export. Please try again.');
+      Alert.alert('Error', 'Failed to export contact. Please try again.');
     }
   };
-
   const handleExportAllContacts = async () => {
     try {
       if (filteredContacts.length === 0) {
@@ -456,27 +468,40 @@ export default function ContactsScreen() {
         return;
       }
       
-      setExportContact(undefined);
-      setExportContacts(filteredContacts);
-      setIsExportWebViewVisible(true);
+      // Create contacts data for bulk export
+      const contactsData = filteredContacts.map(contact => ({
+        name: contact.name,
+        surname: contact.surname,
+        phone: contact.phone || '',
+        email: contact.email || '',
+        company: contact.company || '',
+        howWeMet: contact.howWeMet
+      }));
+
+      const contactsParams = new URLSearchParams({
+        action: 'downloadMultiple',
+        contacts: JSON.stringify(contactsData),
+        count: filteredContacts.length.toString()
+      });
+
+      const contactsUrl = `${API_BASE_URL}/saveContact.html?${contactsParams.toString()}`;
+      
+      Alert.alert(
+        'Export All Contacts',
+        `Export all ${filteredContacts.length} contacts as a single contact file?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Export All', 
+            onPress: () => Linking.openURL(contactsUrl)
+          }
+        ]
+      );
     } catch (error) {
       console.error('Export all contacts error:', error);
       Alert.alert('Error', 'Failed to prepare contacts export. Please try again.');
     }
   };
-
-  // Handle WebView export success
-  const handleExportSuccess = (message: string) => {
-    Alert.alert('✅ Export Successful!', message);
-  };
-
-  // Handle WebView export close
-  const handleExportClose = () => {
-    setIsExportWebViewVisible(false);
-    setExportContact(undefined);
-    setExportContacts(undefined);
-  };
-
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={styles.container}>
@@ -637,17 +662,7 @@ export default function ContactsScreen() {
                 </Swipeable>
               ))}
             </ScrollView>
-          )}
-        </View>
-
-        {/* Contact Export WebView */}
-        <ContactExportWebView
-          visible={isExportWebViewVisible}
-          contact={exportContact}
-          contacts={exportContacts}
-          onClose={handleExportClose}
-          onSuccess={handleExportSuccess}
-        />
+          )}        </View>
 
         <Modal
           visible={isShareModalVisible}

@@ -1899,9 +1899,7 @@ Please send them a TestFlight invite.`,
                 appIcon2.textContent = 'apple';
                 appLinkText2.textContent = 'Get TestFlight';
                 appDescription2.textContent = 'XS Card is currently in beta testing - Get early access by installing TestFlight, we will send you an invite shortly after.';
-            }        });
-
-        // Function to reset company field state
+            }        });        // Function to reset company field state
         function resetCompanyField() {
             const companyInput = document.getElementById('scannerCompany');
             const submitBtn = document.querySelector('#exchangeForm .submit-btn');
@@ -1915,7 +1913,264 @@ Please send them a TestFlight invite.`,
             if (submitBtn) {
                 resetSubmitButton(submitBtn, '<span class="material-icons">send</span> Send Contact');
             }
+        }        // Check if this is a contact export request from the app
+        function checkContactExportRequest() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const action = urlParams.get('action');
+            
+            console.log('Checking for contact export action:', action);
+            console.log('URL parameters:', Object.fromEntries(urlParams));
+            
+            if (action === 'downloadContact') {
+                // Hide the main content and show download message
+                document.body.style.background = '#f0f0f0';
+                const container = document.querySelector('.container');
+                if (container) {
+                    container.style.display = 'none';
+                }
+                
+                // Single contact export
+                const contactData = {
+                    name: urlParams.get('name') || '',
+                    surname: urlParams.get('surname') || '',
+                    phone: urlParams.get('phone') || '',
+                    email: urlParams.get('email') || '',
+                    company: urlParams.get('company') || '',
+                    howWeMet: urlParams.get('howWeMet') || ''
+                };
+                
+                console.log('Contact data:', contactData);
+                
+                // Show download page and trigger download immediately
+                showDownloadPage();
+                setTimeout(() => downloadContactFile(contactData), 100);
+                
+            } else if (action === 'downloadMultiple') {
+                // Hide the main content and show download message
+                document.body.style.background = '#f0f0f0';
+                const container = document.querySelector('.container');
+                if (container) {
+                    container.style.display = 'none';
+                }
+                
+                // Multiple contacts export
+                try {
+                    const contactsJson = urlParams.get('contacts');
+                    const count = urlParams.get('count') || '0';
+                    
+                    console.log('Multiple contacts count:', count);
+                    
+                    if (contactsJson) {
+                        const contacts = JSON.parse(decodeURIComponent(contactsJson));
+                        console.log('Contacts data:', contacts);
+                        
+                        showDownloadPage();
+                        setTimeout(() => downloadMultipleContactsFile(contacts, count), 100);
+                    }
+                } catch (error) {
+                    console.error('Error parsing contacts data:', error);
+                    alert('Error processing contacts data: ' + error.message);
+                }
+            }
         }
+        
+        // Show a download page instead of the main content
+        function showDownloadPage() {
+            document.body.innerHTML = `
+                <div style="
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    min-height: 100vh;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    font-family: Arial, sans-serif;
+                    text-align: center;
+                    padding: 20px;
+                ">
+                    <div style="
+                        background: rgba(255,255,255,0.1);
+                        backdrop-filter: blur(10px);
+                        border-radius: 20px;
+                        padding: 40px;
+                        max-width: 400px;
+                        box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+                    ">
+                        <div style="font-size: 60px; margin-bottom: 20px;">📱</div>
+                        <h2 style="margin: 0 0 20px 0; font-size: 24px;">Downloading Contact...</h2>
+                        <p style="margin: 0; opacity: 0.9; line-height: 1.5;">
+                            Your contact file is being prepared. The download will start automatically.
+                        </p>
+                        <div style="margin-top: 30px;">
+                            <div style="
+                                width: 40px;
+                                height: 40px;
+                                border: 3px solid rgba(255,255,255,0.3);
+                                border-top-color: white;
+                                border-radius: 50%;
+                                animation: spin 1s linear infinite;
+                                margin: 0 auto;
+                            "></div>
+                        </div>
+                    </div>
+                </div>
+                <style>
+                    @keyframes spin {
+                        to { transform: rotate(360deg); }
+                    }
+                </style>
+            `;
+        }
+          // Function to download single contact as vCard file
+        function downloadContactFile(contact) {
+            console.log('Starting download for contact:', contact);
+            
+            const vCardData = `BEGIN:VCARD
+VERSION:3.0
+FN:${contact.name} ${contact.surname}
+N:${contact.surname};${contact.name};;;
+EMAIL:${contact.email}
+TEL;TYPE=CELL:${contact.phone}
+ORG:${contact.company}
+NOTE:Met at: ${contact.howWeMet}
+END:VCARD`;
+
+            console.log('Generated vCard:', vCardData);
+
+            try {
+                const blob = new Blob([vCardData.trim()], { type: 'text/vcard' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                
+                link.href = url;
+                link.download = `${contact.name}_${contact.surname}.vcf`;
+                link.style.display = 'none';
+                
+                console.log('Download filename:', link.download);
+                
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // Clean up the URL object
+                URL.revokeObjectURL(url);
+                
+                console.log('Download triggered successfully');
+                
+                // Show success message
+                setTimeout(() => {
+                    showDownloadMessage(`Contact file for ${contact.name} ${contact.surname} downloaded!`);
+                }, 100);
+                
+            } catch (error) {
+                console.error('Download error:', error);
+                alert('Error downloading contact: ' + error.message);
+            }
+        }        // Function to download multiple contacts as single vCard file
+        function downloadMultipleContactsFile(contacts, count) {
+            console.log('Starting download for multiple contacts:', contacts.length);
+            
+            let vCardData = '';
+            
+            contacts.forEach((contact, index) => {
+                console.log(`Processing contact ${index + 1}:`, contact);
+                vCardData += `BEGIN:VCARD
+VERSION:3.0
+FN:${contact.name} ${contact.surname}
+N:${contact.surname};${contact.name};;;
+EMAIL:${contact.email}
+TEL;TYPE=CELL:${contact.phone}
+ORG:${contact.company}
+NOTE:Met at: ${contact.howWeMet}
+END:VCARD
+
+`;
+            });
+
+            console.log('Generated vCard data length:', vCardData.length);
+
+            try {
+                const blob = new Blob([vCardData.trim()], { type: 'text/vcard' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                
+                const today = new Date().toISOString().split('T')[0];
+                const filename = `XS_Card_Contacts_${count}_${today}.vcf`;
+                
+                link.href = url;
+                link.download = filename;
+                link.style.display = 'none';
+                
+                console.log('Download filename:', filename);
+                
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // Clean up the URL object
+                URL.revokeObjectURL(url);
+                
+                console.log('Multiple contacts download triggered successfully');
+                
+                // Show success message
+                setTimeout(() => {
+                    showDownloadMessage(`${count} contacts downloaded as single file!`);
+                }, 100);
+                
+            } catch (error) {
+                console.error('Multiple contacts download error:', error);
+                alert('Error downloading contacts: ' + error.message);
+            }
+        }
+
+        // Show download success message
+        function showDownloadMessage(message) {
+            // Create and show a nice success message
+            const messageDiv = document.createElement('div');
+            messageDiv.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: #4CAF50;
+                color: white;
+                padding: 20px 30px;
+                border-radius: 10px;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+                z-index: 10000;
+                text-align: center;
+                font-size: 16px;
+                max-width: 300px;
+            `;
+            
+            messageDiv.innerHTML = `
+                <div style="margin-bottom: 10px;">✅</div>
+                <div>${message}</div>
+                <div style="margin-top: 10px; font-size: 14px;">
+                    To add to your phone:<br>
+                    1. Open the downloaded .vcf file<br>
+                    2. Choose "Import to Contacts"
+                </div>
+            `;
+            
+            document.body.appendChild(messageDiv);
+            
+            // Auto remove after 4 seconds
+            setTimeout(() => {
+                if (messageDiv.parentNode) {
+                    messageDiv.parentNode.removeChild(messageDiv);
+                }
+                // Optional: close window if opened from app
+                if (window.opener) {
+                    setTimeout(() => window.close(), 1000);
+                }
+            }, 4000);
+        }        // Initialize on page load - run immediately and on DOMContentLoaded
+        checkContactExportRequest();
+        document.addEventListener('DOMContentLoaded', function() {
+            checkContactExportRequest();
+        });
     </script>
 </body>
 </html>
