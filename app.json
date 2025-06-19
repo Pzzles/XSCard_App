@@ -12,15 +12,12 @@
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
-  "ios": {
-    "supportsTablet": true,
-    "bundleIdentifier": "com.p.zzles.xscard",
-    "buildNumber": "1.0.2",
-    "icon": "./assets/icons/icon.png",
-    "infoPlist": {
-      "NSContactsUsageDescription": "This app needs access to contacts to save business card information directly to your phone's contacts."
-    }
-  },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.p.zzles.xscard",
+      "buildNumber": "1.0.2",
+      "icon": "./assets/icons/icon.png"
+    },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/icons/adaptive-icon.png",
@@ -28,9 +25,7 @@
       },
       "package": "com.p.zzles.xscard",
       "permissions": [
-        "INTERNET",
-        "READ_CONTACTS",
-        "WRITE_CONTACTS"
+        "INTERNET"
       ]
     },
     "web": {
@@ -38,7 +33,7 @@
     },
     "extra": {
       "eas": {
-       "projectId": "75e89bdc-a27b-4ca7-bce8-f76c910d1d47"
+        "projectId": "75e89bdc-a27b-4ca7-bce8-f76c910d1d47"
       }
     },
     "owner": "p.zzles",
