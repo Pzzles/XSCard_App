@@ -3,72 +3,54 @@ import { View, Image, StyleSheet, ActivityIndicator, Text } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { AuthStackParamList } from '../../types';
-import { getStoredAuthData, getKeepLoggedInPreference } from '../../utils/authStorage';
+import { useAuth } from '../../context/AuthContext';
 
 type SplashScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'Splash'>;
 
 export default function SplashScreen() {
   const navigation = useNavigation<SplashScreenNavigationProp>();
+  const { isLoading, isAuthenticated, keepLoggedIn } = useAuth();
   const [authCheckStatus, setAuthCheckStatus] = useState<string>('Checking authentication...');
+  const [minDisplayTimeElapsed, setMinDisplayTimeElapsed] = useState(false);
 
+  // Ensure minimum display time for smooth UX
   useEffect(() => {
-    checkAuthStatusAndNavigate();
-  }, [navigation]);
+    const timer = setTimeout(() => {
+      setMinDisplayTimeElapsed(true);
+    }, 1500);
 
-  const checkAuthStatusAndNavigate = async () => {
-    try {
-      console.log('SplashScreen: Starting authentication check...');
-      setAuthCheckStatus('Checking authentication...');
+    return () => clearTimeout(timer);
+  }, []);
 
-      // Wait minimum 1.5 seconds for smooth UX
-      const minDisplayTime = 1500;
-      const startTime = Date.now();
-
-      // Check stored auth data and keep logged in preference
-      const [authData, keepLoggedIn] = await Promise.all([
-        getStoredAuthData(),
-        getKeepLoggedInPreference()
-      ]);
-
-      console.log('SplashScreen: Auth data exists:', !!authData);
-      console.log('SplashScreen: Keep logged in preference:', keepLoggedIn);
-
-      let shouldNavigateToMainApp = false;
-
-      if (authData && authData.userData && keepLoggedIn) {
-        console.log('SplashScreen: Valid stored data with keepLoggedIn enabled');
+  // Handle navigation when auth state is determined and minimum time has elapsed
+  useEffect(() => {
+    if (!isLoading && minDisplayTimeElapsed) {
+      console.log('SplashScreen: Auth state determined:', { isAuthenticated, keepLoggedIn });
+      
+      if (isAuthenticated && keepLoggedIn) {
+        console.log('SplashScreen: User authenticated with keepLoggedIn enabled');
         setAuthCheckStatus('Welcome back!');
-        shouldNavigateToMainApp = true;
-      } else {
-        console.log('SplashScreen: No valid stored data or keepLoggedIn disabled');
-        setAuthCheckStatus('Loading...');
-        shouldNavigateToMainApp = false;
-      }
-
-      // Ensure minimum display time for smooth UX
-      const elapsedTime = Date.now() - startTime;
-      const remainingTime = Math.max(0, minDisplayTime - elapsedTime);
-
-      setTimeout(() => {
-        if (shouldNavigateToMainApp) {
+        setTimeout(() => {
           console.log('SplashScreen: Navigating to MainApp');
           navigation.replace('MainApp');
-        } else {
+        }, 500);
+      } else {
+        console.log('SplashScreen: User not authenticated or keepLoggedIn disabled');
+        setAuthCheckStatus('Loading...');
+        setTimeout(() => {
           console.log('SplashScreen: Navigating to SignIn');
           navigation.replace('SignIn');
-        }
-      }, remainingTime);
-
-    } catch (error) {
-      console.error('SplashScreen: Error during auth check:', error);
-      setAuthCheckStatus('Loading...');
-      
-      // On error, default to SignIn after minimum display time
-      setTimeout(() => {
-        navigation.replace('SignIn');
-      }, 1500);
+        }, 500);
+      }
+    } else if (!isLoading && !minDisplayTimeElapsed) {
+      // Auth is ready but still showing splash for UX
+      if (isAuthenticated && keepLoggedIn) {
+        setAuthCheckStatus('Welcome back!');
+      } else {
+        setAuthCheckStatus('Loading...');
+      }
     }
-  };
+  }, [isLoading, isAuthenticated, keepLoggedIn, minDisplayTimeElapsed, navigation]);
 
   return (
     <View style={styles.container}>
