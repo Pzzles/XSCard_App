@@ -9,6 +9,9 @@ import {
   AuthData
 } from '../utils/authStorage';
 import { ErrorHandler, ERROR_CODES, handleAuthError, handleStorageError, createAppError } from '../utils/errorHandler';
+// Firebase integration
+import { auth } from '../config/firebaseConfig';
+import { onAuthStateChanged, signOut as firebaseSignOut, User as FirebaseUser } from 'firebase/auth';
 
 // User interface
 export interface User {
@@ -142,7 +145,73 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
-  // Restore authentication state on app start
+  // Firebase Auth State Listener - NEW INTEGRATION
+  useEffect(() => {
+    console.log('AuthProvider: Setting up Firebase auth state listener');
+    
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+      try {
+        console.log('Firebase auth state changed:', !!firebaseUser);
+        
+        if (firebaseUser) {
+          console.log('Firebase user authenticated:', firebaseUser.uid);
+          
+          // Get fresh token from Firebase
+          const token = await firebaseUser.getIdToken();
+          console.log('Firebase token refreshed automatically');
+          
+          // Check if we have stored auth data
+          const storedAuthData = await getStoredAuthData();
+          
+          if (storedAuthData && storedAuthData.userData) {
+            // Update token in storage with fresh Firebase token
+            await storeAuthData({
+              ...storedAuthData,
+              userToken: `Bearer ${token}`,
+              lastLoginTime: Date.now()
+            });
+            
+            // Update context state
+            dispatch({
+              type: 'SET_USER',
+              payload: {
+                user: storedAuthData.userData,
+                token: `Bearer ${token}`,
+                keepLoggedIn: storedAuthData.keepLoggedIn,
+                lastLoginTime: Date.now()
+              }
+            });
+            
+            console.log('AuthProvider: Firebase token updated in context and storage');
+          } else {
+            console.log('AuthProvider: Firebase user authenticated but no stored user data');
+            // Firebase user exists but no stored data - might be a fresh login
+          }
+        } else {
+          console.log('Firebase user signed out');
+          
+          // Check if this was an intentional logout
+          const keepLoggedIn = await getKeepLoggedInPreference();
+          if (!keepLoggedIn) {
+            console.log('AuthProvider: Firebase signout detected with keepLoggedIn=false');
+            // Clear local auth data if user doesn't want to stay logged in
+            await clearAuthData();
+            dispatch({ type: 'CLEAR_USER' });
+          }
+        }
+      } catch (error) {
+        console.error('AuthProvider: Error in Firebase auth state listener:', error);
+        // Don't throw error here - let the app continue functioning
+      }
+    });
+
+    return () => {
+      console.log('AuthProvider: Cleaning up Firebase auth state listener');
+      unsubscribe();
+    };
+  }, []);
+
+  // Restore authentication state on app start - ENHANCED
   useEffect(() => {
     const restoreAuthState = async () => {
       try {
@@ -151,7 +220,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const authData = await getStoredAuthData();
         
         if (authData) {
+          console.log('AuthProvider: Restoring auth state from storage');
           dispatch({ type: 'RESTORE_AUTH', payload: authData });
+          
+          // Firebase auth state listener will handle token refresh automatically
         } else {
           // No stored auth data, get keepLoggedIn preference only
           const keepLoggedIn = await getKeepLoggedInPreference();
@@ -171,15 +243,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     restoreAuthState();
   }, []);
 
-  // Login function
+  // Login function - ENHANCED for Firebase
   const login = async (email: string, password: string, keepLoggedIn: boolean): Promise<void> => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
       dispatch({ type: 'CLEAR_ERROR' });
 
-      // This will be implemented in Phase 3 when we update SignInScreen
-      // For now, this is a placeholder that maintains the existing flow
-      const error = createAppError(ERROR_CODES.AUTHENTICATION_FAILED, new Error('Login implementation will be completed in Phase 3'));
+      console.log('AuthProvider: Starting Firebase-enhanced login process');
+      
+      // Note: The actual Firebase authentication will be handled in SignInScreen
+      // This function will be called after successful Firebase authentication
+      // to update the context state with user data from backend
+      
+      // For now, this maintains backward compatibility
+      const error = createAppError(ERROR_CODES.AUTHENTICATION_FAILED, new Error('Login implementation updated to use Firebase client SDK in SignInScreen'));
       await handleAuthError(error);
       throw error;
       
@@ -198,10 +275,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  // Logout function
+  // Logout function - ENHANCED for Firebase
   const logout = async (): Promise<void> => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
+      
+      console.log('AuthProvider: Starting Firebase-enhanced logout process');
+      
+      // Sign out from Firebase first
+      try {
+        await firebaseSignOut(auth);
+        console.log('AuthProvider: Firebase signout successful');
+      } catch (firebaseError) {
+        console.error('AuthProvider: Firebase signout error:', firebaseError);
+        // Continue with local logout even if Firebase signout fails
+      }
       
       // Clear auth data from storage
       await clearAuthData();
@@ -211,6 +299,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       // Get the keepLoggedIn preference (which was cleared) and restore it to false
       dispatch({ type: 'SET_KEEP_LOGGED_IN', payload: false });
+      
+      console.log('AuthProvider: Logout complete');
       
     } catch (error) {
       console.error('Error during logout:', error);
@@ -223,11 +313,31 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  // Refresh token function (placeholder for Phase 4)
+  // Refresh token function - ENHANCED with Firebase
   const refreshToken = async (): Promise<void> => {
     try {
-      // This will be implemented in Phase 4 with Firebase integration
-      console.log('Token refresh will be implemented in Phase 4');
+      console.log('AuthProvider: Firebase-enhanced token refresh');
+      
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        // Force token refresh from Firebase
+        const newToken = await currentUser.getIdToken(true);
+        console.log('AuthProvider: Firebase token force-refreshed');
+        
+        // Update stored token
+        const authData = await getStoredAuthData();
+        if (authData) {
+          await storeAuthData({
+            ...authData,
+            userToken: `Bearer ${newToken}`,
+            lastLoginTime: Date.now()
+          });
+          console.log('AuthProvider: Refreshed token stored');
+        }
+      } else {
+        console.log('AuthProvider: No Firebase user for token refresh');
+        throw new Error('No authenticated user for token refresh');
+      }
     } catch (error) {
       console.error('Error refreshing token:', error);
       

@@ -135,9 +135,9 @@ export default function SignInScreen() {
         const token = `Bearer ${firebaseToken}`;
         const userData = {
           ...data.user,
-          id: firebaseUser.uid,
-          name: firebaseUser.displayName || '',
-          email: firebaseUser.email || ''
+          id: data.user.uid || firebaseUser.uid,
+          name: data.user.name || '',
+          email: data.user.email || firebaseUser.email || ''
         };
 
         // Use our Phase 1 storage system to store all auth data
