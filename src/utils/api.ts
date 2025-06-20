@@ -1,6 +1,8 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ErrorHandler, ERROR_CODES, handleAuthError, handleNetworkError, createAppError } from './errorHandler';
+// Firebase integration for enhanced token refresh
+import { auth } from '../config/firebaseConfig';
 
 // Add these types near the top of the file
 export interface PasscreatorResponse {
@@ -36,8 +38,8 @@ export const setGlobalNavigationRef = (navigationRef: any) => {
 // Helper function to get the appropriate base URL
 const getBaseUrl = () => {
 
-   return 'https://xscard-app.onrender.com';
- //    return 'http://localhost:8383';
+  // return 'https://xscard-app.onrender.com';
+     return 'http://localhost:8383';
  //return 'http://192.168.68.101:8383';
 
 };
@@ -138,7 +140,7 @@ export const authenticatedFetch = async (endpoint: string, options: RequestInit 
   }
 };
 
-// NEW: Token refresh function (implementation placeholder for Phase 4)
+// ENHANCED: Token refresh function with Firebase integration
 export const refreshAuthToken = async (): Promise<string> => {
   try {
     const currentToken = await AsyncStorage.getItem('userToken');
@@ -149,9 +151,33 @@ export const refreshAuthToken = async (): Promise<string> => {
       throw error;
     }
 
-    console.log('[Token Refresh] Attempting to refresh token...');
+    console.log('[Token Refresh] Attempting Firebase-enhanced token refresh...');
     
-    // Phase 4B: Request token refresh from backend
+    // Try Firebase token refresh first (primary method)
+    const firebaseUser = auth.currentUser;
+    if (firebaseUser) {
+      try {
+        console.log('[Token Refresh] Using Firebase token refresh (primary method)');
+        const newFirebaseToken = await firebaseUser.getIdToken(true); // Force refresh
+        const newTokenWithBearer = `Bearer ${newFirebaseToken}`;
+        
+        // Store the new token
+        await AsyncStorage.setItem('userToken', newTokenWithBearer);
+        await AsyncStorage.setItem('lastLoginTime', Date.now().toString());
+        
+        console.log('[Token Refresh] Firebase token refresh successful');
+        return newTokenWithBearer;
+        
+      } catch (firebaseError) {
+        console.warn('[Token Refresh] Firebase refresh failed, falling back to backend:', firebaseError);
+        // Continue to backend refresh fallback below
+      }
+    } else {
+      console.warn('[Token Refresh] No Firebase user, using backend refresh');
+    }
+    
+    // Fallback: Backend token refresh
+    console.log('[Token Refresh] Using backend token refresh (fallback method)');
     const response = await fetch(buildUrl(ENDPOINTS.REFRESH_TOKEN), {
       method: 'POST',
       headers: {
@@ -183,7 +209,7 @@ export const refreshAuthToken = async (): Promise<string> => {
       const newTokenWithBearer = `Bearer ${data.token}`;
       await AsyncStorage.setItem('userToken', newTokenWithBearer);
       
-      console.log('[Token Refresh] Token refreshed successfully');
+      console.log('[Token Refresh] Backend token refresh successful');
       
       // Update last login time to track token age
       await AsyncStorage.setItem('lastLoginTime', Date.now().toString());
@@ -209,7 +235,7 @@ export const refreshAuthToken = async (): Promise<string> => {
   }
 };
 
-// NEW: Token validation function - Phase 4A Implementation
+// ENHANCED: Token validation function with Firebase integration
 export const validateAuthToken = async (): Promise<boolean> => {
   try {
     const currentToken = await AsyncStorage.getItem('userToken');
@@ -219,8 +245,26 @@ export const validateAuthToken = async (): Promise<boolean> => {
       return false;
     }
 
-    console.log('[Token Validation] Validating token with backend...');
+    console.log('[Token Validation] Validating token with Firebase integration...');
     
+    // Try Firebase validation first (primary method)
+    const firebaseUser = auth.currentUser;
+    if (firebaseUser) {
+      try {
+        console.log('[Token Validation] Using Firebase validation (primary method)');
+        await firebaseUser.getIdToken(false); // Don't force refresh, just validate
+        console.log('[Token Validation] Firebase validation successful');
+        return true;
+      } catch (firebaseError) {
+        console.warn('[Token Validation] Firebase validation failed, trying backend:', firebaseError);
+        // Continue to backend validation fallback below
+      }
+    } else {
+      console.warn('[Token Validation] No Firebase user, using backend validation');
+    }
+    
+    // Fallback: Backend validation
+    console.log('[Token Validation] Using backend validation (fallback method)');
     const response = await fetch(buildUrl(ENDPOINTS.VALIDATE_TOKEN), {
       method: 'POST',
       headers: {
@@ -256,15 +300,15 @@ export const validateAuthToken = async (): Promise<boolean> => {
   }
 };
 
-// NEW: Enhanced authenticated fetch with token refresh capability
+// ENHANCED: Enhanced authenticated fetch with Firebase integration
 export const authenticatedFetchWithRefresh = async (endpoint: string, options: RequestInit = {}) => {
   try {
-    // Phase 4B: Check if token needs refresh before making the request
+    // Check if token needs refresh before making the request
     const needsRefresh = await shouldRefreshToken();
     if (needsRefresh) {
       console.log('[Auth Fetch] Token appears old, attempting refresh before request...');
       try {
-        await refreshAuthToken();
+        await refreshAuthToken(); // Now uses Firebase-enhanced refresh
         console.log('[Auth Fetch] Proactive token refresh successful');
       } catch (refreshError) {
         console.error('[Auth Fetch] Proactive token refresh failed:', refreshError);
@@ -279,10 +323,10 @@ export const authenticatedFetchWithRefresh = async (endpoint: string, options: R
     if (response.status === 401) {
       console.log('[Auth Fetch] Received 401 - token appears expired');
       
-      // Phase 4B: Attempt token refresh before logout
+      // Attempt Firebase-enhanced token refresh before logout
       try {
-        console.log('[Auth Fetch] Attempting token refresh...');
-        await refreshAuthToken();
+        console.log('[Auth Fetch] Attempting Firebase-enhanced token refresh...');
+        await refreshAuthToken(); // Now uses Firebase-enhanced refresh
         
         console.log('[Auth Fetch] Token refresh successful, retrying original request...');
         

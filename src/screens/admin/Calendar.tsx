@@ -5,7 +5,7 @@ import { COLORS } from '../../constants/colors';
 import AdminHeader from '../../components/AdminHeader';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { AdminTabParamList, Contact, AuthStackParamList } from '../../types';
-import { API_BASE_URL, ENDPOINTS, authenticatedFetch, getUserId, buildUrl, authenticatedFetchWithRefresh, forceLogoutExpiredToken } from '../../utils/api';
+import { API_BASE_URL, ENDPOINTS, getUserId, buildUrl, authenticatedFetchWithRefresh, forceLogoutExpiredToken } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';

@@ -10,8 +10,9 @@ let expoProcess = null;
 
 function cleanup() {
     if (serverProcess) {
-        serverProcess.kill();
-        console.log('Server process terminated');
+        serverProcess.close(() => {
+            console.log('Server process terminated');
+        });
     }
     if (expoProcess) {
         expoProcess.kill();
@@ -61,7 +62,7 @@ serverProcess.on("error", (error) => {
     cleanup();
 });
 
-// Start Expo after a short delay
+// Start Expo after a short delay (2 seconds instead of 8383ms)
 setTimeout(() => {
     console.log('Starting Expo...');
     expoProcess = spawn("npx", ["expo", "start", "--clear"], {
@@ -72,4 +73,5 @@ setTimeout(() => {
     expoProcess.on("error", (error) => {
         console.error(`Failed to start Expo: ${error}`);
         cleanup();
-    });}, 8383);
+    });
+}, 2000);
