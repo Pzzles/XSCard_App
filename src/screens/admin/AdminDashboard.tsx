@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, ScrollView, Dimensions, Platform, ActivityIndic
 import { COLORS } from '../../constants/colors';
 import AdminHeader from '../../components/AdminHeader';
 import { LineChart } from 'react-native-chart-kit';
-import { API_BASE_URL, ENDPOINTS, authenticatedFetch, getUserId, authenticatedFetchWithRefresh } from '../../utils/api';
+import { API_BASE_URL, ENDPOINTS, getUserId, authenticatedFetchWithRefresh } from '../../utils/api';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StackNavigationProp } from '@react-navigation/stack';

@@ -6,7 +6,7 @@ import { Animated } from 'react-native';
 import { COLORS, CARD_COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { API_BASE_URL, ENDPOINTS, buildUrl, authenticatedFetch, getUserId, authenticatedFetchWithRefresh } from '../../utils/api';
+import { API_BASE_URL, ENDPOINTS, buildUrl, getUserId, authenticatedFetchWithRefresh } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { EditCardScreenRouteProp, RootStackParamList } from '../../types/navigation';

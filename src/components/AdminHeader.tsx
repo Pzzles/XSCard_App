@@ -6,7 +6,7 @@ import { useNavigation } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { AdminTabParamList } from '../types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL, authenticatedFetch, performServerLogout } from '../utils/api';
+import { API_BASE_URL, performServerLogout } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 
 type AdminHeaderNavigationProp = BottomTabNavigationProp<AdminTabParamList>;

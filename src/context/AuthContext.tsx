@@ -12,6 +12,8 @@ import { ErrorHandler, ERROR_CODES, handleAuthError, handleStorageError, createA
 // Firebase integration
 import { auth } from '../config/firebaseConfig';
 import { onAuthStateChanged, signOut as firebaseSignOut, User as FirebaseUser } from 'firebase/auth';
+// Token refresh service integration
+import { scheduleTokenRefresh, clearTokenRefreshTimer } from '../services/tokenValidationService';
 
 // User interface
 export interface User {
@@ -145,9 +147,9 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
-  // Firebase Auth State Listener - NEW INTEGRATION
+  // Firebase Auth State Listener - ENHANCED WITH TOKEN REFRESH INTEGRATION
   useEffect(() => {
-    console.log('AuthProvider: Setting up Firebase auth state listener');
+    console.log('AuthProvider: Setting up Firebase auth state listener with token refresh integration');
     
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       try {
@@ -162,13 +164,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           
           // Check if we have stored auth data
           const storedAuthData = await getStoredAuthData();
+          const keepLoggedIn = await getKeepLoggedInPreference();
           
           if (storedAuthData && storedAuthData.userData) {
             // Update token in storage with fresh Firebase token
             await storeAuthData({
               ...storedAuthData,
               userToken: `Bearer ${token}`,
-              lastLoginTime: Date.now()
+              lastLoginTime: Date.now(),
+              keepLoggedIn: keepLoggedIn
             });
             
             // Update context state
@@ -177,18 +181,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               payload: {
                 user: storedAuthData.userData,
                 token: `Bearer ${token}`,
-                keepLoggedIn: storedAuthData.keepLoggedIn,
+                keepLoggedIn: keepLoggedIn,
                 lastLoginTime: Date.now()
               }
             });
             
             console.log('AuthProvider: Firebase token updated in context and storage');
+            
+            // **CRITICAL INTEGRATION**: Start token refresh service if keepLoggedIn is true
+            if (keepLoggedIn) {
+              console.log('AuthProvider: Starting token refresh service (keepLoggedIn=true)');
+              scheduleTokenRefresh();
+            } else {
+              console.log('AuthProvider: Stopping token refresh service (keepLoggedIn=false)');
+              clearTokenRefreshTimer();
+            }
           } else {
             console.log('AuthProvider: Firebase user authenticated but no stored user data');
             // Firebase user exists but no stored data - might be a fresh login
+            // Stop token refresh service until proper login data is available
+            clearTokenRefreshTimer();
           }
         } else {
           console.log('Firebase user signed out');
+          
+          // **CRITICAL**: Always stop token refresh service when user signs out
+          console.log('AuthProvider: Stopping token refresh service (user signed out)');
+          clearTokenRefreshTimer();
           
           // Check if this was an intentional logout
           const keepLoggedIn = await getKeepLoggedInPreference();
@@ -201,15 +220,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       } catch (error) {
         console.error('AuthProvider: Error in Firebase auth state listener:', error);
+        // Stop token refresh service on errors to prevent issues
+        clearTokenRefreshTimer();
         // Don't throw error here - let the app continue functioning
       }
     });
 
     return () => {
-      console.log('AuthProvider: Cleaning up Firebase auth state listener');
+      console.log('AuthProvider: Cleaning up Firebase auth state listener and token refresh');
+      clearTokenRefreshTimer(); // Clean up token refresh on unmount
       unsubscribe();
     };
   }, []);
+
+  // **ENHANCED**: Monitor keepLoggedIn preference changes
+  useEffect(() => {
+    const handleKeepLoggedInChange = async () => {
+      if (state.isAuthenticated) {
+        if (state.keepLoggedIn) {
+          console.log('AuthProvider: keepLoggedIn enabled - starting token refresh service');
+          scheduleTokenRefresh();
+        } else {
+          console.log('AuthProvider: keepLoggedIn disabled - stopping token refresh service');
+          clearTokenRefreshTimer();
+        }
+      }
+    };
+
+    handleKeepLoggedInChange();
+  }, [state.keepLoggedIn, state.isAuthenticated]);
 
   // Restore authentication state on app start - ENHANCED
   useEffect(() => {
@@ -282,6 +321,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       console.log('AuthProvider: Starting Firebase-enhanced logout process');
       
+      // **CRITICAL**: Stop token refresh service immediately
+      console.log('AuthProvider: Stopping token refresh service during logout');
+      clearTokenRefreshTimer();
+      
       // Sign out from Firebase first
       try {
         await firebaseSignOut(auth);
@@ -304,6 +347,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
     } catch (error) {
       console.error('Error during logout:', error);
+      
+      // Ensure token refresh is stopped even on error
+      clearTokenRefreshTimer();
       
       // Handle storage errors during logout
       await handleStorageError(error);

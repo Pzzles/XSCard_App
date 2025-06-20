@@ -14,7 +14,7 @@ import { CommonActions } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL, ENDPOINTS, authenticatedFetch, getUserId, performServerLogout, authenticatedFetchWithRefresh } from '../../utils/api';
+import { API_BASE_URL, ENDPOINTS, getUserId, performServerLogout, authenticatedFetchWithRefresh } from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
 
 type UnlockPremiumStackParamList = {

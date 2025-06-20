@@ -6,7 +6,7 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useColorScheme } from '../context/ColorSchemeContext';
-import { API_BASE_URL, authenticatedFetch, performServerLogout } from '../utils/api';
+import { API_BASE_URL, performServerLogout } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 
 // Update this type to match your actual navigation type

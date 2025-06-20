@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, Image, TouchableOpacity, ScrollView, TextInput,
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
-import { API_BASE_URL, ENDPOINTS, buildUrl, authenticatedFetch, getUserId, authenticatedFetchWithRefresh, forceLogoutExpiredToken } from '../../utils/api';
+import { API_BASE_URL, ENDPOINTS, buildUrl, getUserId, authenticatedFetchWithRefresh, forceLogoutExpiredToken } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';

@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 
 // Firebase configuration for XSCard App
 // This should match your Firebase project (same as backend)
@@ -15,7 +16,9 @@ const firebaseConfig = {
 // Initialize Firebase
 export const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase Auth (React Native persistence is handled automatically)
-export const auth = getAuth(app);
+// Initialize Firebase Auth with AsyncStorage persistence for React Native
+export const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(ReactNativeAsyncStorage)
+});
 
 console.log('Firebase client initialized for project:', firebaseConfig.projectId); 

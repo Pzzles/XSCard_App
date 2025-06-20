@@ -16,7 +16,7 @@ export class AuthManager {
   private static isTokenRefreshActive = false;
 
   /**
-   * Handle app going to background - ENHANCED for Firebase
+   * Handle app going to background - ENHANCED FOR FIREBASE INTEGRATION
    * If keepLoggedIn is false, clear authentication data
    */
   static async handleAppBackground(): Promise<void> {
@@ -31,9 +31,9 @@ export class AuthManager {
         await this.performAutoLogout();
       } else {
         console.log('Keep logged in is enabled, maintaining session');
-        // With Firebase, we don't need manual token refresh timers
-        // Firebase handles token refresh automatically through auth state listener
-        console.log('Firebase will maintain authentication state automatically');
+        // Token refresh is now handled by AuthContext Firebase integration
+        // We don't need manual timers here anymore
+        console.log('AuthManager: Session maintained by AuthContext Firebase integration');
       }
     } catch (error) {
       console.error('Error handling app background:', error);
@@ -41,8 +41,8 @@ export class AuthManager {
   }
 
   /**
-   * Handle app coming to foreground - ENHANCED for Firebase
-   * Firebase auth state listener handles token validation automatically
+   * Handle app coming to foreground - ENHANCED FOR FIREBASE INTEGRATION
+   * Check auth status and let AuthContext handle token refresh
    */
   static async handleAppForeground(): Promise<void> {
     try {
@@ -58,7 +58,10 @@ export class AuthManager {
         const firebaseUser = auth.currentUser;
         if (firebaseUser) {
           console.log('Firebase user is still authenticated:', firebaseUser.uid);
-          // Firebase auth state listener will handle token refresh automatically
+          // AuthContext Firebase listener will handle token refresh automatically
+          // Just ensure token refresh service is active
+          console.log('AuthManager: Ensuring token refresh service is active');
+          scheduleTokenRefresh();
           
           // Update last activity time
           await updateLastLoginTime();
@@ -68,6 +71,8 @@ export class AuthManager {
         }
       } else {
         console.log('Keep logged in is disabled, no validation needed');
+        // Ensure token refresh service is stopped
+        clearTokenRefreshTimer();
       }
     } catch (error) {
       console.error('Error handling app foreground:', error);
@@ -75,124 +80,97 @@ export class AuthManager {
   }
 
   /**
-   * Validate token when app resumes - SIMPLIFIED for Firebase
-   */
-  static async validateTokenOnResume(): Promise<boolean> {
-    try {
-      console.log('AuthManager: Validating token on resume');
-      
-      // Check if Firebase user exists
-      const firebaseUser = auth.currentUser;
-      if (!firebaseUser) {
-        console.log('No Firebase user found');
-        return false;
-      }
-
-      // Check if we have stored auth data
-      const authData = await getStoredAuthData();
-      if (!authData || !authData.userToken) {
-        console.log('No stored auth data found');
-        return false;
-      }
-
-      console.log('Firebase user and stored data both exist');
-      
-      // Firebase handles token validation automatically
-      // We just need to update last login time
-      await updateLastLoginTime();
-      
-      return true;
-    } catch (error) {
-      console.error('Error validating token on resume:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Setup automatic token refresh timer - DEPRECATED with Firebase
-   * Firebase handles token refresh automatically, but keeping for compatibility
-   */
-  static setupTokenRefreshTimer(): void {
-    console.log('AuthManager: Token refresh now handled automatically by Firebase');
-    console.log('AuthManager: Manual token refresh timers are no longer needed');
-    
-    // Clean up any existing timers
-    this.clearTokenRefreshTimer();
-    
-    // Firebase auth state listener handles all token refresh automatically
-    // No manual timers needed
-  }
-
-  /**
-   * Clear token refresh timer - SIMPLIFIED
-   */
-  static clearTokenRefreshTimer(): void {
-    console.log('AuthManager: Clearing any existing token refresh timers');
-    
-    if (this.tokenRefreshTimer) {
-      clearInterval(this.tokenRefreshTimer);
-      this.tokenRefreshTimer = null;
-    }
-    
-    // Clear service timer as well for compatibility
-    clearTokenRefreshTimer();
-    this.isTokenRefreshActive = false;
-    
-    console.log('Token refresh timers cleared - Firebase handles refresh automatically');
-  }
-
-  /**
-   * Perform automatic logout - ENHANCED for Firebase
+   * Perform auto-logout when session should not be maintained
    */
   static async performAutoLogout(): Promise<void> {
     try {
-      console.log('AuthManager: Performing auto logout');
+      console.log('AuthManager: Performing auto-logout');
       
-      // Clear token refresh timer (though not needed with Firebase)
-      this.clearTokenRefreshTimer();
+      // Stop token refresh service immediately
+      clearTokenRefreshTimer();
       
-      // Sign out from Firebase first
+      // Sign out from Firebase
       try {
-        if (auth.currentUser) {
-          await firebaseSignOut(auth);
-          console.log('AuthManager: Firebase signout successful');
-        }
+        await firebaseSignOut(auth);
+        console.log('AuthManager: Firebase signout successful');
       } catch (firebaseError) {
         console.error('AuthManager: Firebase signout error:', firebaseError);
         // Continue with local logout even if Firebase signout fails
       }
       
-      // Clear all authentication data
+      // Clear local auth data
       await clearAuthData();
       
-      console.log('Auto logout completed');
+      console.log('AuthManager: Auto-logout completed');
     } catch (error) {
-      console.error('Error during auto logout:', error);
+      console.error('AuthManager: Error during auto-logout:', error);
+      // Ensure token refresh is stopped even on error
+      clearTokenRefreshTimer();
     }
   }
 
   /**
-   * Handle token refresh failures - DEPRECATED with Firebase
+   * Check current authentication status - ENHANCED FOR FIREBASE
    */
-  private static async handleTokenRefreshFailure(error: any): Promise<void> {
-    console.log('AuthManager: Token refresh failure handling is now managed by Firebase');
-    console.log('AuthManager: Firebase auth state listener will handle authentication errors');
-    
-    // If we get here, it's likely a network error during app-specific operations
-    if (error.message?.includes('Network') || error.message?.includes('fetch')) {
-      console.log('Network error detected, Firebase will retry automatically');
-      return;
-    }
-    
-    // For authentication errors, perform logout
-    if (error.message?.includes('Authentication') || error.message?.includes('401')) {
-      console.log('Authentication error detected, performing auto logout');
-      await this.performAutoLogout();
+  static async validateTokenOnResume(): Promise<boolean> {
+    try {
+      console.log('AuthManager: Validating token on resume');
+      
+      // Check Firebase auth state first
+      const firebaseUser = auth.currentUser;
+      if (!firebaseUser) {
+        console.log('AuthManager: No Firebase user, token invalid');
+        return false;
+      }
+      
+      // Check stored auth data
+      const authData = await getStoredAuthData();
+      if (!authData) {
+        console.log('AuthManager: No stored auth data, token invalid');
+        return false;
+      }
+      
+      // With Firebase, if user exists and we have stored data, token should be valid
+      // AuthContext will handle automatic token refresh
+      console.log('AuthManager: Token validation successful with Firebase integration');
+      return true;
+    } catch (error) {
+      console.error('AuthManager: Error validating token on resume:', error);
+      return false;
     }
   }
 
   /**
-   * Initialize AuthManager - ENHANCED for Firebase
+   * Setup token refresh timer - DEPRECATED
+   * @deprecated Use AuthContext Firebase integration instead
+   */
+  static setupTokenRefreshTimer(): void {
+    console.warn('AuthManager.setupTokenRefreshTimer() is deprecated. Token refresh is now handled by AuthContext Firebase integration.');
+    // This method is kept for backward compatibility but does nothing
+    // Token refresh is now handled by AuthContext
+  }
+
+  /**
+   * Clear token refresh timer - UPDATED FOR NEW INTEGRATION
+   */
+  static clearTokenRefreshTimer(): void {
+    console.log('AuthManager: Clearing token refresh timer');
+    
+    // Clear local timer if it exists (legacy)
+    if (this.tokenRefreshTimer) {
+      clearInterval(this.tokenRefreshTimer);
+      this.tokenRefreshTimer = null;
+    }
+    
+    // Clear the service-level timer
+    clearTokenRefreshTimer();
+    
+    this.isTokenRefreshActive = false;
+    console.log('AuthManager: Token refresh timer cleared');
+  }
+
+  /**
+   * Initialize AuthManager - ENHANCED FOR FIREBASE INTEGRATION
    */
   static async initialize(): Promise<void> {
     try {
@@ -206,10 +184,14 @@ export class AuthManager {
         const firebaseUser = auth.currentUser;
         if (firebaseUser) {
           console.log('AuthManager: Firebase user found during initialization:', firebaseUser.uid);
-          // Firebase auth state listener will handle the rest
+          // AuthContext Firebase listener will handle token refresh
+          console.log('AuthManager: Token refresh handled by AuthContext');
         } else {
           console.log('AuthManager: No Firebase user found, waiting for auth state');
         }
+      } else {
+        // Ensure token refresh is stopped if keepLoggedIn is false
+        clearTokenRefreshTimer();
       }
       
       console.log('AuthManager initialized successfully with Firebase integration');
@@ -219,16 +201,19 @@ export class AuthManager {
   }
 
   /**
-   * Clean up AuthManager - SIMPLIFIED
+   * Clean up AuthManager resources
    */
-  static cleanup(): void {
-    console.log('AuthManager: Cleaning up');
-    this.clearTokenRefreshTimer();
-    console.log('AuthManager cleanup completed - Firebase handles auth state cleanup');
+  static cleanup(): Promise<void> {
+    return new Promise((resolve) => {
+      console.log('AuthManager: Cleaning up resources');
+      this.clearTokenRefreshTimer();
+      this.isTokenRefreshActive = false;
+      resolve();
+    });
   }
 
   /**
-   * Get current authentication status - ENHANCED for Firebase
+   * Get current authentication status - ENHANCED FOR FIREBASE
    */
   static async getAuthStatus(): Promise<{
     isAuthenticated: boolean;
@@ -258,35 +243,6 @@ export class AuthManager {
         tokenValid: false,
         firebaseUser: false,
       };
-    }
-  }
-
-  /**
-   * Force token refresh - ENHANCED for Firebase
-   */
-  static async forceTokenRefresh(): Promise<void> {
-    try {
-      console.log('AuthManager: Force token refresh with Firebase');
-      
-      const firebaseUser = auth.currentUser;
-      if (firebaseUser) {
-        // Force token refresh from Firebase
-        const newToken = await firebaseUser.getIdToken(true);
-        console.log('AuthManager: Firebase token force-refreshed');
-        
-        // Update stored token
-        const authData = await getStoredAuthData();
-        if (authData) {
-          await AsyncStorage.setItem('userToken', `Bearer ${newToken}`);
-          await updateLastLoginTime();
-          console.log('AuthManager: Refreshed token updated in storage');
-        }
-      } else {
-        throw new Error('No Firebase user for token refresh');
-      }
-    } catch (error) {
-      console.error('AuthManager: Error during force token refresh:', error);
-      throw error;
     }
   }
 } 

@@ -1,72 +1,118 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { validateAuthToken, shouldRefreshToken, refreshAuthToken } from '../utils/api';
 import { getStoredAuthData, updateLastLoginTime } from '../utils/authStorage';
+// Firebase integration
+import { auth } from '../config/firebaseConfig';
 
 export class TokenValidationService {
   private static refreshTimer: NodeJS.Timeout | null = null;
   private static isServiceActive = false;
 
   /**
-   * Validate the current token stored in AsyncStorage
+   * Validate the current token - ENHANCED FOR FIREBASE INTEGRATION
    */
   static async validateCurrentToken(): Promise<boolean> {
     try {
-      console.log('TokenValidationService: Validating current token');
+      console.log('TokenValidationService: Validating current token with Firebase integration');
       
+      // First check if Firebase user exists
+      const firebaseUser = auth.currentUser;
+      if (!firebaseUser) {
+        console.log('TokenValidationService: No Firebase user found');
+        return false;
+      }
+      
+      // Check if we have stored token
       const token = await AsyncStorage.getItem('userToken');
       if (!token) {
-        console.log('No token found for validation');
+        console.log('TokenValidationService: No stored token found');
         return false;
       }
 
-      // Use the API utility to validate token
-      const isValid = await validateAuthToken();
-      console.log('Token validation result:', isValid);
+      // With Firebase integration, try to get a fresh token to validate
+      try {
+        const freshToken = await firebaseUser.getIdToken(false); // Don't force refresh
+        if (freshToken) {
+          console.log('TokenValidationService: Firebase token validation successful');
+          return true;
+        }
+      } catch (firebaseError) {
+        console.error('TokenValidationService: Firebase token validation failed:', firebaseError);
+        
+        // Try backend validation as fallback
+        console.log('TokenValidationService: Falling back to backend validation');
+        const isValid = await validateAuthToken();
+        console.log('TokenValidationService: Backend validation result:', isValid);
+        return isValid;
+      }
       
-      return isValid;
+      return false;
     } catch (error) {
-      console.error('Error validating current token:', error);
+      console.error('TokenValidationService: Error validating current token:', error);
       return false;
     }
   }
 
   /**
-   * Check if token needs refresh and refresh if necessary
+   * Check if token needs refresh and refresh if necessary - ENHANCED FOR FIREBASE
    */
   static async refreshTokenIfNeeded(): Promise<void> {
     try {
-      console.log('TokenValidationService: Checking if token needs refresh');
+      console.log('TokenValidationService: Checking if token needs refresh (Firebase-enhanced)');
       
+      const firebaseUser = auth.currentUser;
+      if (!firebaseUser) {
+        console.log('TokenValidationService: No Firebase user for token refresh');
+        throw new Error('No Firebase user available for token refresh');
+      }
+      
+      // Check if token needs refresh using our existing logic
       const needsRefresh = await shouldRefreshToken();
-      console.log('Token needs refresh:', needsRefresh);
+      console.log('TokenValidationService: Token needs refresh:', needsRefresh);
       
       if (needsRefresh) {
-        console.log('Refreshing token...');
-        const newToken = await refreshAuthToken();
-        console.log('Token refreshed successfully');
+        console.log('TokenValidationService: Refreshing token via Firebase...');
         
-        // Update last login time after successful refresh
-        await updateLastLoginTime();
+        try {
+          // Try Firebase token refresh first
+          const newToken = await firebaseUser.getIdToken(true); // Force refresh
+          console.log('TokenValidationService: Firebase token refreshed successfully');
+          
+          // Update stored token
+          await AsyncStorage.setItem('userToken', `Bearer ${newToken}`);
+          await updateLastLoginTime();
+          
+          console.log('TokenValidationService: Token updated in storage');
+        } catch (firebaseError) {
+          console.error('TokenValidationService: Firebase refresh failed, trying backend:', firebaseError);
+          
+          // Fallback to backend refresh
+          const newToken = await refreshAuthToken();
+          console.log('TokenValidationService: Backend token refresh successful');
+          
+          // Update last login time after successful refresh
+          await updateLastLoginTime();
+        }
       } else {
-        console.log('Token refresh not needed');
+        console.log('TokenValidationService: Token refresh not needed');
       }
     } catch (error) {
-      console.error('Error refreshing token:', error);
+      console.error('TokenValidationService: Error refreshing token:', error);
       throw error;
     }
   }
 
   /**
-   * Schedule automatic token refresh
+   * Schedule automatic token refresh - ENHANCED FOR FIREBASE INTEGRATION
    */
   static scheduleTokenRefresh(): void {
     try {
       if (this.isServiceActive) {
-        console.log('Token refresh already scheduled, skipping');
+        console.log('TokenValidationService: Token refresh already scheduled, skipping');
         return;
       }
 
-      console.log('TokenValidationService: Scheduling token refresh');
+      console.log('TokenValidationService: Scheduling Firebase-enhanced token refresh');
       this.isServiceActive = true;
       
       // Schedule immediate check
@@ -78,9 +124,9 @@ export class TokenValidationService {
         this.performTokenCheck();
       }, 25 * 60 * 1000); // 25 minutes
 
-      console.log('Token refresh scheduled successfully');
+      console.log('TokenValidationService: Token refresh scheduled successfully');
     } catch (error) {
-      console.error('Error scheduling token refresh:', error);
+      console.error('TokenValidationService: Error scheduling token refresh:', error);
       this.isServiceActive = false;
     }
   }
@@ -97,20 +143,22 @@ export class TokenValidationService {
     }
     
     this.isServiceActive = false;
-    console.log('Token refresh timer cleared');
+    console.log('TokenValidationService: Token refresh timer cleared');
   }
 
   /**
-   * Perform token check and refresh if needed
+   * Perform token check and refresh if needed - ENHANCED FOR FIREBASE
    */
   private static async performTokenCheck(): Promise<void> {
     try {
-      console.log('TokenValidationService: Performing token check');
+      console.log('TokenValidationService: Performing Firebase-enhanced token check');
       
-      // Check if we still have auth data
+      // Check if we still have auth data and Firebase user
       const authData = await getStoredAuthData();
-      if (!authData) {
-        console.log('No auth data found, stopping token refresh');
+      const firebaseUser = auth.currentUser;
+      
+      if (!authData || !firebaseUser) {
+        console.log('TokenValidationService: No auth data or Firebase user, stopping token refresh');
         this.clearTokenRefreshTimer();
         return;
       }
@@ -118,34 +166,37 @@ export class TokenValidationService {
       // Validate current token
       const isValid = await this.validateCurrentToken();
       if (!isValid) {
-        console.log('Token is invalid, attempting refresh');
+        console.log('TokenValidationService: Token is invalid, attempting refresh');
         await this.refreshTokenIfNeeded();
       } else {
-        console.log('Token is still valid');
+        console.log('TokenValidationService: Token is still valid');
       }
     } catch (error) {
-      console.error('Error during token check:', error);
+      console.error('TokenValidationService: Error during token check:', error);
       // Don't clear the timer on single failures, allow retry
     }
   }
 
   /**
-   * Get token expiration info
+   * Get token expiration info - ENHANCED FOR FIREBASE
    */
   static async getTokenExpirationInfo(): Promise<{
     hasToken: boolean;
     isExpired: boolean;
+    hasFirebaseUser: boolean;
     expiresAt?: number;
     lastRefresh?: number;
   }> {
     try {
       const token = await AsyncStorage.getItem('userToken');
       const authData = await getStoredAuthData();
+      const firebaseUser = auth.currentUser;
       
       if (!token) {
         return {
           hasToken: false,
           isExpired: true,
+          hasFirebaseUser: !!firebaseUser,
         };
       }
 
@@ -154,33 +205,61 @@ export class TokenValidationService {
       return {
         hasToken: true,
         isExpired: needsRefresh,
+        hasFirebaseUser: !!firebaseUser,
         lastRefresh: authData?.lastLoginTime ?? undefined,
       };
     } catch (error) {
-      console.error('Error getting token expiration info:', error);
+      console.error('TokenValidationService: Error getting token expiration info:', error);
       return {
         hasToken: false,
         isExpired: true,
+        hasFirebaseUser: false,
       };
     }
   }
 
   /**
-   * Force token validation (useful for testing)
+   * Force token validation (useful for testing) - ENHANCED FOR FIREBASE
    */
   static async forceTokenValidation(): Promise<{
     isValid: boolean;
+    firebaseValid?: boolean;
+    backendValid?: boolean;
     error?: string;
   }> {
     try {
-      console.log('TokenValidationService: Force validating token');
-      const isValid = await this.validateCurrentToken();
+      console.log('TokenValidationService: Force validating token with Firebase');
+      
+      const firebaseUser = auth.currentUser;
+      let firebaseValid = false;
+      let backendValid = false;
+      
+      // Test Firebase validation
+      if (firebaseUser) {
+        try {
+          await firebaseUser.getIdToken(false);
+          firebaseValid = true;
+        } catch (firebaseError) {
+          console.error('TokenValidationService: Firebase validation failed:', firebaseError);
+        }
+      }
+      
+      // Test backend validation
+      try {
+        backendValid = await validateAuthToken();
+      } catch (backendError) {
+        console.error('TokenValidationService: Backend validation failed:', backendError);
+      }
+      
+      const isValid = firebaseValid || backendValid;
       
       return {
         isValid,
+        firebaseValid,
+        backendValid,
       };
     } catch (error) {
-      console.error('Error during force token validation:', error);
+      console.error('TokenValidationService: Error during force token validation:', error);
       return {
         isValid: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -189,26 +268,75 @@ export class TokenValidationService {
   }
 
   /**
-   * Force token refresh (useful for testing)
+   * Force token refresh (useful for testing) - ENHANCED FOR FIREBASE
    */
   static async forceTokenRefresh(): Promise<{
     success: boolean;
+    method?: string;
     error?: string;
   }> {
     try {
-      console.log('TokenValidationService: Force refreshing token');
-      await this.refreshTokenIfNeeded();
+      console.log('TokenValidationService: Force refreshing token with Firebase');
       
-      return {
-        success: true,
-      };
+      const firebaseUser = auth.currentUser;
+      if (firebaseUser) {
+        try {
+          // Try Firebase refresh first
+          const newToken = await firebaseUser.getIdToken(true);
+          await AsyncStorage.setItem('userToken', `Bearer ${newToken}`);
+          await updateLastLoginTime();
+          
+          return {
+            success: true,
+            method: 'firebase',
+          };
+        } catch (firebaseError) {
+          console.error('TokenValidationService: Firebase force refresh failed:', firebaseError);
+          
+          // Fallback to backend refresh
+          await this.refreshTokenIfNeeded();
+          return {
+            success: true,
+            method: 'backend',
+          };
+        }
+      } else {
+        // No Firebase user, try backend only
+        await this.refreshTokenIfNeeded();
+        return {
+          success: true,
+          method: 'backend',
+        };
+      }
     } catch (error) {
-      console.error('Error during force token refresh:', error);
+      console.error('TokenValidationService: Error during force token refresh:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
+  }
+
+  /**
+   * Check if service is currently active
+   */
+  static isActive(): boolean {
+    return this.isServiceActive;
+  }
+
+  /**
+   * Get service status for debugging
+   */
+  static getServiceStatus(): {
+    isActive: boolean;
+    hasTimer: boolean;
+    firebaseUser: boolean;
+  } {
+    return {
+      isActive: this.isServiceActive,
+      hasTimer: !!this.refreshTimer,
+      firebaseUser: !!auth.currentUser,
+    };
   }
 }
 
