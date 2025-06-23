@@ -542,6 +542,62 @@ app.get('/test-scan-tracking/:userId/:cardIndex?', async (req, res) => {
     }
 });
 
+// Add a new endpoint to handle app requests
+app.post('/app-request', async (req, res) => {
+  try {
+    const { email, userId, source } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+    
+    // Create a timestamp
+    const timestamp = new Date().toISOString();
+    
+    // Create a reference to the app-requests collection
+    const appRequestsRef = admin.firestore().collection('app-requests');
+    
+    // Save the request
+    await appRequestsRef.add({
+      email,
+      userId: userId || null,
+      source: source || 'unknown',
+      platform: req.headers['user-agent'] || 'unknown',
+      status: 'pending',
+      timestamp
+    });
+    
+    // Optional: Add to mailing list collection if exists
+    try {
+      const mailingListRef = admin.firestore().collection('mailing-list');
+      
+      // Check if email already exists
+      const emailSnapshot = await mailingListRef
+        .where('email', '==', email)
+        .limit(1)
+        .get();
+        
+      if (emailSnapshot.empty) {
+        await mailingListRef.add({
+          email,
+          subscribed: true,
+          source: 'app_request',
+          timestamp
+        });
+      }
+    } catch (mailingListError) {
+      console.error('Error adding to mailing list:', mailingListError);
+      // Continue execution - this should not fail the main request
+    }
+    
+    res.status(200).json({ success: true, message: 'App request received' });
+    
+  } catch (error) {
+    console.error('Error processing app request:', error);
+    res.status(500).json({ error: 'Failed to process app request' });
+  }
+});
+
 // Protected routes - after public routes
 app.use('/', userRoutes);
 app.use('/', cardRoutes);
