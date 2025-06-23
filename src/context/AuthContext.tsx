@@ -12,6 +12,8 @@ import { ErrorHandler, ERROR_CODES, handleAuthError, handleStorageError, createA
 // Firebase integration
 import { auth } from '../config/firebaseConfig';
 import { onAuthStateChanged, signOut as firebaseSignOut, User as FirebaseUser } from 'firebase/auth';
+// API utilities for data recovery
+import { buildUrl, ENDPOINTS } from '../utils/api';
 
 // User interface
 export interface User {
@@ -164,6 +166,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           const storedAuthData = await getStoredAuthData();
           
           if (storedAuthData && storedAuthData.userData) {
+            // ✅ HAPPY PATH: Both Firebase user AND stored data exist
             // Update token in storage with fresh Firebase token
             await storeAuthData({
               ...storedAuthData,
@@ -184,8 +187,72 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             
             console.log('AuthProvider: Firebase token updated in context and storage');
           } else {
-            console.log('AuthProvider: Firebase user authenticated but no stored user data');
-            // Firebase user exists but no stored data - might be a fresh login
+            // 🔥 FIX: Firebase user exists but no stored data - DATA INCONSISTENCY
+            console.warn('AuthProvider: Firebase user authenticated but no stored user data - attempting to recover');
+            
+            try {
+              // Try to re-fetch user data from backend using Firebase token
+              const response = await fetch(buildUrl(ENDPOINTS.GET_USER), {
+                method: 'GET',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`,
+                },
+              });
+
+              if (response.ok) {
+                const data = await response.json();
+                console.log('AuthProvider: Successfully recovered user data from backend');
+                
+                const userData = {
+                  ...data.user,
+                  id: data.user.uid || firebaseUser.uid,
+                  name: data.user.name || '',
+                  email: data.user.email || firebaseUser.email || ''
+                };
+
+                // Get keepLoggedIn preference (should still exist)
+                const keepLoggedIn = await getKeepLoggedInPreference();
+                
+                // Store the recovered data
+                await storeAuthData({
+                  userToken: `Bearer ${token}`,
+                  userData: userData,
+                  userRole: userData.plan === 'admin' ? 'admin' : 'user',
+                  keepLoggedIn,
+                  lastLoginTime: Date.now(),
+                });
+
+                // Update context state with recovered data
+                dispatch({
+                  type: 'SET_USER',
+                  payload: {
+                    user: userData,
+                    token: `Bearer ${token}`,
+                    keepLoggedIn,
+                    lastLoginTime: Date.now()
+                  }
+                });
+                
+                console.log('AuthProvider: Data recovery successful - user re-authenticated');
+              } else {
+                throw new Error(`Backend responded with ${response.status}`);
+              }
+            } catch (recoveryError) {
+              console.error('AuthProvider: Failed to recover user data from backend:', recoveryError);
+              console.log('AuthProvider: Forcing logout due to data inconsistency');
+              
+              // If we can't recover data, force logout to maintain consistency
+              try {
+                await firebaseSignOut(auth);
+              } catch (signOutError) {
+                console.error('AuthProvider: Error signing out of Firebase:', signOutError);
+              }
+              
+              await clearAuthData();
+              dispatch({ type: 'CLEAR_USER' });
+              dispatch({ type: 'SET_KEEP_LOGGED_IN', payload: false });
+            }
           }
         } else {
           console.log('Firebase user signed out');
