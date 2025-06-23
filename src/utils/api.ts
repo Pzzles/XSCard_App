@@ -3,6 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ErrorHandler, ERROR_CODES, handleAuthError, handleNetworkError, createAppError } from './errorHandler';
 // Firebase integration for enhanced token refresh
 import { auth } from '../config/firebaseConfig';
+// Import for keepLoggedIn preference check
+import { getKeepLoggedInPreference } from './authStorage';
 
 // Add these types near the top of the file
 export interface PasscreatorResponse {
@@ -38,8 +40,8 @@ export const setGlobalNavigationRef = (navigationRef: any) => {
 // Helper function to get the appropriate base URL
 const getBaseUrl = () => {
 
-  // return 'https://xscard-app.onrender.com';
-     return 'http://localhost:8383';
+   return 'https://xscard-app.onrender.com';
+   //  return 'http://localhost:8383';
  //return 'http://192.168.68.101:8383';
 
 };
@@ -307,6 +309,16 @@ export const authenticatedFetchWithRefresh = async (endpoint: string, options: R
     const needsRefresh = await shouldRefreshToken();
     if (needsRefresh) {
       console.log('[Auth Fetch] Token appears old, attempting refresh before request...');
+      
+      // 🔥 NEW: Check keepLoggedIn preference before refresh
+      const keepLoggedIn = await getKeepLoggedInPreference();
+      if (!keepLoggedIn) {
+        console.log('[Auth Fetch] Token expired and keepLoggedIn is false - forcing logout');
+        const error = createAppError(ERROR_CODES.AUTHENTICATION_FAILED, new Error('Session expired - please log in again'));
+        await handleAuthError(error, () => forceLogoutExpiredToken());
+        throw error;
+      }
+      
       try {
         await refreshAuthToken(); // Now uses Firebase-enhanced refresh
         console.log('[Auth Fetch] Proactive token refresh successful');
@@ -322,6 +334,15 @@ export const authenticatedFetchWithRefresh = async (endpoint: string, options: R
     // If token is expired or invalid (401), handle appropriately
     if (response.status === 401) {
       console.log('[Auth Fetch] Received 401 - token appears expired');
+      
+      // 🔥 NEW: Check keepLoggedIn preference before attempting refresh
+      const keepLoggedIn = await getKeepLoggedInPreference();
+      if (!keepLoggedIn) {
+        console.log('[Auth Fetch] 401 error and keepLoggedIn is false - forcing logout');
+        const error = createAppError(ERROR_CODES.AUTHENTICATION_FAILED, new Error('Session expired - please log in again'));
+        await handleAuthError(error, () => forceLogoutExpiredToken());
+        throw error;
+      }
       
       // Attempt Firebase-enhanced token refresh before logout
       try {

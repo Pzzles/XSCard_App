@@ -5,8 +5,6 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { AuthStackParamList } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { validateCurrentToken } from '../../services/tokenValidationService';
-import { auth } from '../../config/firebaseConfig';
-import { onAuthStateChanged } from 'firebase/auth';
 
 type SplashScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'Splash'>;
 
@@ -15,8 +13,6 @@ export default function SplashScreen() {
   const { isLoading, isAuthenticated, keepLoggedIn } = useAuth();
   const [authCheckStatus, setAuthCheckStatus] = useState<string>('Checking authentication...');
   const [minDisplayTimeElapsed, setMinDisplayTimeElapsed] = useState(false);
-  const [firebaseReady, setFirebaseReady] = useState(false);
-  const [validationComplete, setValidationComplete] = useState(false);
 
   // Ensure minimum display time for smooth UX
   useEffect(() => {
@@ -27,100 +23,45 @@ export default function SplashScreen() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Wait for Firebase auth state to be ready
+  // Handle navigation when auth state is determined and minimum time has elapsed
   useEffect(() => {
-    console.log('SplashScreen: Setting up Firebase auth state listener');
-    
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      console.log('SplashScreen: Firebase auth state ready, user:', !!firebaseUser);
-      setFirebaseReady(true);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  // Enhanced validation when everything is ready
-  useEffect(() => {
-    const validateAuthAndToken = async () => {
-      if (!isLoading && firebaseReady && !validationComplete) {
-        console.log('SplashScreen: Starting enhanced authentication validation');
-        console.log('SplashScreen: Auth state:', { isAuthenticated, keepLoggedIn });
-        console.log('SplashScreen: Firebase user:', !!auth.currentUser);
-        
-        setAuthCheckStatus('Validating session...');
-        
-        try {
-          if (isAuthenticated && keepLoggedIn) {
-            console.log('SplashScreen: User appears authenticated with keepLoggedIn enabled');
-            setAuthCheckStatus('Welcome back!');
-            
-            // Check Firebase user exists
-            const firebaseUser = auth.currentUser;
-            if (!firebaseUser) {
-              console.log('SplashScreen: No Firebase user found after auth state ready');
-              setAuthCheckStatus('Session expired...');
-              setValidationComplete(true);
-              return;
-            }
-            
-            console.log('SplashScreen: Firebase user confirmed:', firebaseUser.uid);
-            
-            // Validate stored token with Firebase user available
-            console.log('SplashScreen: Validating stored token...');
-            const isTokenValid = await validateCurrentToken();
-            
-            if (isTokenValid) {
-              console.log('SplashScreen: Token validation successful');
-              setAuthCheckStatus('Welcome back!');
-            } else {
-              console.log('SplashScreen: Token validation failed');
-              setAuthCheckStatus('Session expired...');
-            }
-          } else {
-            console.log('SplashScreen: User not authenticated or keepLoggedIn disabled');
-            setAuthCheckStatus('Loading...');
-          }
-        } catch (error) {
-          console.error('SplashScreen: Error during token validation:', error);
-          setAuthCheckStatus('Authentication error...');
-        }
-        
-        setValidationComplete(true);
-      }
-    };
-
-    validateAuthAndToken();
-  }, [isLoading, isAuthenticated, keepLoggedIn, firebaseReady, validationComplete]);
-
-  // Handle navigation when all checks are complete
-  useEffect(() => {
-    if (!isLoading && minDisplayTimeElapsed && firebaseReady && validationComplete) {
-      console.log('SplashScreen: All checks complete, determining navigation');
-      console.log('SplashScreen: Final auth state:', { isAuthenticated, keepLoggedIn });
-      console.log('SplashScreen: Firebase user:', !!auth.currentUser);
+    if (!isLoading && minDisplayTimeElapsed) {
+      console.log('SplashScreen: Auth state determined:', { isAuthenticated, keepLoggedIn });
       
-      if (isAuthenticated && keepLoggedIn && auth.currentUser) {
-        console.log('SplashScreen: User authenticated with valid session');
+      if (isAuthenticated && keepLoggedIn) {
+        console.log('SplashScreen: User authenticated with keepLoggedIn enabled');
+        setAuthCheckStatus('Welcome back!');
+        
+        // Validate token in background but don't block navigation
+        validateCurrentToken().then(isValid => {
+          if (!isValid) {
+            console.log('SplashScreen: Token validation failed, but AuthContext will handle refresh');
+          }
+        }).catch(error => {
+          console.log('SplashScreen: Token validation error:', error);
+        });
+        
         setTimeout(() => {
           console.log('SplashScreen: Navigating to MainApp');
           navigation.replace('MainApp');
         }, 500);
       } else {
-        console.log('SplashScreen: Redirecting to SignIn');
+        console.log('SplashScreen: User not authenticated or keepLoggedIn disabled');
+        setAuthCheckStatus('Loading...');
         setTimeout(() => {
           console.log('SplashScreen: Navigating to SignIn');
           navigation.replace('SignIn');
         }, 500);
       }
-    } else if (!isLoading && !minDisplayTimeElapsed && firebaseReady && validationComplete) {
-      // Auth and token validation are ready but still showing splash for UX
-      if (isAuthenticated && keepLoggedIn && auth.currentUser) {
+    } else if (!isLoading && !minDisplayTimeElapsed) {
+      // Auth is ready but still showing splash for UX
+      if (isAuthenticated && keepLoggedIn) {
         setAuthCheckStatus('Welcome back!');
       } else {
         setAuthCheckStatus('Loading...');
       }
     }
-  }, [isLoading, isAuthenticated, keepLoggedIn, minDisplayTimeElapsed, firebaseReady, validationComplete, navigation]);
+  }, [isLoading, isAuthenticated, keepLoggedIn, minDisplayTimeElapsed, navigation]);
 
   return (
     <View style={styles.container}>
