@@ -13,7 +13,8 @@ const { authenticateUser } = require('../middleware/auth');
 
 // Public routes - no authentication needed
 router.get('/subscription/trial/callback', handleTrialCallback);
-router.post('/subscription/webhook', handleSubscriptionWebhook);
+// TEMPORARILY DISABLED - Webhook route disabled due to suspected external money transfers
+// router.post('/subscription/webhook', handleSubscriptionWebhook);
 
 // Protected routes - authentication required
 router.post('/subscription/trial/initialize', authenticateUser, initializeTrialSubscription);
