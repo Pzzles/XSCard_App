@@ -36,6 +36,7 @@ const meetingRoutes = require('./routes/meetingRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const subscriptionRoutes = require('./routes/subscriptionRoutes'); // Add subscription routes
 const apkRoutes = require('./routes/apkRoutes'); // Add APK routes
+const eventRoutes = require('./routes/eventRoutes'); // Add event routes
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -599,7 +600,8 @@ app.post('/app-request', async (req, res) => {
 });
 
 // Protected routes - after public routes
-app.use('/', userRoutes);
+app.use('/', userRoutes); // Put userRoutes FIRST so SignIn works
+app.use('/', eventRoutes); // Event routes after user routes
 app.use('/', cardRoutes);
 app.use('/', contactRoutes);
 app.use('/', meetingRoutes);

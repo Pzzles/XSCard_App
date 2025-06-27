@@ -1073,3 +1073,181 @@ exports.testTokenRefreshSuccess = async (req, res) => {
         });
     }
 };
+
+// EVENT PREFERENCES FUNCTIONALITY
+
+// Update user event preferences
+exports.updateEventPreferences = async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        const { eventPreferences } = req.body;
+
+        if (!eventPreferences) {
+            return res.status(400).json({
+                success: false,
+                message: 'Event preferences data is required'
+            });
+        }
+
+        // Initialize default preferences if they don't exist
+        const defaultPreferences = {
+            receiveEventNotifications: true,
+            receiveNewEventBroadcasts: true,
+            receiveEventUpdates: true,
+            receiveEventReminders: true,
+            preferredCategories: [],
+            locationRadius: 50,
+            preferredLocation: null
+        };
+
+        // Merge with provided preferences, ensuring all fields have values
+        const updatedPreferences = {
+            receiveEventNotifications: eventPreferences.receiveEventNotifications ?? defaultPreferences.receiveEventNotifications,
+            receiveNewEventBroadcasts: eventPreferences.receiveNewEventBroadcasts ?? defaultPreferences.receiveNewEventBroadcasts,
+            receiveEventUpdates: eventPreferences.receiveEventUpdates ?? defaultPreferences.receiveEventUpdates,
+            receiveEventReminders: eventPreferences.receiveEventReminders ?? defaultPreferences.receiveEventReminders,
+            preferredCategories: eventPreferences.preferredCategories || defaultPreferences.preferredCategories,
+            locationRadius: eventPreferences.locationRadius || defaultPreferences.locationRadius,
+            preferredLocation: eventPreferences.preferredLocation || defaultPreferences.preferredLocation
+        };
+
+        // Check if user exists
+        const userRef = db.collection('users').doc(userId);
+        const userDoc = await userRef.get();
+
+        if (!userDoc.exists) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Update user document with event preferences
+        await userRef.update({
+            eventPreferences: updatedPreferences,
+            updatedAt: admin.firestore.Timestamp.now()
+        });
+
+        console.log(`Event preferences updated for user ${userId}:`, updatedPreferences);
+
+        res.status(200).json({
+            success: true,
+            message: 'Event preferences updated successfully',
+            eventPreferences: updatedPreferences
+        });
+
+    } catch (error) {
+        console.error('Error updating event preferences:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error updating preferences',
+            error: error.message
+        });
+    }
+};
+
+// Get user event preferences
+exports.getEventPreferences = async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        
+        const userDoc = await db.collection('users').doc(userId).get();
+        
+        if (!userDoc.exists) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        const userData = userDoc.data();
+
+        // Default preferences if none exist
+        const defaultPreferences = {
+            receiveEventNotifications: true,
+            receiveNewEventBroadcasts: true,
+            receiveEventUpdates: true,
+            receiveEventReminders: true,
+            preferredCategories: [],
+            locationRadius: 50,
+            preferredLocation: null
+        };
+
+        const preferences = userData.eventPreferences || defaultPreferences;
+
+        res.status(200).json({
+            success: true,
+            data: { 
+                eventPreferences: preferences 
+            }
+        });
+
+    } catch (error) {
+        console.error('Error fetching event preferences:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching preferences',
+            error: error.message
+        });
+    }
+};
+
+// Initialize user event preferences if they don't exist
+exports.initializeEventPreferences = async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        
+        const userRef = db.collection('users').doc(userId);
+        const userDoc = await userRef.get();
+
+        if (!userDoc.exists) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        const userData = userDoc.data();
+
+        // Check if preferences already exist
+        if (userData.eventPreferences) {
+            return res.status(200).json({
+                success: true,
+                message: 'Event preferences already exist',
+                eventPreferences: userData.eventPreferences
+            });
+        }
+
+        // Initialize with default preferences
+        const defaultPreferences = {
+            receiveEventNotifications: true,
+            receiveNewEventBroadcasts: true,
+            receiveEventUpdates: true,
+            receiveEventReminders: true,
+            preferredCategories: [],
+            locationRadius: 50,
+            preferredLocation: null
+        };
+
+        await userRef.update({
+            eventPreferences: defaultPreferences,
+            updatedAt: admin.firestore.Timestamp.now()
+        });
+
+        console.log(`Event preferences initialized for user ${userId}`);
+
+        res.status(200).json({
+            success: true,
+            message: 'Event preferences initialized successfully',
+            eventPreferences: defaultPreferences
+        });
+
+    } catch (error) {
+        console.error('Error initializing event preferences:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error initializing preferences',
+            error: error.message
+        });
+    }
+};
