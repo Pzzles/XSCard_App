@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XSCard Events - WebSocket Test</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .header p {
+            opacity: 0.8;
+            font-size: 16px;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .login-form {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input[type="email"], input[type="password"] {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e1e5e9;
+            border-radius: 6px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="email"]:focus, input[type="password"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+            width: 100%;
+        }
+
+        .btn:hover {
+            background: #5a6fd8;
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .status {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+
+        .status.disconnected {
+            background: #fee;
+            color: #c53030;
+            border-left: 4px solid #c53030;
+        }
+
+        .status.connected {
+            background: #f0fff4;
+            color: #22543d;
+            border-left: 4px solid #22543d;
+        }
+
+        .status.connecting {
+            background: #fffaf0;
+            color: #c05621;
+            border-left: 4px solid #c05621;
+        }
+
+        .notifications {
+            margin-top: 30px;
+        }
+
+        .notification {
+            background: #e6fffa;
+            border-left: 4px solid #38b2ac;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 0 6px 6px 0;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .notification.new-event {
+            background: #e6fffa;
+            border-left-color: #38b2ac;
+        }
+
+        .notification.event-update {
+            background: #fff5e6;
+            border-left-color: #ed8936;
+        }
+
+        .notification.event-cancelled {
+            background: #fed7d7;
+            border-left-color: #e53e3e;
+        }
+
+        .notification.loaded {
+            background: #f8f9fa;
+            border-left-style: dashed;
+            opacity: 0.85;
+        }
+
+        .notification.real-time {
+            border-left-style: solid;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .notification h3 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        .notification p {
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .notification .timestamp {
+            font-size: 12px;
+            color: #999;
+            margin-top: 10px;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .user-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .logout-btn {
+            background: #e53e3e;
+            margin-top: 10px;
+            width: auto;
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+
+        .logout-btn:hover {
+            background: #c53030;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔔 XSCard Events - Real-time Test</h1>
+            <p>WebSocket Broadcasting Test Page</p>
+        </div>
+
+        <div class="content">
+            <!-- Login Form -->
+            <div id="loginSection" class="login-form">
+                <h2 style="margin-bottom: 20px; color: #2c3e50;">Login to Test WebSocket</h2>
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label for="email">Email:</label>
+                        <input type="email" id="email" value="testehakke@gufum.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password:</label>
+                        <input type="password" id="password" value="123456" required>
+                    </div>
+                    <button type="submit" class="btn" id="loginBtn">Connect & Login</button>
+                </form>
+            </div>
+
+            <!-- Connected Section -->
+            <div id="connectedSection" class="hidden">
+                <div class="user-info">
+                    <h3>👤 Logged in as: <span id="userEmail"></span></h3>
+                    <p>User ID: <span id="userId"></span></p>
+                    <button class="btn logout-btn" onclick="logout()">Logout</button>
+                </div>
+
+                <!-- Connection Status -->
+                <div id="status" class="status disconnected">
+                    🔌 Disconnected
+                </div>
+
+                <!-- Instructions -->
+                <div style="background: #f0f8ff; padding: 20px; border-radius: 6px; margin-bottom: 20px;">
+                    <h3>🧪 How to Test:</h3>
+                    <ol style="margin-left: 20px; line-height: 1.6;">
+                        <li>Keep this page open and logged in</li>
+                        <li>Open Postman or another browser window</li>
+                        <li>Sign in with a <strong>different user</strong></li>
+                        <li>Create and publish an event via API</li>
+                        <li>Watch for real-time notifications below! 👇</li>
+                    </ol>
+                </div>
+
+                <!-- Notifications Area -->
+                <div class="notifications">
+                    <h3>🔔 Real-time Event Notifications</h3>
+                    <div id="notificationsList">
+                        <p style="color: #666; font-style: italic;">Waiting for event notifications...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let socket = null;
+        let authToken = null;
+        let currentUser = null;
+        let trackedEvents = new Map(); // Track events by ID for updates/removals
+        let eventHistory = new Set(); // Track which events we've shown (deduplication)
+        let eventStates = new Map(); // Track event lifecycle states
+        let isLoadingHistory = false;
+        let pendingNotifications = []; // Queue notifications during history load
+
+        // Event lifecycle states
+        const EVENT_STATES = {
+            CREATED: 'created',
+            UPDATED: 'updated', 
+            PUBLISHED: 'published',
+            CANCELLED: 'cancelled'
+        };
+
+        // Login functionality
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const loginBtn = document.getElementById('loginBtn');
+            
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Connecting...';
+            
+            try {
+                // Authenticate with API
+                const response = await fetch('/SignIn', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Login failed: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                authToken = data.token;
+                currentUser = data.user;
+                
+                // Show connected section
+                document.getElementById('loginSection').classList.add('hidden');
+                document.getElementById('connectedSection').classList.remove('hidden');
+                
+                // Update user info
+                document.getElementById('userEmail').textContent = currentUser.email;
+                document.getElementById('userId').textContent = currentUser.uid;
+                
+                // Connect WebSocket and load history
+                await initializeEventHistory();
+                
+            } catch (error) {
+                alert('Login failed: ' + error.message);
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Connect & Login';
+            }
+        });
+
+        // Initialize complete event history system
+        async function initializeEventHistory() {
+            try {
+                updateStatus('connecting', '🔄 Loading event history...');
+                isLoadingHistory = true;
+                
+                // 1. Load recent published events from API
+                await loadRecentEvents();
+                
+                // 2. Connect WebSocket for real-time updates
+                connectWebSocket();
+                
+                // 3. Process any queued notifications
+                processPendingNotifications();
+                
+                isLoadingHistory = false;
+                updateStatus('connected', '✅ Connected with history loaded');
+                
+            } catch (error) {
+                console.error('Error initializing event history:', error);
+                isLoadingHistory = false;
+                // Still try to connect WebSocket
+                connectWebSocket();
+            }
+        }
+
+        // Load recent events from API
+        async function loadRecentEvents() {
+            try {
+                console.log('🔄 Loading recent events from API...');
+                const response = await fetch('/events/public?limit=10', {
+                    headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
+                });
+                
+                console.log('📡 API Response status:', response.status);
+                
+                if (!response.ok) {
+                    console.error('❌ API request failed:', response.status, response.statusText);
+                    throw new Error(`Failed to load events: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('📊 API Response data:', data);
+                
+                if (!data.success || !data.data || !data.data.events) {
+                    console.error('❌ Unexpected API response structure:', data);
+                    return;
+                }
+                
+                console.log(`📅 Found ${data.data.events.length} events from API`);
+                
+                if (data.data.events.length === 0) {
+                    console.log('ℹ️ No published events found in database');
+                    // Show a helpful message
+                    const notificationsList = document.getElementById('notificationsList');
+                    if (notificationsList.children.length === 1 && 
+                        notificationsList.firstElementChild.tagName === 'P') {
+                        notificationsList.innerHTML = '<p style="color: #666; font-style: italic;">No events found. Create and publish events to see them here!</p>';
+                    }
+                    return;
+                }
+                
+                // Sort events by publishedAt or createdAt (newest first)
+                const events = data.data.events.sort((a, b) => {
+                    const timeA = new Date(b.publishedAt || b.createdAt);
+                    const timeB = new Date(a.publishedAt || a.createdAt);
+                    return timeA - timeB;
+                });
+                
+                console.log('📝 Events to load:', events.map(e => ({ id: e.id, title: e.title, status: e.status })));
+                
+                // Add each event as a loaded notification
+                events.forEach(event => {
+                    console.log(`➕ Loading event: ${event.title} (${event.id})`);
+                    addEventNotification('new-event', 'Published Event', {
+                        event: event,
+                        timestamp: event.publishedAt || event.createdAt
+                    }, false, true); // Mark as loaded, not real-time
+                });
+                
+                console.log(`✅ Successfully loaded ${events.length} recent events`);
+                
+            } catch (error) {
+                console.error('❌ Failed to load recent events:', error);
+                // Show error message to user
+                const notificationsList = document.getElementById('notificationsList');
+                if (notificationsList.children.length === 1 && 
+                    notificationsList.firstElementChild.tagName === 'P') {
+                    notificationsList.innerHTML = '<p style="color: #e53e3e; font-style: italic;">Failed to load event history. WebSocket notifications will still work!</p>';
+                }
+            }
+        }
+
+        // WebSocket connection
+        function connectWebSocket() {
+            updateStatus('connecting', '🔄 Connecting to WebSocket...');
+            
+            socket = io({
+                auth: { token: authToken },
+                transports: ['websocket', 'polling']
+            });
+
+            socket.on('connect', () => {
+                updateStatus('connected', '✅ Connected to WebSocket');
+                console.log('Connected with socket ID:', socket.id);
+            });
+
+            socket.on('connection_confirmed', (data) => {
+                console.log('Connection confirmed:', data);
+                updateStatus('connected', `✅ Connected - ${data.connectedUsers} users online`);
+            });
+
+            socket.on('connect_error', (error) => {
+                console.error('Connection error:', error);
+                updateStatus('disconnected', '❌ Connection failed: ' + error.message);
+            });
+
+            socket.on('disconnect', (reason) => {
+                console.log('Disconnected:', reason);
+                updateStatus('disconnected', '🔌 Disconnected: ' + reason);
+            });
+
+            // Event notifications with smart handling
+            socket.on('new_event', (data) => {
+                console.log('New event received:', data);
+                handleRealtimeNotification('new-event', 'New Event Published!', data);
+            });
+
+            socket.on('event_update', (data) => {
+                console.log('Event update received:', data);
+                let title = 'Event Updated!';
+                if (data.type === 'event_cancelled') {
+                    title = 'Event Cancelled!';
+                }
+                handleRealtimeNotification('event-update', title, data);
+            });
+
+            socket.on('event_cancelled', (data) => {
+                console.log('Event cancelled received:', data);
+                handleRealtimeNotification('event-cancelled', 'Event Cancelled!', data);
+            });
+
+            socket.on('new_registration', (data) => {
+                console.log('New registration received:', data);
+                handleRealtimeNotification('new-event', 'New Registration!', data);
+            });
+        }
+
+        // Handle real-time notifications with smart queuing
+        function handleRealtimeNotification(type, title, data) {
+            if (isLoadingHistory) {
+                // Queue notification if we're still loading history
+                pendingNotifications.push({ type, title, data, timestamp: Date.now() });
+                return;
+            }
+            
+            addEventNotification(type, title, data, false, false);
+        }
+
+        // Process notifications that were queued during history loading
+        function processPendingNotifications() {
+            if (pendingNotifications.length === 0) return;
+            
+            console.log(`Processing ${pendingNotifications.length} queued notifications`);
+            
+            // Sort by timestamp
+            pendingNotifications.sort((a, b) => a.timestamp - b.timestamp);
+            
+            // Process each notification
+            pendingNotifications.forEach(notif => {
+                addEventNotification(notif.type, notif.title, notif.data, false, false);
+            });
+            
+            pendingNotifications = [];
+        }
+
+        // Smart event notification system with deduplication and state management
+        function addEventNotification(type, title, data, isCancellation = false, isLoaded = false) {
+            const event = data.event || {};
+            const eventId = event.id;
+            
+            if (!eventId) {
+                console.warn('Event notification missing ID:', data);
+                return;
+            }
+
+            // Handle cancellation - remove original event
+            if (type === 'event-cancelled' || isCancellation) {
+                removeEventFromList(eventId);
+                // Add cancellation notification briefly
+                addNotificationToDOM('event-cancelled', 'Event Cancelled!', data, true, isLoaded);
+                updateEventState(eventId, EVENT_STATES.CANCELLED);
+                return;
+            }
+
+            // Handle updates - remove old version if exists
+            if (type === 'event-update') {
+                removeEventFromList(eventId);
+                updateEventState(eventId, EVENT_STATES.UPDATED);
+            } else if (type === 'new-event') {
+                // Check if this is a duplicate of a loaded event
+                if (eventHistory.has(eventId) && !isLoaded) {
+                    console.log(`Skipping duplicate event: ${eventId}`);
+                    return;
+                }
+                updateEventState(eventId, isLoaded ? EVENT_STATES.PUBLISHED : EVENT_STATES.CREATED);
+            }
+
+            // Add the notification
+            addNotificationToDOM(type, title, data, isCancellation, isLoaded);
+            
+            // Track this event
+            eventHistory.add(eventId);
+        }
+
+        // Add notification to DOM with smart positioning
+        function addNotificationToDOM(type, title, data, isCancellation = false, isLoaded = false) {
+            const notificationsList = document.getElementById('notificationsList');
+            
+            // Clear the "waiting" message if it's there
+            if (notificationsList.children.length === 1 && 
+                notificationsList.firstElementChild.tagName === 'P') {
+                notificationsList.innerHTML = '';
+            }
+            
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            
+            // Add visual distinction for loaded vs real-time
+            if (isLoaded) {
+                notification.classList.add('loaded');
+            } else {
+                notification.classList.add('real-time');
+            }
+            
+            const event = data.event || {};
+            const eventId = event.id;
+            const timestamp = new Date(data.timestamp).toLocaleTimeString();
+            
+            // Add event ID as data attribute for removal (except cancellations)
+            if (eventId && !isCancellation) {
+                notification.setAttribute('data-event-id', eventId);
+                trackedEvents.set(eventId, notification);
+            }
+            
+            notification.innerHTML = `
+                <h3>${title} ${isLoaded ? '<span style="font-size: 12px; opacity: 0.6;">(loaded)</span>' : ''}</h3>
+                <p><strong>Event:</strong> ${event.title || 'Unknown'}</p>
+                <p><strong>Category:</strong> ${event.category || 'Unknown'}</p>
+                <p><strong>Type:</strong> ${event.eventType || 'Unknown'} ${event.ticketPrice > 0 ? `(R${event.ticketPrice})` : '(Free)'}</p>
+                <p><strong>Organizer:</strong> ${event.organizerInfo?.name || 'Unknown'}</p>
+                ${event.location ? `<p><strong>Location:</strong> ${event.location.venue || event.location.city || 'Unknown'}</p>` : ''}
+                <div class="timestamp">📅 ${timestamp}</div>
+            `;
+            
+            // Smart positioning: real-time notifications go to top, loaded ones are in chronological order
+            if (isLoaded) {
+                notificationsList.appendChild(notification);
+            } else {
+                notificationsList.insertBefore(notification, notificationsList.firstChild);
+            }
+            
+            // Play notification sound for real-time events only
+            if (!isLoaded) {
+                try {
+                    const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N+QQAoUXrTp66hVFApGn+DyvmEaBjiO1e/CdSYEJXfM8+CQQAoMW7Xs7qhVGQhXq+zyvmEaBjiN1O7EdiYEJnfR8+CQQAoOW7Xu7qhVGAhYrObzsGceBC6Dz/DBeSYEJXPH8uONOAkRYrvp56dYFAhbru3uvmIaBDAA');
+                    audio.volume = 0.3;
+                    audio.play().catch(() => {});
+                } catch (e) {}
+            }
+            
+            // Remove old notifications (keep max 15)
+            while (notificationsList.children.length > 15) {
+                const lastChild = notificationsList.lastChild;
+                const eventId = lastChild.getAttribute('data-event-id');
+                if (eventId) {
+                    trackedEvents.delete(eventId);
+                }
+                notificationsList.removeChild(lastChild);
+            }
+        }
+
+        // Update connection status
+        function updateStatus(type, message) {
+            const statusEl = document.getElementById('status');
+            statusEl.className = `status ${type}`;
+            statusEl.textContent = message;
+        }
+
+        // Remove event from the list with animation
+        function removeEventFromList(eventId) {
+            if (!eventId) return;
+            
+            const eventElement = document.querySelector(`[data-event-id="${eventId}"]`);
+            if (eventElement) {
+                // Add fade-out animation before removing
+                eventElement.style.transition = 'opacity 0.5s ease-out, transform 0.5s ease-out';
+                eventElement.style.opacity = '0';
+                eventElement.style.transform = 'translateX(-20px)';
+                
+                // Remove after animation
+                setTimeout(() => {
+                    eventElement.remove();
+                    trackedEvents.delete(eventId);
+                }, 500);
+            }
+        }
+
+        // Track event lifecycle states
+        function updateEventState(eventId, state) {
+            if (!eventStates.has(eventId)) {
+                eventStates.set(eventId, {
+                    id: eventId,
+                    states: [],
+                    currentState: state,
+                    lastUpdated: Date.now()
+                });
+            } else {
+                const eventState = eventStates.get(eventId);
+                eventState.states.push(eventState.currentState);
+                eventState.currentState = state;
+                eventState.lastUpdated = Date.now();
+            }
+        }
+
+        // Logout functionality
+        function logout() {
+            if (socket) {
+                socket.disconnect();
+            }
+            
+            authToken = null;
+            currentUser = null;
+            trackedEvents.clear();
+            eventHistory.clear();
+            eventStates.clear();
+            pendingNotifications = [];
+            isLoadingHistory = false;
+            
+            document.getElementById('loginSection').classList.remove('hidden');
+            document.getElementById('connectedSection').classList.add('hidden');
+            document.getElementById('loginBtn').disabled = false;
+            document.getElementById('loginBtn').textContent = 'Connect & Login';
+            
+            // Clear notifications
+            document.getElementById('notificationsList').innerHTML = 
+                '<p style="color: #666; font-style: italic;">Waiting for event notifications...</p>';
+        }
+    </script>
+</body>
+</html> 

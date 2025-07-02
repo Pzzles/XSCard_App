@@ -155,11 +155,6 @@ exports.publishEvent = async (req, res) => {
     const updatedDoc = await eventRef.get();
     const updatedEvent = updatedDoc.data();
 
-    // TODO: Broadcast to connected users when socket service is available
-    // if (req.app.socketService) {
-    //   await req.app.socketService.broadcastNewEvent(updatedEvent);
-    // }
-
     res.status(200).json({
       success: true,
       message: 'Event published successfully',
@@ -402,11 +397,6 @@ exports.updateEvent = async (req, res) => {
     const updatedDoc = await eventRef.get();
     const updatedEvent = updatedDoc.data();
 
-    // TODO: Broadcast update to registered users when socket service is available
-    // if (updatedEvent.status === 'published' && req.app.socketService) {
-    //   await req.app.socketService.broadcastEventUpdate(updatedEvent, 'event_update');
-    // }
-
     res.status(200).json({
       success: true,
       message: 'Event updated successfully',
@@ -422,7 +412,7 @@ exports.updateEvent = async (req, res) => {
   }
 };
 
-// Delete event
+// Delete event (now cancels event instead)
 exports.deleteEvent = async (req, res) => {
   try {
     const { eventId } = req.params;
@@ -440,25 +430,40 @@ exports.deleteEvent = async (req, res) => {
       return sendError(res, 403, 'Not authorized to delete this event');
     }
 
-    // Check if event has registrations
-    const registrations = await db.collection('event_registrations')
-      .where('eventId', '==', eventId)
-      .get();
-
-    if (registrations.size > 0) {
-      return sendError(res, 400, 'Cannot delete event with existing registrations. Cancel the event instead.');
+    // Check if event is already cancelled
+    if (eventData.status === 'cancelled') {
+      return sendError(res, 400, 'Event is already cancelled');
     }
 
-    // Delete event
-    await db.collection('events').doc(eventId).delete();
+    // Cancel the event instead of deleting
+    await db.collection('events').doc(eventId).update({
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    // Get updated event data for broadcasting
+    const updatedEventDoc = await db.collection('events').doc(eventId).get();
+    const updatedEventData = updatedEventDoc.data();
+
+    // Store event data for broadcasting middleware
+    req.eventData = {
+      ...updatedEventData,
+      eventDate: formatDate(updatedEventData.eventDate),
+      endDate: updatedEventData.endDate ? formatDate(updatedEventData.endDate) : null
+    };
+    req.broadcastType = 'event_cancelled';
 
     res.status(200).json({
       success: true,
-      message: 'Event deleted successfully'
+      message: 'Event cancelled successfully',
+      data: {
+        event: req.eventData
+      }
     });
 
   } catch (error) {
-    sendError(res, 500, 'Error deleting event', error);
+    sendError(res, 500, 'Error cancelling event', error);
   }
 };
 

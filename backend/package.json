@@ -32,5 +32,8 @@
     "react-native": "0.76.9",
     "react-native-modal": "^13.0.1",
     "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.1"
   }
 }
