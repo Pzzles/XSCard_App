@@ -1,0 +1,417 @@
+{
+	"info": {
+		"_postman_id": "phase2b-test3-price-filtering",
+		"name": "Phase 2B Test 3: Event Type & Price Range Filtering",
+		"description": "Testing event type preferences (free/paid), price range filtering, and registration broadcasting",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8383",
+			"type": "string"
+		},
+		{
+			"key": "user1Token",
+			"value": "",
+			"type": "string",
+			"description": "Free events only user"
+		},
+		{
+			"key": "user2Token", 
+			"value": "",
+			"type": "string",
+			"description": "Price range user (R100-R500)"
+		},
+		{
+			"key": "user3Token",
+			"value": "",
+			"type": "string",
+			"description": "Event creator"
+		},
+		{
+			"key": "testEventId",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Setup Price Preferences",
+			"item": [
+				{
+					"name": "1. Authenticate Users",
+					"item": [
+						{
+							"name": "1a. User 1 (Free Events Only)",
+							"request": {
+								"method": "POST",
+								"header": [{"key": "Content-Type", "value": "application/json"}],
+								"body": {"mode": "raw", "raw": "{\n    \"email\": \"testehakke@gufum.com\",\n    \"password\": \"123456\"\n}"},
+								"url": {"raw": "{{baseUrl}}/SignIn", "host": ["{{baseUrl}}"], "path": ["SignIn"]}
+							},
+							"event": [{"listen": "test", "script": {"exec": ["pm.test('User 1 auth success', () => { pm.response.to.have.status(200); pm.collectionVariables.set('user1Token', pm.response.json().token); });"]}}]
+						},
+						{
+							"name": "1b. User 2 (Price Range)",
+							"request": {
+								"method": "POST",
+								"header": [{"key": "Content-Type", "value": "application/json"}],
+								"body": {"mode": "raw", "raw": "{\n    \"email\": \"pule@xspark.co.za\",\n    \"password\": \"P.zzle$0\"\n}"},
+								"url": {"raw": "{{baseUrl}}/SignIn", "host": ["{{baseUrl}}"], "path": ["SignIn"]}
+							},
+							"event": [{"listen": "test", "script": {"exec": ["pm.test('User 2 auth success', () => { pm.response.to.have.status(200); pm.collectionVariables.set('user2Token', pm.response.json().token); });"]}}]
+						},
+						{
+							"name": "1c. User 3 (Creator)",
+							"request": {
+								"method": "POST",
+								"header": [{"key": "Content-Type", "value": "application/json"}],
+								"body": {"mode": "raw", "raw": "{\n    \"email\": \"hapah71805@coasah.com\",\n    \"password\": \"Password.10\"\n}"},
+								"url": {"raw": "{{baseUrl}}/SignIn", "host": ["{{baseUrl}}"], "path": ["SignIn"]}
+							},
+							"event": [{"listen": "test", "script": {"exec": ["pm.test('User 3 auth success', () => { pm.response.to.have.status(200); pm.collectionVariables.set('user3Token', pm.response.json().token); });"]}}]
+						}
+					]
+				},
+				{
+					"name": "2. Configure User 1 (Free Events Only)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{user1Token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"eventPreferences\": {\n        \"receiveEventNotifications\": true,\n        \"receiveNewEventBroadcasts\": true,\n        \"preferredCategories\": [],\n        \"eventTypePreference\": \"free\",\n        \"priceRange\": null\n    }\n}"
+						},
+						"url": {"raw": "{{baseUrl}}/user/event-preferences", "host": ["{{baseUrl}}"], "path": ["user", "event-preferences"]}
+					},
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('User 1 configured for free events', () => { pm.response.to.have.status(200); console.log('✅ User 1: Free events only'); });"]}}]
+				},
+				{
+					"name": "3. Configure User 2 (R100-R500 Range)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{user2Token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"eventPreferences\": {\n        \"receiveEventNotifications\": true,\n        \"receiveNewEventBroadcasts\": true,\n        \"preferredCategories\": [],\n        \"eventTypePreference\": null,\n        \"priceRange\": {\"min\": 100, \"max\": 500}\n    }\n}"
+						},
+						"url": {"raw": "{{baseUrl}}/user/event-preferences", "host": ["{{baseUrl}}"], "path": ["user", "event-preferences"]}
+					},
+					"event": [{"listen": "test", "script": {"exec": ["pm.test('User 2 configured for price range', () => { pm.response.to.have.status(200); console.log('✅ User 2: R100-R500 price range'); });"]}}]
+				}
+			]
+		},
+		{
+			"name": "Price Filtering Tests",
+			"item": [
+				{
+					"name": "4. Create Free Event (Should Match User 1 Only)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{user3Token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Free Community Workshop\",\n    \"description\": \"Testing free event filtering\",\n    \"eventDate\": \"2024-12-01T18:00:00.000Z\",\n    \"location\": {\"venue\": \"Community Center\", \"city\": \"Cape Town\", \"country\": \"South Africa\"},\n    \"category\": \"tech\",\n    \"eventType\": \"free\",\n    \"ticketPrice\": 0,\n    \"visibility\": \"public\",\n    \"tags\": [\"phase2b\", \"test3\", \"free\"]\n}"
+						},
+						"url": {"raw": "{{baseUrl}}/events", "host": ["{{baseUrl}}"], "path": ["events"]}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Free event created', () => {",
+									"    pm.response.to.have.status(201);",
+									"    const event = pm.response.json().event;",
+									"    pm.expect(event.eventType).to.equal('free');",
+									"    pm.expect(event.ticketPrice).to.equal(0);",
+									"    pm.collectionVariables.set('testEventId', event.id);",
+									"});",
+									"",
+									"// Auto-publish",
+									"const eventId = pm.response.json().event.id;",
+									"setTimeout(() => {",
+									"    pm.sendRequest({",
+									"        url: pm.variables.get('baseUrl') + '/events/' + eventId + '/publish',",
+									"        method: 'POST',",
+									"        header: { 'Authorization': 'Bearer ' + pm.collectionVariables.get('user3Token') }",
+									"    }, (err, res) => {",
+									"        if (res && res.code === 200) {",
+									"            console.log('📡 Free event published - should notify:');",
+									"            console.log('   ✅ User 1: Wants free events');",
+									"            console.log('   ❌ User 2: Outside price range (wants R100-R500)');",
+									"        }",
+									"    });",
+									"}, 1000);"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "5. Create R50 Event (Should NOT Match Either)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{user3Token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Cheap Workshop - R50\",\n    \"description\": \"Testing low price filtering\",\n    \"eventDate\": \"2024-12-05T18:00:00.000Z\",\n    \"location\": {\"venue\": \"Budget Venue\", \"city\": \"Cape Town\", \"country\": \"South Africa\"},\n    \"category\": \"business\",\n    \"eventType\": \"paid\",\n    \"ticketPrice\": 50,\n    \"visibility\": \"public\",\n    \"tags\": [\"phase2b\", \"test3\", \"cheap\"]\n}"
+						},
+						"url": {"raw": "{{baseUrl}}/events", "host": ["{{baseUrl}}"], "path": ["events"]}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('R50 event created', () => {",
+									"    pm.response.to.have.status(201);",
+									"    pm.expect(pm.response.json().event.ticketPrice).to.equal(50);",
+									"});",
+									"",
+									"// Auto-publish",
+									"const eventId = pm.response.json().event.id;",
+									"setTimeout(() => {",
+									"    pm.sendRequest({",
+									"        url: pm.variables.get('baseUrl') + '/events/' + eventId + '/publish',",
+									"        method: 'POST',",
+									"        header: { 'Authorization': 'Bearer ' + pm.collectionVariables.get('user3Token') }",
+									"    }, (err, res) => {",
+									"        if (res && res.code === 200) {",
+									"            console.log('📡 R50 event published - should notify:');",
+									"            console.log('   ❌ User 1: Wants free only');",
+									"            console.log('   ❌ User 2: Below min price (wants R100-R500)');",
+									"        }",
+									"    });",
+									"}, 1000);"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "6. Create R300 Event (Should Match User 2 Only)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{user3Token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Premium Workshop - R300\",\n    \"description\": \"Testing mid-range price filtering\",\n    \"eventDate\": \"2024-12-10T18:00:00.000Z\",\n    \"location\": {\"venue\": \"Premium Venue\", \"city\": \"Cape Town\", \"country\": \"South Africa\"},\n    \"category\": \"tech\",\n    \"eventType\": \"paid\",\n    \"ticketPrice\": 300,\n    \"visibility\": \"public\",\n    \"tags\": [\"phase2b\", \"test3\", \"premium\"]\n}"
+						},
+						"url": {"raw": "{{baseUrl}}/events", "host": ["{{baseUrl}}"], "path": ["events"]}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('R300 event created', () => {",
+									"    pm.response.to.have.status(201);",
+									"    pm.expect(pm.response.json().event.ticketPrice).to.equal(300);",
+									"});",
+									"",
+									"// Auto-publish",
+									"const eventId = pm.response.json().event.id;",
+									"setTimeout(() => {",
+									"    pm.sendRequest({",
+									"        url: pm.variables.get('baseUrl') + '/events/' + eventId + '/publish',",
+									"        method: 'POST',",
+									"        header: { 'Authorization': 'Bearer ' + pm.collectionVariables.get('user3Token') }",
+									"    }, (err, res) => {",
+									"        if (res && res.code === 200) {",
+									"            console.log('📡 R300 event published - should notify:');",
+									"            console.log('   ❌ User 1: Wants free only');",
+									"            console.log('   ✅ User 2: Within price range (R100-R500)');",
+									"        }",
+									"    });",
+									"}, 1000);"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "7. Create R800 Event (Should NOT Match Either)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{user3Token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Expensive Conference - R800\",\n    \"description\": \"Testing high price filtering\",\n    \"eventDate\": \"2024-12-15T09:00:00.000Z\",\n    \"location\": {\"venue\": \"Luxury Hotel\", \"city\": \"Cape Town\", \"country\": \"South Africa\"},\n    \"category\": \"business\",\n    \"eventType\": \"paid\",\n    \"ticketPrice\": 800,\n    \"visibility\": \"public\",\n    \"tags\": [\"phase2b\", \"test3\", \"expensive\"]\n}"
+						},
+						"url": {"raw": "{{baseUrl}}/events", "host": ["{{baseUrl}}"], "path": ["events"]}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('R800 event created', () => {",
+									"    pm.response.to.have.status(201);",
+									"    pm.expect(pm.response.json().event.ticketPrice).to.equal(800);",
+									"});",
+									"",
+									"// Auto-publish",
+									"const eventId = pm.response.json().event.id;",
+									"setTimeout(() => {",
+									"    pm.sendRequest({",
+									"        url: pm.variables.get('baseUrl') + '/events/' + eventId + '/publish',",
+									"        method: 'POST',",
+									"        header: { 'Authorization': 'Bearer ' + pm.collectionVariables.get('user3Token') }",
+									"    }, (err, res) => {",
+									"        if (res && res.code === 200) {",
+									"            console.log('📡 R800 event published - should notify:');",
+									"            console.log('   ❌ User 1: Wants free only');",
+									"            console.log('   ❌ User 2: Above max price (wants R100-R500)');",
+									"        }",
+									"    });",
+									"}, 1000);"
+								]
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Registration Broadcasting Tests",
+			"item": [
+				{
+					"name": "8. User 1 Registers for Free Event",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{user1Token}}"}
+						],
+						"body": {"mode": "raw", "raw": "{\n    \"specialRequests\": \"Testing registration broadcasting\"\n}"},
+						"url": {"raw": "{{baseUrl}}/events/{{testEventId}}/register", "host": ["{{baseUrl}}"], "path": ["events", "{{testEventId}}", "register"]}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Registration successful', () => {",
+									"    pm.response.to.have.status(201);",
+									"    console.log('✅ User 1 registered for free event');",
+									"    console.log('📡 Should trigger organizer notification');",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "9. User 1 Unregisters from Event",
+					"request": {
+						"method": "DELETE",
+						"header": [{"key": "Authorization", "value": "Bearer {{user1Token}}"}],
+						"url": {"raw": "{{baseUrl}}/events/{{testEventId}}/unregister", "host": ["{{baseUrl}}"], "path": ["events", "{{testEventId}}", "unregister"]}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Unregistration successful', () => {",
+									"    pm.response.to.have.status(200);",
+									"    console.log('✅ User 1 unregistered from event');",
+									"    console.log('📡 Should trigger organizer notification');",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Validation",
+			"item": [
+				{
+					"name": "10. Verify Preferences",
+					"item": [
+						{
+							"name": "10a. User 1 Preferences",
+							"request": {
+								"method": "GET",
+								"header": [{"key": "Authorization", "value": "Bearer {{user1Token}}"}],
+								"url": {"raw": "{{baseUrl}}/user/event-preferences", "host": ["{{baseUrl}}"], "path": ["user", "event-preferences"]}
+							},
+							"event": [{"listen": "test", "script": {"exec": ["pm.test('User 1 preferences verified', () => { pm.response.to.have.status(200); const prefs = pm.response.json().data.eventPreferences; pm.expect(prefs.eventTypePreference).to.equal('free'); console.log('✅ User 1: Free events only'); });"]}}]
+						},
+						{
+							"name": "10b. User 2 Preferences",
+							"request": {
+								"method": "GET",
+								"header": [{"key": "Authorization", "value": "Bearer {{user2Token}}"}],
+								"url": {"raw": "{{baseUrl}}/user/event-preferences", "host": ["{{baseUrl}}"], "path": ["user", "event-preferences"]}
+							},
+							"event": [{"listen": "test", "script": {"exec": ["pm.test('User 2 preferences verified', () => { pm.response.to.have.status(200); const prefs = pm.response.json().data.eventPreferences; pm.expect(prefs.priceRange.min).to.equal(100); pm.expect(prefs.priceRange.max).to.equal(500); console.log('✅ User 2: R100-R500 range'); });"]}}]
+						}
+					]
+				},
+				{
+					"name": "11. Test Summary",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {"raw": "{{baseUrl}}/events/public?limit=1", "host": ["{{baseUrl}}"], "path": ["events", "public"], "query": [{"key": "limit", "value": "1"}]}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Test 3 summary', () => {",
+									"    pm.response.to.have.status(200);",
+									"    console.log('');",
+									"    console.log('🎯 PHASE 2B TEST 3 - PRICE & EVENT TYPE FILTERING RESULTS');",
+									"    console.log('='.repeat(60));",
+									"    console.log('');",
+									"    console.log('💰 Price Filtering Tests:');",
+									"    console.log('   • Free Event (R0) → User 1: ✅ | User 2: ❌');",
+									"    console.log('   • Cheap Event (R50) → User 1: ❌ | User 2: ❌');",
+									"    console.log('   • Mid Event (R300) → User 1: ❌ | User 2: ✅');",
+									"    console.log('   • Expensive Event (R800) → User 1: ❌ | User 2: ❌');",
+									"    console.log('');",
+									"    console.log('📝 Event Type Filtering:');",
+									"    console.log('   • User 1: Free events only preference');",
+									"    console.log('   • User 2: Price range R100-R500 preference');",
+									"    console.log('');",
+									"    console.log('🔔 Registration Broadcasting:');",
+									"    console.log('   • Registration notifications to organizer');",
+									"    console.log('   • Unregistration notifications to organizer');",
+									"    console.log('   • Updated attendee counts in broadcasts');",
+									"    console.log('');",
+									"    console.log('✅ Proceed to Test Scenario 4 if all passed');",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		}
+	]
+} 

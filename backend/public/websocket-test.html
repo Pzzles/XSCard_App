@@ -258,14 +258,127 @@
 
                 <!-- Instructions -->
                 <div style="background: #f0f8ff; padding: 20px; border-radius: 6px; margin-bottom: 20px;">
-                    <h3>🧪 How to Test:</h3>
+                    <h3>🧪 How to Test Phase 2B Smart Broadcasting:</h3>
                     <ol style="margin-left: 20px; line-height: 1.6;">
-                        <li>Keep this page open and logged in</li>
-                        <li>Open Postman or another browser window</li>
-                        <li>Sign in with a <strong>different user</strong></li>
-                        <li>Create and publish an event via API</li>
-                        <li>Watch for real-time notifications below! 👇</li>
+                        <li>Update your preferences below to test filtering</li>
+                        <li><strong>Premium users</strong> get filtered notifications based on preferences</li>
+                        <li><strong>Free users</strong> get most events (basic filtering only)</li>
+                        <li>Create events via API that match/don't match your preferences</li>
+                        <li>Watch how smart broadcasting filters notifications! 👇</li>
                     </ol>
+                </div>
+
+                <!-- User Preferences Panel -->
+                <div style="background: #f8f9fa; padding: 20px; border-radius: 6px; margin-bottom: 20px; border-left: 4px solid #28a745;">
+                    <h3>⚙️ Event Preferences (Phase 2B)</h3>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <label style="font-weight: bold; margin-bottom: 5px; display: block;">Subscription Level:</label>
+                        <select id="subscriptionLevel" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px; width: 150px;">
+                            <option value="free">Free User</option>
+                            <option value="premium">Premium User</option>
+                        </select>
+                        <small style="color: #666; display: block; margin-top: 5px;">
+                            Premium users get smart filtering, free users get basic filtering
+                        </small>
+                    </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label style="font-weight: bold; margin-bottom: 5px; display: flex; align-items: center;">
+                            <input type="checkbox" id="receiveNotifications" checked style="margin-right: 8px;">
+                            Receive Event Notifications
+                        </label>
+                    </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label style="font-weight: bold; margin-bottom: 5px; display: flex; align-items: center;">
+                            <input type="checkbox" id="receiveNewEventBroadcasts" checked style="margin-right: 8px;">
+                            Receive New Event Broadcasts
+                        </label>
+                    </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label style="font-weight: bold; margin-bottom: 5px; display: block;">Preferred Categories:</label>
+                        <div id="categoryCheckboxes" style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px;">
+                            <label style="display: flex; align-items: center; font-weight: normal;">
+                                <input type="checkbox" value="tech" style="margin-right: 5px;"> Tech
+                            </label>
+                            <label style="display: flex; align-items: center; font-weight: normal;">
+                                <input type="checkbox" value="business" style="margin-right: 5px;"> Business
+                            </label>
+                            <label style="display: flex; align-items: center; font-weight: normal;">
+                                <input type="checkbox" value="arts" style="margin-right: 5px;"> Arts
+                            </label>
+                            <label style="display: flex; align-items: center; font-weight: normal;">
+                                <input type="checkbox" value="sports" style="margin-right: 5px;"> Sports
+                            </label>
+                            <label style="display: flex; align-items: center; font-weight: normal;">
+                                <input type="checkbox" value="food" style="margin-right: 5px;"> Food
+                            </label>
+                        </div>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <input type="text" id="customCategory" placeholder="Add custom category..." 
+                                   style="padding: 6px; border: 1px solid #ddd; border-radius: 3px; flex: 1;">
+                            <button onclick="addCustomCategory()" style="padding: 6px 12px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                                Add
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label style="font-weight: bold; margin-bottom: 5px; display: block;">Event Type Preference:</label>
+                        <select id="eventTypePreference" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px; width: 150px;">
+                            <option value="">All Events</option>
+                            <option value="free">Free Events Only</option>
+                            <option value="paid">Paid Events Only</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label style="font-weight: bold; margin-bottom: 5px; display: block;">Preferred Location:</label>
+                        <input type="text" id="preferredCity" placeholder="e.g., Cape Town" 
+                               style="padding: 8px; border: 1px solid #ddd; border-radius: 4px; width: 200px; margin-right: 10px;">
+                        <small style="color: #666; display: block; margin-top: 5px;">
+                            City-based filtering (exact match)
+                        </small>
+                    </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label style="font-weight: bold; margin-bottom: 5px; display: block;">Price Range (R):</label>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <input type="number" id="priceMin" placeholder="Min" min="0" 
+                                   style="padding: 6px; border: 1px solid #ddd; border-radius: 3px; width: 80px;">
+                            <span>to</span>
+                            <input type="number" id="priceMax" placeholder="Max" min="0" 
+                                   style="padding: 6px; border: 1px solid #ddd; border-radius: 3px; width: 80px;">
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 10px;">
+                        <button onclick="updatePreferences()" style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                            💾 Update Preferences
+                        </button>
+                        <button onclick="loadCurrentPreferences()" style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                            🔄 Load Current
+                        </button>
+                        <button onclick="simulatePreferences()" style="padding: 10px 20px; background: #ffc107; color: black; border: none; border-radius: 5px; cursor: pointer;">
+                            🧪 Simulate Only
+                        </button>
+                    </div>
+
+                    <div id="preferencesStatus" style="margin-top: 10px; padding: 10px; border-radius: 4px; display: none;"></div>
+                </div>
+
+                <!-- Phase 2B Broadcasting Stats -->
+                <div style="background: #fff3cd; padding: 15px; border-radius: 6px; margin-bottom: 20px; border-left: 4px solid #ffc107;">
+                    <h4>📊 Smart Broadcasting Stats</h4>
+                    <div id="broadcastingStats" style="font-family: monospace; font-size: 12px; margin-top: 10px;">
+                        <div>🔄 Preference filtering: <span id="filteringStatus">Not tested yet</span></div>
+                        <div>👥 User type: <span id="userType">Free User</span></div>
+                        <div>📋 Active categories: <span id="activeCategories">None selected</span></div>
+                        <div>🌍 Location filter: <span id="locationFilter">Not set</span></div>
+                        <div>💰 Price filter: <span id="priceFilter">Not set</span></div>
+                    </div>
                 </div>
 
                 <!-- Notifications Area -->
@@ -528,6 +641,17 @@
                 return;
             }
 
+            // Phase 2B: Check if notification should be shown based on preferences
+            if (!isLoaded && simulatedPreferences) {
+                const shouldShow = simulatePreferenceFiltering(event, simulatedPreferences);
+                if (!shouldShow) {
+                    console.log(`🚫 Phase 2B: Notification filtered out by simulated preferences for event: ${event.title}`);
+                    updateFilteringStatus('filtered');
+                    return;
+                }
+                updateFilteringStatus('passed');
+            }
+
             // Handle cancellation - remove original event
             if (type === 'event-cancelled' || isCancellation) {
                 removeEventFromList(eventId);
@@ -690,6 +814,298 @@
             document.getElementById('notificationsList').innerHTML = 
                 '<p style="color: #666; font-style: italic;">Waiting for event notifications...</p>';
         }
+
+        // Phase 2B: Preference Management Functions
+        let simulatedPreferences = null; // For testing without actually updating server
+
+        // Add custom category
+        function addCustomCategory() {
+            const input = document.getElementById('customCategory');
+            const categoryName = input.value.trim().toLowerCase();
+            
+            if (!categoryName) return;
+            
+            // Check for duplicates
+            const existingCategories = Array.from(document.querySelectorAll('#categoryCheckboxes input[type="checkbox"]'))
+                .map(cb => cb.value.toLowerCase());
+            
+            if (existingCategories.includes(categoryName)) {
+                alert('Category already exists!');
+                return;
+            }
+            
+            // Create new checkbox
+            const checkboxContainer = document.getElementById('categoryCheckboxes');
+            const label = document.createElement('label');
+            label.style.cssText = 'display: flex; align-items: center; font-weight: normal;';
+            label.innerHTML = `
+                <input type="checkbox" value="${categoryName}" style="margin-right: 5px;" checked> 
+                ${categoryName.charAt(0).toUpperCase() + categoryName.slice(1)}
+            `;
+            
+            checkboxContainer.appendChild(label);
+            input.value = '';
+            updateBroadcastingStats();
+        }
+
+        // Update user preferences on server
+        async function updatePreferences() {
+            const preferences = getPreferencesFromForm();
+            
+            try {
+                const response = await fetch('/user/event-preferences', {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        eventPreferences: preferences.eventPreferences,
+                        subscription: preferences.subscription
+                    })
+                });
+                
+                if (response.ok) {
+                    showPreferencesStatus('✅ Preferences updated successfully!', 'success');
+                    simulatedPreferences = null; // Clear simulation
+                    updateBroadcastingStats();
+                    console.log('✅ Phase 2B: User preferences updated on server');
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                showPreferencesStatus('❌ Failed to update preferences: ' + error.message, 'error');
+                console.error('❌ Phase 2B: Failed to update preferences:', error);
+            }
+        }
+
+        // Load current preferences from server
+        async function loadCurrentPreferences() {
+            try {
+                const response = await fetch('/user/event-preferences', {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    setFormFromPreferences(data.data.eventPreferences);
+                    showPreferencesStatus('✅ Current preferences loaded', 'success');
+                    updateBroadcastingStats();
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                showPreferencesStatus('❌ Failed to load preferences: ' + error.message, 'error');
+                console.error('❌ Phase 2B: Failed to load preferences:', error);
+            }
+        }
+
+        // Simulate preferences for testing (doesn't update server)
+        function simulatePreferences() {
+            simulatedPreferences = getPreferencesFromForm();
+            showPreferencesStatus('🧪 Simulating preferences for testing (not saved to server)', 'warning');
+            updateBroadcastingStats();
+            console.log('🧪 Phase 2B: Simulating preferences:', simulatedPreferences);
+        }
+
+        // Get preferences from form elements
+        function getPreferencesFromForm() {
+            const selectedCategories = Array.from(document.querySelectorAll('#categoryCheckboxes input[type="checkbox"]:checked'))
+                .map(cb => cb.value);
+            
+            const priceMin = document.getElementById('priceMin').value;
+            const priceMax = document.getElementById('priceMax').value;
+            
+            const eventPreferences = {
+                receiveEventNotifications: document.getElementById('receiveNotifications').checked,
+                receiveNewEventBroadcasts: document.getElementById('receiveNewEventBroadcasts').checked,
+                receiveEventUpdates: true,
+                receiveEventReminders: true,
+                preferredCategories: selectedCategories,
+                preferredLocation: {
+                    city: document.getElementById('preferredCity').value.trim() || null
+                },
+                eventTypePreference: document.getElementById('eventTypePreference').value || null,
+                priceRange: (priceMin || priceMax) ? {
+                    min: parseInt(priceMin) || 0,
+                    max: parseInt(priceMax) || 10000
+                } : null
+            };
+            
+            return {
+                eventPreferences,
+                subscription: document.getElementById('subscriptionLevel').value
+            };
+        }
+
+        // Set form from preferences object
+        function setFormFromPreferences(prefs) {
+            document.getElementById('receiveNotifications').checked = prefs.receiveEventNotifications ?? true;
+            document.getElementById('receiveNewEventBroadcasts').checked = prefs.receiveNewEventBroadcasts ?? true;
+            
+            // Set categories
+            document.querySelectorAll('#categoryCheckboxes input[type="checkbox"]').forEach(cb => {
+                cb.checked = prefs.preferredCategories?.includes(cb.value) || false;
+            });
+            
+            // Set location
+            document.getElementById('preferredCity').value = prefs.preferredLocation?.city || '';
+            
+            // Set event type preference
+            document.getElementById('eventTypePreference').value = prefs.eventTypePreference || '';
+            
+            // Set price range
+            if (prefs.priceRange) {
+                document.getElementById('priceMin').value = prefs.priceRange.min || '';
+                document.getElementById('priceMax').value = prefs.priceRange.max || '';
+            }
+        }
+
+        // Show preferences status message
+        function showPreferencesStatus(message, type) {
+            const statusEl = document.getElementById('preferencesStatus');
+            statusEl.style.display = 'block';
+            statusEl.textContent = message;
+            
+            switch (type) {
+                case 'success':
+                    statusEl.style.backgroundColor = '#d4edda';
+                    statusEl.style.color = '#155724';
+                    statusEl.style.border = '1px solid #c3e6cb';
+                    break;
+                case 'error':
+                    statusEl.style.backgroundColor = '#f8d7da';
+                    statusEl.style.color = '#721c24';
+                    statusEl.style.border = '1px solid #f5c6cb';
+                    break;
+                case 'warning':
+                    statusEl.style.backgroundColor = '#fff3cd';
+                    statusEl.style.color = '#856404';
+                    statusEl.style.border = '1px solid #ffeaa7';
+                    break;
+            }
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                statusEl.style.display = 'none';
+            }, 5000);
+        }
+
+        // Update broadcasting stats display
+        function updateBroadcastingStats() {
+            const prefs = simulatedPreferences || getPreferencesFromForm();
+            
+            document.getElementById('userType').textContent = 
+                prefs.subscription === 'premium' ? 'Premium User (Smart Filtering)' : 'Free User (Basic Filtering)';
+            
+            document.getElementById('activeCategories').textContent = 
+                prefs.eventPreferences.preferredCategories.length > 0 
+                    ? prefs.eventPreferences.preferredCategories.join(', ')
+                    : 'All categories';
+            
+            document.getElementById('locationFilter').textContent = 
+                prefs.eventPreferences.preferredLocation?.city || 'Any location';
+            
+            const priceRange = prefs.eventPreferences.priceRange;
+            document.getElementById('priceFilter').textContent = 
+                priceRange ? `R${priceRange.min} - R${priceRange.max}` : 'Any price';
+            
+            document.getElementById('filteringStatus').textContent = 
+                simulatedPreferences ? 'Simulated (not saved)' : 'Active on server';
+        }
+
+        // Simulate client-side preference filtering for testing
+        function simulatePreferenceFiltering(eventData, preferences) {
+            const prefs = preferences.eventPreferences;
+            
+            // Basic notification toggles
+            if (!prefs.receiveEventNotifications || !prefs.receiveNewEventBroadcasts) {
+                return false;
+            }
+            
+            // Premium filtering simulation
+            if (preferences.subscription === 'premium') {
+                // Category filtering
+                if (prefs.preferredCategories.length > 0) {
+                    const eventCategory = eventData.category?.toLowerCase();
+                    const preferredCategories = prefs.preferredCategories.map(cat => cat.toLowerCase());
+                    
+                    if (!preferredCategories.includes(eventCategory)) {
+                        console.log(`🔍 Category filter: ${eventCategory} not in [${preferredCategories.join(', ')}]`);
+                        return false;
+                    }
+                }
+                
+                // Location filtering
+                if (prefs.preferredLocation?.city && eventData.location?.city) {
+                    const userCity = prefs.preferredLocation.city.toLowerCase();
+                    const eventCity = eventData.location.city.toLowerCase();
+                    
+                    if (userCity !== eventCity) {
+                        console.log(`🔍 Location filter: ${eventCity} != ${userCity}`);
+                        return false;
+                    }
+                }
+                
+                // Event type filtering
+                if (prefs.eventTypePreference) {
+                    const userPref = prefs.eventTypePreference.toLowerCase();
+                    const eventType = eventData.eventType?.toLowerCase();
+                    
+                    if ((userPref === 'free' && eventType !== 'free') || 
+                        (userPref === 'paid' && eventType !== 'paid')) {
+                        console.log(`🔍 Event type filter: wants ${userPref}, event is ${eventType}`);
+                        return false;
+                    }
+                }
+                
+                // Price range filtering
+                if (prefs.priceRange && eventData.ticketPrice !== undefined) {
+                    const { min = 0, max = 10000 } = prefs.priceRange;
+                    const eventPrice = eventData.ticketPrice || 0;
+                    
+                    if (eventPrice < min || eventPrice > max) {
+                        console.log(`🔍 Price filter: ${eventPrice} outside range ${min}-${max}`);
+                        return false;
+                    }
+                }
+            }
+            
+            return true;
+        }
+
+        // Update filtering status in the stats
+        function updateFilteringStatus(status) {
+            const statusEl = document.getElementById('filteringStatus');
+            if (status === 'filtered') {
+                statusEl.textContent = '🚫 Last notification filtered out';
+                statusEl.style.color = '#dc3545';
+            } else if (status === 'passed') {
+                statusEl.textContent = '✅ Last notification passed filtering';
+                statusEl.style.color = '#28a745';
+            }
+        }
+
+        // Initialize preference controls on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set up category checkbox change listeners
+            document.addEventListener('change', function(e) {
+                if (e.target.matches('#categoryCheckboxes input[type="checkbox"]') ||
+                    e.target.matches('#subscriptionLevel') ||
+                    e.target.matches('#receiveNotifications') ||
+                    e.target.matches('#receiveNewEventBroadcasts')) {
+                    updateBroadcastingStats();
+                }
+            });
+            
+            // Set up input change listeners
+            ['preferredCity', 'eventTypePreference', 'priceMin', 'priceMax'].forEach(id => {
+                document.getElementById(id).addEventListener('input', updateBroadcastingStats);
+            });
+            
+            // Initialize stats display
+            updateBroadcastingStats();
+        });
     </script>
 </body>
 </html> 

@@ -83,15 +83,63 @@ class EventBroadcastMiddleware {
             if (res.statusCode === 201 && data.success && data.registration) {
                 setImmediate(async () => {
                     try {
-                        // Get event data for broadcasting
                         const eventId = req.params.eventId;
-                        if (eventId) {
-                            // Registration broadcasting placeholder for Phase 2B
-                            // Phase 2A focuses on event lifecycle broadcasts
-                            console.log('[EventBroadcastMiddleware] New registration to broadcast for event:', eventId);
+                        if (eventId && data.event) {
+                            console.log('[EventBroadcastMiddleware] Broadcasting registration update for event:', eventId);
+                            
+                            // Prepare registration data for broadcasting
+                            const registrationData = {
+                                id: data.registration.id,
+                                userId: data.registration.userId,
+                                userName: data.registration.userName || 'Unknown User',
+                                registeredAt: data.registration.registeredAt || new Date().toISOString(),
+                                status: data.registration.status || 'registered'
+                            };
+
+                            // Use the comprehensive registration broadcasting
+                            await EventBroadcastService.broadcastRegistrationUpdate(data.event, registrationData);
+                        } else {
+                            console.warn('[EventBroadcastMiddleware] Missing event or eventId for registration broadcast');
                         }
                     } catch (error) {
                         console.warn('[EventBroadcastMiddleware] Registration broadcast failed:', error.message);
+                    }
+                });
+            }
+        };
+        
+        next();
+    }
+
+    /**
+     * Add broadcasting after successful event unregistration
+     */
+    static broadcastAfterUnregistration(req, res, next) {
+        const originalJson = res.json.bind(res);
+        
+        res.json = function(data) {
+            originalJson(data);
+            
+            if (res.statusCode === 200 && data.success) {
+                setImmediate(async () => {
+                    try {
+                        const eventId = req.params.eventId;
+                        if (eventId && data.event) {
+                            console.log('[EventBroadcastMiddleware] Broadcasting unregistration update for event:', eventId);
+                            
+                            // Prepare unregistration data for broadcasting
+                            const unregistrationData = {
+                                userId: req.user?.uid,
+                                userName: req.user?.name || 'Unknown User'
+                            };
+
+                            // Use the comprehensive unregistration broadcasting
+                            await EventBroadcastService.broadcastUnregistrationUpdate(data.event, unregistrationData);
+                        } else {
+                            console.warn('[EventBroadcastMiddleware] Missing event or eventId for unregistration broadcast');
+                        }
+                    } catch (error) {
+                        console.warn('[EventBroadcastMiddleware] Unregistration broadcast failed:', error.message);
                     }
                 });
             }

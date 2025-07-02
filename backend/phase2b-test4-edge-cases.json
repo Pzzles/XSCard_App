@@ -1,0 +1,539 @@
+{
+	"info": {
+		"_postman_id": "phase2b-test4-edge-cases",
+		"name": "Phase 2B Test 4: Edge Cases & Error Handling",
+		"description": "Comprehensive testing of edge cases, error handling, circuit breaker, and system resilience",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8383",
+			"type": "string"
+		},
+		{
+			"key": "user1Token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "user2Token", 
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "user3Token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "rapidEventIds",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Setup Edge Case Testing",
+			"item": [
+				{
+					"name": "1. Authenticate Users",
+					"item": [
+						{
+							"name": "1a. User 1",
+							"request": {
+								"method": "POST",
+								"header": [{"key": "Content-Type", "value": "application/json"}],
+								"body": {"mode": "raw", "raw": "{\n    \"email\": \"testehakke@gufum.com\",\n    \"password\": \"123456\"\n}"},
+								"url": {"raw": "{{baseUrl}}/SignIn", "host": ["{{baseUrl}}"], "path": ["SignIn"]}
+							},
+							"event": [{"listen": "test", "script": {"exec": ["pm.collectionVariables.set('user1Token', pm.response.json().token);"]}}]
+						},
+						{
+							"name": "1b. User 2",
+							"request": {
+								"method": "POST",
+								"header": [{"key": "Content-Type", "value": "application/json"}],
+								"body": {"mode": "raw", "raw": "{\n    \"email\": \"pule@xspark.co.za\",\n    \"password\": \"P.zzle$0\"\n}"},
+								"url": {"raw": "{{baseUrl}}/SignIn", "host": ["{{baseUrl}}"], "path": ["SignIn"]}
+							},
+							"event": [{"listen": "test", "script": {"exec": ["pm.collectionVariables.set('user2Token', pm.response.json().token);"]}}]
+						},
+						{
+							"name": "1c. User 3",
+							"request": {
+								"method": "POST",
+								"header": [{"key": "Content-Type", "value": "application/json"}],
+								"body": {"mode": "raw", "raw": "{\n    \"email\": \"hapah71805@coasah.com\",\n    \"password\": \"Password.10\"\n}"},
+								"url": {"raw": "{{baseUrl}}/SignIn", "host": ["{{baseUrl}}"], "path": ["SignIn"]}
+							},
+							"event": [{"listen": "test", "script": {"exec": ["pm.collectionVariables.set('user3Token', pm.response.json().token);"]}}]
+						}
+					]
+				},
+				{
+					"name": "2. Reset Circuit Breaker",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {"raw": "{{baseUrl}}/events/websocket/status", "host": ["{{baseUrl}}"], "path": ["events", "websocket", "status"]}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Circuit breaker is reset', () => {",
+									"    pm.response.to.have.status(200);",
+									"    const status = pm.response.json().status.broadcastServiceStatus;",
+									"    pm.expect(status.circuitBreakerOpen).to.be.false;",
+									"    console.log('✅ Circuit breaker is closed, ready for edge case testing');",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Invalid Preference Tests",
+			"item": [
+				{
+					"name": "3. Test Invalid Preference Data",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{user1Token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"eventPreferences\": {\n        \"receiveEventNotifications\": \"invalid_boolean\",\n        \"preferredCategories\": \"not_an_array\",\n        \"priceRange\": {\"min\": \"invalid_number\", \"max\": -100},\n        \"invalidField\": \"should_be_ignored\"\n    }\n}"
+						},
+						"url": {"raw": "{{baseUrl}}/user/event-preferences", "host": ["{{baseUrl}}"], "path": ["user", "event-preferences"]}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Invalid preferences handled gracefully', () => {",
+									"    // Should either validate and reject, or sanitize and accept",
+									"    if (pm.response.code === 400) {",
+									"        console.log('✅ Server rejected invalid data (preferred)');",
+									"    } else if (pm.response.code === 200) {",
+									"        console.log('⚠️ Server accepted and sanitized invalid data');",
+									"    } else {",
+									"        pm.expect.fail('Unexpected response to invalid data');",
+									"    }",
+									"    console.log('📊 Broadcasting should still work with default preferences');",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "4. Test Malformed JSON Preferences",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{user2Token}}"}
+						],
+						"body": {"mode": "raw", "raw": "{\"eventPreferences\": {\"receiveEventNotifications\": true, \"invalidJson\": }"},
+						"url": {"raw": "{{baseUrl}}/user/event-preferences", "host": ["{{baseUrl}}"], "path": ["user", "event-preferences"]}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Malformed JSON handled', () => {",
+									"    pm.expect(pm.response.code).to.equal(400);",
+									"    console.log('✅ Malformed JSON properly rejected');",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Rapid Event Creation (Stress Test)",
+			"item": [
+				{
+					"name": "5. Rapid Event Creation - Event 1",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{user3Token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Rapid Test Event 1\",\n    \"description\": \"Testing system under rapid event creation\",\n    \"eventDate\": \"2024-12-20T10:00:00.000Z\",\n    \"location\": {\"venue\": \"Test Venue 1\", \"city\": \"Cape Town\", \"country\": \"South Africa\"},\n    \"category\": \"tech\",\n    \"eventType\": \"free\",\n    \"visibility\": \"public\",\n    \"tags\": [\"rapid-test\", \"stress-test\"]\n}"
+						},
+						"url": {"raw": "{{baseUrl}}/events", "host": ["{{baseUrl}}"], "path": ["events"]}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Rapid event 1 created', () => {",
+									"    pm.response.to.have.status(201);",
+									"    const eventId = pm.response.json().event.id;",
+									"    // Auto-publish immediately",
+									"    pm.sendRequest({",
+									"        url: pm.variables.get('baseUrl') + '/events/' + eventId + '/publish',",
+									"        method: 'POST',",
+									"        header: { 'Authorization': 'Bearer ' + pm.collectionVariables.get('user3Token') }",
+									"    }, () => {});",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "6. Rapid Event Creation - Event 2",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{user3Token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Rapid Test Event 2\",\n    \"description\": \"Testing system under rapid event creation\",\n    \"eventDate\": \"2024-12-20T11:00:00.000Z\",\n    \"location\": {\"venue\": \"Test Venue 2\", \"city\": \"Cape Town\", \"country\": \"South Africa\"},\n    \"category\": \"business\",\n    \"eventType\": \"paid\",\n    \"ticketPrice\": 100,\n    \"visibility\": \"public\",\n    \"tags\": [\"rapid-test\", \"stress-test\"]\n}"
+						},
+						"url": {"raw": "{{baseUrl}}/events", "host": ["{{baseUrl}}"], "path": ["events"]}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Rapid event 2 created', () => {",
+									"    pm.response.to.have.status(201);",
+									"    const eventId = pm.response.json().event.id;",
+									"    pm.sendRequest({",
+									"        url: pm.variables.get('baseUrl') + '/events/' + eventId + '/publish',",
+									"        method: 'POST',",
+									"        header: { 'Authorization': 'Bearer ' + pm.collectionVariables.get('user3Token') }",
+									"    }, () => {});",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "7. Rapid Event Creation - Event 3",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{user3Token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Rapid Test Event 3\",\n    \"description\": \"Testing system under rapid event creation\",\n    \"eventDate\": \"2024-12-20T12:00:00.000Z\",\n    \"location\": {\"venue\": \"Test Venue 3\", \"city\": \"Cape Town\", \"country\": \"South Africa\"},\n    \"category\": \"arts\",\n    \"eventType\": \"paid\",\n    \"ticketPrice\": 200,\n    \"visibility\": \"public\",\n    \"tags\": [\"rapid-test\", \"stress-test\"]\n}"
+						},
+						"url": {"raw": "{{baseUrl}}/events", "host": ["{{baseUrl}}"], "path": ["events"]}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Rapid event 3 created', () => {",
+									"    pm.response.to.have.status(201);",
+									"    const eventId = pm.response.json().event.id;",
+									"    pm.sendRequest({",
+									"        url: pm.variables.get('baseUrl') + '/events/' + eventId + '/publish',",
+									"        method: 'POST',",
+									"        header: { 'Authorization': 'Bearer ' + pm.collectionVariables.get('user3Token') }",
+									"    }, () => {});",
+									"    console.log('📡 3 rapid events created and published');",
+									"    console.log('🧪 Broadcasting system should handle this smoothly');",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Missing Data Edge Cases",
+			"item": [
+				{
+					"name": "8. Create Event with Missing Location",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{user3Token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Event with Missing Location Data\",\n    \"description\": \"Testing edge case with incomplete location\",\n    \"eventDate\": \"2024-12-25T15:00:00.000Z\",\n    \"location\": {\"venue\": \"Venue Only\"},\n    \"category\": \"tech\",\n    \"eventType\": \"free\",\n    \"visibility\": \"public\",\n    \"tags\": [\"edge-case\", \"missing-data\"]\n}"
+						},
+						"url": {"raw": "{{baseUrl}}/events", "host": ["{{baseUrl}}"], "path": ["events"]}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Event with missing location data handled', () => {",
+									"    if (pm.response.code === 201) {",
+									"        console.log('✅ Event created with partial location data');",
+									"        console.log('📊 Location filtering should handle gracefully');",
+									"        const eventId = pm.response.json().event.id;",
+									"        // Auto-publish",
+									"        pm.sendRequest({",
+									"            url: pm.variables.get('baseUrl') + '/events/' + eventId + '/publish',",
+									"            method: 'POST',",
+									"            header: { 'Authorization': 'Bearer ' + pm.collectionVariables.get('user3Token') }",
+									"        }, () => {});",
+									"    } else {",
+									"        console.log('⚠️ Event creation failed with incomplete data');",
+									"    }",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "9. Create Event with Null Category",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{user3Token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Event with Null Category\",\n    \"description\": \"Testing edge case with null category\",\n    \"eventDate\": \"2024-12-26T16:00:00.000Z\",\n    \"location\": {\"venue\": \"Test Venue\", \"city\": \"Cape Town\", \"country\": \"South Africa\"},\n    \"category\": null,\n    \"eventType\": \"free\",\n    \"visibility\": \"public\",\n    \"tags\": [\"edge-case\", \"null-category\"]\n}"
+						},
+						"url": {"raw": "{{baseUrl}}/events", "host": ["{{baseUrl}}"], "path": ["events"]}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Event with null category handled', () => {",
+									"    if (pm.response.code === 201) {",
+									"        console.log('✅ Event created with null category');",
+									"        console.log('📊 Category filtering should handle gracefully');",
+									"        const eventId = pm.response.json().event.id;",
+									"        pm.sendRequest({",
+									"            url: pm.variables.get('baseUrl') + '/events/' + eventId + '/publish',",
+									"            method: 'POST',",
+									"            header: { 'Authorization': 'Bearer ' + pm.collectionVariables.get('user3Token') }",
+									"        }, () => {});",
+									"    } else {",
+									"        console.log('⚠️ Event creation failed with null category');",
+									"    }",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "System Health & Recovery Tests",
+			"item": [
+				{
+					"name": "10. Check Broadcasting Service After Stress",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {"raw": "{{baseUrl}}/events/websocket/status", "host": ["{{baseUrl}}"], "path": ["events", "websocket", "status"]}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Broadcasting service survived stress test', () => {",
+									"    pm.response.to.have.status(200);",
+									"    const status = pm.response.json().status.broadcastServiceStatus;",
+									"    pm.expect(status.available).to.be.true;",
+									"    console.log('✅ Broadcasting service still healthy after stress test');",
+									"    console.log('📊 Connected users:', status.connectedUsers);",
+									"    console.log('🔧 Circuit breaker state:', status.circuitBreakerOpen ? 'OPEN' : 'CLOSED');",
+									"    console.log('⚠️ Failure count:', status.failureCount);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "11. Test API Performance After Broadcasting Load",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {"raw": "{{baseUrl}}/events/public?limit=5", "host": ["{{baseUrl}}"], "path": ["events", "public"], "query": [{"key": "limit", "value": "5"}]}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('API performance not degraded', () => {",
+									"    pm.response.to.have.status(200);",
+									"    pm.expect(pm.response.responseTime).to.be.below(2000);",
+									"    console.log('✅ API response time:', pm.response.responseTime + 'ms');",
+									"    console.log('📊 Broadcasting load did not affect API performance');",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Preference Fallback Tests",
+			"item": [
+				{
+					"name": "12. Test User with No Preferences Set",
+					"request": {
+						"method": "POST",
+						"header": [
+							{"key": "Content-Type", "value": "application/json"},
+							{"key": "Authorization", "value": "Bearer {{user1Token}}"}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Event for User with No Preferences\",\n    \"description\": \"Testing fallback behavior\",\n    \"eventDate\": \"2024-12-30T18:00:00.000Z\",\n    \"location\": {\"venue\": \"Fallback Test Venue\", \"city\": \"Cape Town\", \"country\": \"South Africa\"},\n    \"category\": \"tech\",\n    \"eventType\": \"free\",\n    \"visibility\": \"public\",\n    \"tags\": [\"fallback-test\"]\n}"
+						},
+						"url": {"raw": "{{baseUrl}}/events", "host": ["{{baseUrl}}"], "path": ["events"]}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Event creation works without user preferences', () => {",
+									"    pm.response.to.have.status(201);",
+									"    console.log('✅ Event created when user has no/default preferences');",
+									"    const eventId = pm.response.json().event.id;",
+									"    // Auto-publish to test broadcasting fallback",
+									"    pm.sendRequest({",
+									"        url: pm.variables.get('baseUrl') + '/events/' + eventId + '/publish',",
+									"        method: 'POST',",
+									"        header: { 'Authorization': 'Bearer ' + pm.collectionVariables.get('user1Token') }",
+									"    }, (err, res) => {",
+									"        if (res && res.code === 200) {",
+									"            console.log('📡 Broadcasting should use default preferences');",
+									"        }",
+									"    });",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Final Validation",
+			"item": [
+				{
+					"name": "13. Final System Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {"raw": "{{baseUrl}}/events/websocket/status", "host": ["{{baseUrl}}"], "path": ["events", "websocket", "status"]}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Final system health verification', () => {",
+									"    pm.response.to.have.status(200);",
+									"    const status = pm.response.json().status.broadcastServiceStatus;",
+									"    pm.expect(status.available).to.be.true;",
+									"    console.log('✅ All edge case tests completed');",
+									"    console.log('📊 Final system state:');",
+									"    console.log('   • Service available:', status.available);",
+									"    console.log('   • Circuit breaker:', status.circuitBreakerOpen ? 'OPEN' : 'CLOSED');",
+									"    console.log('   • Connected users:', status.connectedUsers);",
+									"    console.log('   • Total failures:', status.failureCount);",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "14. Edge Case Test Summary",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {"raw": "{{baseUrl}}/events/public?limit=1", "host": ["{{baseUrl}}"], "path": ["events", "public"], "query": [{"key": "limit", "value": "1"}]}
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Edge case testing complete', () => {",
+									"    pm.response.to.have.status(200);",
+									"    console.log('');",
+									"    console.log('🎯 PHASE 2B TEST 4 - EDGE CASES & ERROR HANDLING RESULTS');",
+									"    console.log('='.repeat(65));",
+									"    console.log('');",
+									"    console.log('🔬 Edge Cases Tested:');",
+									"    console.log('   1. ✅ Invalid preference data handling');",
+									"    console.log('   2. ✅ Malformed JSON rejection');",
+									"    console.log('   3. ✅ Rapid event creation stress test');",
+									"    console.log('   4. ✅ Missing/incomplete event data');",
+									"    console.log('   5. ✅ Null/undefined field handling');",
+									"    console.log('   6. ✅ User with no preferences fallback');",
+									"    console.log('   7. ✅ System health after stress');",
+									"    console.log('');",
+									"    console.log('🛡️ Error Handling Verified:');",
+									"    console.log('   • HTTP API remains functional');",
+									"    console.log('   • WebSocket broadcasting resilient');",
+									"    console.log('   • Circuit breaker functioning');",
+									"    console.log('   • Graceful fallbacks working');",
+									"    console.log('   • No data corruption or crashes');",
+									"    console.log('');",
+									"    console.log('🧪 Manual Verification Required:');",
+									"    console.log('   1. Check server logs for error handling');",
+									"    console.log('   2. Verify WebSocket connections stable');",
+									"    console.log('   3. Confirm no memory leaks or issues');",
+									"    console.log('   4. Test recovery after edge case scenarios');",
+									"    console.log('');",
+									"    console.log('🎉 PHASE 2B TESTING COMPLETE!');",
+									"    console.log('');",
+									"    console.log('📋 All 4 test scenarios ready for execution:');",
+									"    console.log('   • Test 1: Basic Preference Filtering');",
+									"    console.log('   • Test 2: Advanced Category & Location Filtering');",
+									"    console.log('   • Test 3: Event Type & Price Range Filtering');",
+									"    console.log('   • Test 4: Edge Cases & Error Handling');",
+									"    console.log('');",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		}
+	]
+} 

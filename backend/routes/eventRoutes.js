@@ -69,7 +69,7 @@ router.post('/events/:eventId/register',
 
 router.delete('/events/:eventId/unregister', 
   authenticateUser,
-  EventBroadcastMiddleware.conditionally(EventBroadcastMiddleware.broadcastAfterSuccess('event_update')),
+  EventBroadcastMiddleware.conditionally(EventBroadcastMiddleware.broadcastAfterUnregistration),
   eventController.unregisterFromEvent
 );
 
