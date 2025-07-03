@@ -251,7 +251,7 @@ class EventBroadcastService {
      */
     static async broadcastWithPreferences(eventType, eventData, additionalData = null) {
         try {
-            console.log(`[EventBroadcast] Starting preference-based broadcast for ${eventType}:`);
+            console.log(`[EventBroadcast] 📡 Starting preference-based broadcast for ${eventType}: "${eventData.title}"`);
             
             // Get all connected users
             const connectedUserIds = global.socketService.getConnectedUserIds();
@@ -260,7 +260,8 @@ class EventBroadcastService {
                 return;
             }
 
-            console.log(`[EventBroadcast] Filtering ${connectedUserIds.length} connected users by preferences`);
+            console.log(`[EventBroadcast] 👥 Connected users: [${connectedUserIds.join(', ')}]`);
+            console.log(`[EventBroadcast] 🔍 Filtering ${connectedUserIds.length} connected users by preferences`);
 
             // Get user preferences for all connected users
             const userPreferences = await this.getUserPreferencesForUsers(connectedUserIds);
@@ -268,10 +269,11 @@ class EventBroadcastService {
             // Filter users based on preferences
             const eligibleUsers = await this.filterUsersByPreferences(connectedUserIds, userPreferences, eventData);
             
-            console.log(`[EventBroadcast] ${eligibleUsers.length}/${connectedUserIds.length} users eligible for "${eventData.title}" notification`);
+            console.log(`[EventBroadcast] 📊 ${eligibleUsers.length}/${connectedUserIds.length} users eligible for "${eventData.title}" notification`);
+            console.log(`[EventBroadcast] 📤 Eligible users: [${eligibleUsers.join(', ')}]`);
 
             if (eligibleUsers.length === 0) {
-                console.log('[EventBroadcast] No eligible users after preference filtering');
+                console.log('[EventBroadcast] ❌ No eligible users after preference filtering');
                 return;
             }
 
@@ -296,15 +298,18 @@ class EventBroadcastService {
             for (const userId of eligibleUsers) {
                 if (global.socketService.isUserConnected(userId)) {
                     await global.socketService.sendToUser(userId, eventType, broadcastData);
+                    console.log(`[EventBroadcast] ✅ Sent to user ${userId}`);
+                } else {
+                    console.log(`[EventBroadcast] ⚠️ User ${userId} no longer connected, skipping`);
                 }
             }
 
-            console.log(`[EventBroadcast] Successfully sent ${eventType} notification to ${eligibleUsers.length} users`);
+            console.log(`[EventBroadcast] 🎉 Successfully sent ${eventType} notification to ${eligibleUsers.length} users`);
 
         } catch (error) {
-            console.error('[EventBroadcast] Error in preference-based broadcasting:', error);
+            console.error('[EventBroadcast] 🚨 ERROR in preference-based broadcasting:', error);
             // Fallback to broadcasting to all users if preference filtering fails
-            console.log('[EventBroadcast] Falling back to broadcast to all connected users');
+            console.log('[EventBroadcast] 🔄 Falling back to broadcast to all connected users');
             await this.fallbackBroadcastToAll(eventType, eventData, additionalData);
         }
     }
@@ -331,7 +336,7 @@ class EventBroadcastService {
                         const userData = doc.data();
                         userPreferences.set(userId, {
                             eventPreferences: userData.eventPreferences || this.getDefaultPreferences(),
-                            subscription: userData.subscription || 'free' // Assume free tier by default
+                            subscription: userData.plan || 'free'
                         });
                     } else {
                         // User not found, set default preferences
@@ -366,55 +371,60 @@ class EventBroadcastService {
     static async filterUsersByPreferences(userIds, userPreferences, eventData) {
         const eligibleUsers = [];
 
+        console.log(`[EventBroadcast] 🔍 Filtering for "${eventData.title}" (${eventData.category})`);
+
         for (const userId of userIds) {
             const userPref = userPreferences.get(userId);
-            if (!userPref) continue;
+            if (!userPref) {
+                console.log(`[EventBroadcast] ⚠️ No preferences found for user ${userId}, skipping`);
+                continue;
+            }
 
             const { eventPreferences, subscription } = userPref;
+            
+            console.log(`[EventBroadcast] 🧪 User ${userId}: ${subscription} plan`);
 
             // Apply different filtering rules based on subscription level
             if (subscription === 'premium' || subscription === 'enterprise') {
-                // Premium users get FULL CONTROL over all preferences
+                console.log(`[EventBroadcast] 🎯 PREMIUM user - applying smart filtering`);
                 
                 // 1. Check basic notification toggle for premium users
                 if (!eventPreferences.receiveEventNotifications) {
-                    console.log(`[EventBroadcast] Premium user ${userId} has notifications disabled`);
+                    console.log(`[EventBroadcast] ❌ Premium user has notifications disabled`);
                     continue;
                 }
 
                 // 2. Check specific notification type preferences for premium users  
                 if (!eventPreferences.receiveNewEventBroadcasts) {
-                    console.log(`[EventBroadcast] Premium user ${userId} has event broadcasts disabled`);
+                    console.log(`[EventBroadcast] ❌ Premium user has event broadcasts disabled`);
                     continue;
                 }
 
                 // 3. Apply smart filtering for premium users
-                // TODO: Enterprise features - Do NOT implement unless explicitly requested
-                // Future enterprise features: AI recommendations, priority notifications, advanced filtering
-                
                 if (!this.matchesUserPreferences(eventData, eventPreferences)) {
-                    console.log(`[EventBroadcast] Event doesn't match premium user ${userId} preferences`);
+                    console.log(`[EventBroadcast] ❌ Event doesn't match premium user preferences`);
                     continue;
                 }
-                console.log(`[EventBroadcast] Premium user ${userId} - event matches all preferences`);
+                console.log(`[EventBroadcast] ✅ Premium user - event matches preferences`);
             } else {
-                // Free users get BASIC FILTERING (cannot completely disable notifications)
+                console.log(`[EventBroadcast] 🆓 FREE user - applying basic filtering`);
                 
                 // 1. Only respect the main notification toggle for free users
                 // But allow them to get most events regardless of other toggles
                 if (!eventPreferences.receiveEventNotifications) {
-                    console.log(`[EventBroadcast] Free user ${userId} has main notifications disabled`);
+                    console.log(`[EventBroadcast] ❌ Free user has main notifications disabled`);
                     continue;
                 }
                 
                 // 2. Free users get events regardless of receiveNewEventBroadcasts setting
                 // This ensures they can't completely disable all event notifications
-                console.log(`[EventBroadcast] Free user ${userId} - basic filtering passed (gets most events)`);
+                console.log(`[EventBroadcast] ✅ Free user - basic filtering passed`);
             }
 
             eligibleUsers.push(userId);
         }
 
+        console.log(`[EventBroadcast] 📊 Result: ${eligibleUsers.length}/${userIds.length} users eligible`);
         return eligibleUsers;
     }
 
@@ -429,8 +439,10 @@ class EventBroadcastService {
             const preferredCategories = preferences.preferredCategories.map(cat => cat.toLowerCase());
             
             if (!preferredCategories.includes(eventCategory)) {
-                console.log(`[EventBroadcast] Category mismatch: ${eventCategory} not in [${preferredCategories.join(', ')}]`);
+                console.log(`[EventBroadcast] ❌ Category mismatch: ${eventCategory} not in [${preferredCategories.join(', ')}]`);
                 return false;
+            } else {
+                console.log(`[EventBroadcast] ✅ Category match: ${eventCategory}`);
             }
         }
 
@@ -440,8 +452,10 @@ class EventBroadcastService {
             const eventCity = eventData.location.city.toLowerCase();
             
             if (userCity !== eventCity) {
-                console.log(`[EventBroadcast] Location mismatch: ${eventCity} != ${userCity}`);
+                console.log(`[EventBroadcast] ❌ Location mismatch: ${eventCity} != ${userCity}`);
                 return false;
+            } else {
+                console.log(`[EventBroadcast] ✅ Location match: ${eventCity}`);
             }
         }
 
@@ -450,14 +464,18 @@ class EventBroadcastService {
             const userPref = preferences.eventTypePreference.toLowerCase();
             const eventType = eventData.eventType?.toLowerCase();
             
+            console.log(`[EventBroadcast] 🎫 Event type filtering: User wants "${userPref}", event is "${eventType}"`);
+            
             if (userPref === 'free' && eventType !== 'free') {
-                console.log(`[EventBroadcast] User wants free events only, event is ${eventType}`);
+                console.log(`[EventBroadcast] ❌ User wants free events only, event is ${eventType}`);
                 return false;
             }
             if (userPref === 'paid' && eventType !== 'paid') {
-                console.log(`[EventBroadcast] User wants paid events only, event is ${eventType}`);
+                console.log(`[EventBroadcast] ❌ User wants paid events only, event is ${eventType}`);
                 return false;
             }
+            
+            console.log(`[EventBroadcast] ✅ Event type match: ${eventType}`);
         }
 
         // Price range filtering  
@@ -465,10 +483,14 @@ class EventBroadcastService {
             const { min = 0, max = 10000 } = preferences.priceRange;
             const eventPrice = eventData.ticketPrice || 0;
             
+            console.log(`[EventBroadcast] 💰 Price filtering: Event R${eventPrice}, user range R${min}-R${max}`);
+            
             if (eventPrice < min || eventPrice > max) {
-                console.log(`[EventBroadcast] Price ${eventPrice} outside range ${min}-${max}`);
+                console.log(`[EventBroadcast] ❌ Price R${eventPrice} outside range R${min}-R${max}`);
                 return false;
             }
+            
+            console.log(`[EventBroadcast] ✅ Price within range: R${eventPrice}`);
         }
 
         return true;
@@ -486,7 +508,9 @@ class EventBroadcastService {
             receiveEventReminders: true,
             preferredCategories: [],
             locationRadius: 50,
-            preferredLocation: null
+            preferredLocation: null,
+            eventTypePreference: null, // Phase 2B: free/paid preference
+            priceRange: null // Phase 2B: min/max price range
         };
     }
 

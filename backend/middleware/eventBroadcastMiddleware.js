@@ -84,23 +84,45 @@ class EventBroadcastMiddleware {
                 setImmediate(async () => {
                     try {
                         const eventId = req.params.eventId;
-                        if (eventId && data.event) {
-                            console.log('[EventBroadcastMiddleware] Broadcasting registration update for event:', eventId);
-                            
-                            // Prepare registration data for broadcasting
-                            const registrationData = {
-                                id: data.registration.id,
-                                userId: data.registration.userId,
-                                userName: data.registration.userName || 'Unknown User',
-                                registeredAt: data.registration.registeredAt || new Date().toISOString(),
-                                status: data.registration.status || 'registered'
-                            };
-
-                            // Use the comprehensive registration broadcasting
-                            await EventBroadcastService.broadcastRegistrationUpdate(data.event, registrationData);
-                        } else {
-                            console.warn('[EventBroadcastMiddleware] Missing event or eventId for registration broadcast');
+                        if (!eventId) {
+                            console.warn('[EventBroadcastMiddleware] Missing eventId for registration broadcast');
+                            return;
                         }
+
+                        let eventData = data.event;
+                        
+                        // If event data is not in response, fetch it from database
+                        if (!eventData) {
+                            console.log('[EventBroadcastMiddleware] Event data not in response, fetching from database...');
+                            try {
+                                const { db } = require('../services/firebaseConfig');
+                                const eventDoc = await db.collection('events').doc(eventId).get();
+                                if (eventDoc.exists) {
+                                    eventData = { id: eventDoc.id, ...eventDoc.data() };
+                                    console.log('[EventBroadcastMiddleware] Successfully fetched event data for broadcasting');
+                                } else {
+                                    console.warn('[EventBroadcastMiddleware] Event not found in database:', eventId);
+                                    return;
+                                }
+                            } catch (fetchError) {
+                                console.warn('[EventBroadcastMiddleware] Failed to fetch event data:', fetchError.message);
+                                return;
+                            }
+                        }
+
+                        console.log('[EventBroadcastMiddleware] Broadcasting registration update for event:', eventId);
+                        
+                        // Prepare registration data for broadcasting
+                        const registrationData = {
+                            id: data.registration.id,
+                            userId: data.registration.userId,
+                            userName: data.registration.userInfo?.name || data.registration.userName || 'Unknown User',
+                            registeredAt: data.registration.registeredAt || new Date().toISOString(),
+                            status: data.registration.status || 'registered'
+                        };
+
+                        // Use the comprehensive registration broadcasting
+                        await EventBroadcastService.broadcastRegistrationUpdate(eventData, registrationData);
                     } catch (error) {
                         console.warn('[EventBroadcastMiddleware] Registration broadcast failed:', error.message);
                     }
@@ -124,20 +146,42 @@ class EventBroadcastMiddleware {
                 setImmediate(async () => {
                     try {
                         const eventId = req.params.eventId;
-                        if (eventId && data.event) {
-                            console.log('[EventBroadcastMiddleware] Broadcasting unregistration update for event:', eventId);
-                            
-                            // Prepare unregistration data for broadcasting
-                            const unregistrationData = {
-                                userId: req.user?.uid,
-                                userName: req.user?.name || 'Unknown User'
-                            };
-
-                            // Use the comprehensive unregistration broadcasting
-                            await EventBroadcastService.broadcastUnregistrationUpdate(data.event, unregistrationData);
-                        } else {
-                            console.warn('[EventBroadcastMiddleware] Missing event or eventId for unregistration broadcast');
+                        if (!eventId) {
+                            console.warn('[EventBroadcastMiddleware] Missing eventId for unregistration broadcast');
+                            return;
                         }
+
+                        let eventData = data.event;
+                        
+                        // If event data is not in response, fetch it from database
+                        if (!eventData) {
+                            console.log('[EventBroadcastMiddleware] Event data not in response, fetching from database...');
+                            try {
+                                const { db } = require('../services/firebaseConfig');
+                                const eventDoc = await db.collection('events').doc(eventId).get();
+                                if (eventDoc.exists) {
+                                    eventData = { id: eventDoc.id, ...eventDoc.data() };
+                                    console.log('[EventBroadcastMiddleware] Successfully fetched event data for unregistration broadcasting');
+                                } else {
+                                    console.warn('[EventBroadcastMiddleware] Event not found in database:', eventId);
+                                    return;
+                                }
+                            } catch (fetchError) {
+                                console.warn('[EventBroadcastMiddleware] Failed to fetch event data:', fetchError.message);
+                                return;
+                            }
+                        }
+
+                        console.log('[EventBroadcastMiddleware] Broadcasting unregistration update for event:', eventId);
+                        
+                        // Prepare unregistration data for broadcasting
+                        const unregistrationData = {
+                            userId: req.user?.uid,
+                            userName: req.user?.name || 'Unknown User'
+                        };
+
+                        // Use the comprehensive unregistration broadcasting
+                        await EventBroadcastService.broadcastUnregistrationUpdate(eventData, unregistrationData);
                     } catch (error) {
                         console.warn('[EventBroadcastMiddleware] Unregistration broadcast failed:', error.message);
                     }

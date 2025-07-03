@@ -35,7 +35,7 @@ router.post('/events',
   handleMultipleUploads([
     { name: 'bannerImage', maxCount: 1 },
     { name: 'eventImages', maxCount: 5 }
-  ]),
+  ]), 
   EventBroadcastMiddleware.conditionally(EventBroadcastMiddleware.broadcastAfterEventCreation),
   eventController.createEvent
 );
