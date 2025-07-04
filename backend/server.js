@@ -41,6 +41,11 @@ const eventRoutes = require('./routes/eventRoutes'); // Add event routes
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Define critical public routes FIRST to avoid middleware conflicts
+app.get('/saveContact', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'saveContact.html'));
+});
+
 // Public routes - must be before authentication middleware
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/', paymentRoutes); // Add this line before protected routes
@@ -48,10 +53,7 @@ app.use('/', subscriptionRoutes); // Add subscription routes
 app.use('/', apkRoutes); // Add APK routes for public download
 app.use('/', eventRoutes); // Move event routes to public section for /api/events/public
 app.use('/', userRoutes); // Move user routes to public section so SignIn works
-
-app.get('/saveContact', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'saveContact.html'));
-});
+app.use('/', contactRoutes); // Move contact routes to public section to keep save contact public
 
 // Add the AddContact endpoint directly to server.js
 // This bypasses any router or authentication middleware issues
@@ -603,7 +605,6 @@ app.post('/app-request', async (req, res) => {
 
 // Protected routes - after public routes
 app.use('/', cardRoutes);
-app.use('/', contactRoutes);
 app.use('/', meetingRoutes);
 app.use('/', paymentRoutes);
 

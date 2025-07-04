@@ -95,7 +95,7 @@ class EventBroadcastMiddleware {
                         if (!eventData) {
                             console.log('[EventBroadcastMiddleware] Event data not in response, fetching from database...');
                             try {
-                                const { db } = require('../services/firebaseConfig');
+                                const { db } = require('../firebase');
                                 const eventDoc = await db.collection('events').doc(eventId).get();
                                 if (eventDoc.exists) {
                                     eventData = { id: eventDoc.id, ...eventDoc.data() };
@@ -157,7 +157,7 @@ class EventBroadcastMiddleware {
                         if (!eventData) {
                             console.log('[EventBroadcastMiddleware] Event data not in response, fetching from database...');
                             try {
-                                const { db } = require('../services/firebaseConfig');
+                                const { db } = require('../firebase');
                                 const eventDoc = await db.collection('events').doc(eventId).get();
                                 if (eventDoc.exists) {
                                     eventData = { id: eventDoc.id, ...eventDoc.data() };

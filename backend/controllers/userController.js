@@ -1143,7 +1143,7 @@ exports.updateEventPreferences = async (req, res) => {
         res.status(200).json({
             success: true,
             message: 'Event preferences updated successfully',
-            eventPreferences: updatedPreferences
+            preferences: updatedPreferences
         });
 
     } catch (error) {
@@ -1189,9 +1189,7 @@ exports.getEventPreferences = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            data: { 
-                eventPreferences: preferences 
-            }
+            preferences: preferences
         });
 
     } catch (error) {
@@ -1226,7 +1224,7 @@ exports.initializeEventPreferences = async (req, res) => {
             return res.status(200).json({
                 success: true,
                 message: 'Event preferences already exist',
-                eventPreferences: userData.eventPreferences
+                preferences: userData.eventPreferences
             });
         }
 
@@ -1253,7 +1251,7 @@ exports.initializeEventPreferences = async (req, res) => {
         res.status(200).json({
             success: true,
             message: 'Event preferences initialized successfully',
-            eventPreferences: defaultPreferences
+            preferences: defaultPreferences
         });
 
     } catch (error) {

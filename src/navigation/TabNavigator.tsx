@@ -13,6 +13,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import UnlockPremium from '../screens/Unlockpremium/UnlockPremium';
 import { useColorScheme } from '../context/ColorSchemeContext';
+import EventsScreen from '../screens/events/EventsScreen';
+import EventDetailsScreen from '../screens/events/EventDetailsScreen';
+import EventPreferencesScreen from '../screens/events/EventPreferencesScreen';
+import CreateEventScreen from '../screens/events/CreateEventScreen';
+import MyEventsScreen from '../screens/events/MyEventsScreen';
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
 const Stack = createStackNavigator<RootStackParamList>();
@@ -82,6 +87,11 @@ export default function AppNavigator() {
       <Stack.Screen name="AddCards" component={AddCards} />
       <Stack.Screen name="EditCard" component={EditCard} />
       <Stack.Screen name="UnlockPremium" component={UnlockPremium} />
+      <Stack.Screen name="Events" component={EventsScreen} />
+      <Stack.Screen name="EventDetails" component={EventDetailsScreen} />
+      <Stack.Screen name="EventPreferences" component={EventPreferencesScreen} />
+      <Stack.Screen name="CreateEvent" component={CreateEventScreen} />
+      <Stack.Screen name="MyEvents" component={MyEventsScreen} />
     </Stack.Navigator>
   );
 }

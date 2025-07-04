@@ -28,15 +28,21 @@ export type AdminTabParamList = {
 };
 
 export type RootStackParamList = {
+  Auth: undefined;
+  Main: undefined;
   MainTabs: undefined;
+  CreateCard: undefined;
+  CardPreview: { cardData: any };
+  QRScanner: undefined;
+  SaveContact: { cardId: string; cardIndex?: number };
   AddCards: undefined;
   EditCard: undefined;
   UnlockPremium: undefined;
-  AdminDashboard: undefined;
-  SignIn: undefined;
-  CardsScreen: undefined;
-  Contacts: undefined;
-  MainApp: undefined;
+  Events: undefined;
+  EventDetails: { eventId: string; event?: any };
+  EventPreferences: undefined;
+  CreateEvent: undefined;
+  MyEvents: undefined;
 };
 
 export type RootTabParamList = {
