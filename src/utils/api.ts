@@ -40,8 +40,8 @@ export const setGlobalNavigationRef = (navigationRef: any) => {
 // Helper function to get the appropriate base URL
 const getBaseUrl = () => {
 
-   return 'https://xscard-app.onrender.com';
-   //  return 'http://localhost:8383';
+  // return 'https://xscard-app.onrender.com';
+     return 'http://localhost:8383';
  //return 'http://192.168.68.101:8383';
 
 };
@@ -82,6 +82,37 @@ export const ENDPOINTS = {
     TEST_EXPIRED_TOKEN: '/test-expired-token', // Phase 4A Testing
     TEST_TOKEN_REFRESH_SUCCESS: '/test-token-refresh-success', // Phase 4B Testing
     LOGOUT: '/logout',
+    
+    // Events API endpoints
+    // Discovery
+    GET_PUBLIC_EVENTS: '/events/public',
+    SEARCH_EVENTS: '/events/search',
+    GET_EVENT_DETAILS: '/events/:eventId',
+    
+    // Event Management
+    CREATE_EVENT: '/events',
+    UPDATE_EVENT: '/events/:eventId',
+    PUBLISH_EVENT: '/events/:eventId/publish',
+    DELETE_EVENT: '/events/:eventId',
+    
+    // Event Registration
+    REGISTER_EVENT: '/events/:eventId/register',
+    UNREGISTER_EVENT: '/events/:eventId/unregister',
+    
+    // User Events
+    GET_USER_EVENTS: '/user/events',
+    GET_USER_REGISTRATIONS: '/user/registrations',
+    
+    // Event Preferences
+    GET_EVENT_PREFERENCES: '/user/event-preferences',
+    UPDATE_EVENT_PREFERENCES: '/user/event-preferences',
+    INITIALIZE_EVENT_PREFERENCES: '/user/event-preferences/initialize',
+    
+    // Event Database Setup
+    INITIALIZE_EVENT_DB: '/events/initialize-db',
+    
+    // WebSocket Status
+    WEBSOCKET_STATUS: '/events/websocket/status',
 };
 
 export const buildUrl = (endpoint: string) => `${API_BASE_URL}${endpoint}`;

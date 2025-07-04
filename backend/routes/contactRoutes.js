@@ -8,12 +8,11 @@ router.post('/saveContactInfo', contactController.saveContactInfo);
 router.post('/saveContact', contactController.saveContactInfo);
 router.post('/public/saveContact', contactController.saveContactInfo);
 
-// Protected routes
-router.use(authenticateUser);
-router.get('/Contacts', contactController.getAllContacts);
-router.get('/Contacts/:id', contactController.getContactById);
-router.patch('/Contacts/:id', contactController.updateContact);
-router.delete('/Contacts/:id', contactController.deleteContact);
-router.delete('/Contacts/:id/contact/:index', contactController.deleteContactFromList);
+// Protected routes - apply authentication middleware individually
+router.get('/Contacts', authenticateUser, contactController.getAllContacts);
+router.get('/Contacts/:id', authenticateUser, contactController.getContactById);
+router.patch('/Contacts/:id', authenticateUser, contactController.updateContact);
+router.delete('/Contacts/:id', authenticateUser, contactController.deleteContact);
+router.delete('/Contacts/:id/contact/:index', authenticateUser, contactController.deleteContactFromList);
 
 module.exports = router;

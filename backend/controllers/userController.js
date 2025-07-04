@@ -1082,6 +1082,8 @@ exports.updateEventPreferences = async (req, res) => {
         const userId = req.user.uid;
         const { eventPreferences } = req.body;
 
+        console.log(`[UpdatePreferences] 🔍 User ${userId} updating preferences`);
+
         if (!eventPreferences) {
             return res.status(400).json({
                 success: false,
@@ -1097,7 +1099,9 @@ exports.updateEventPreferences = async (req, res) => {
             receiveEventReminders: true,
             preferredCategories: [],
             locationRadius: 50,
-            preferredLocation: null
+            preferredLocation: null,
+            eventTypePreference: null, // Phase 2B: free/paid preference
+            priceRange: null // Phase 2B: min/max price range
         };
 
         // Merge with provided preferences, ensuring all fields have values
@@ -1108,7 +1112,9 @@ exports.updateEventPreferences = async (req, res) => {
             receiveEventReminders: eventPreferences.receiveEventReminders ?? defaultPreferences.receiveEventReminders,
             preferredCategories: eventPreferences.preferredCategories || defaultPreferences.preferredCategories,
             locationRadius: eventPreferences.locationRadius || defaultPreferences.locationRadius,
-            preferredLocation: eventPreferences.preferredLocation || defaultPreferences.preferredLocation
+            preferredLocation: eventPreferences.preferredLocation || defaultPreferences.preferredLocation,
+            eventTypePreference: eventPreferences.eventTypePreference || defaultPreferences.eventTypePreference,
+            priceRange: eventPreferences.priceRange || defaultPreferences.priceRange
         };
 
         // Check if user exists
@@ -1116,11 +1122,15 @@ exports.updateEventPreferences = async (req, res) => {
         const userDoc = await userRef.get();
 
         if (!userDoc.exists) {
+            console.log(`[UpdatePreferences] ❌ User ${userId} not found`);
             return res.status(404).json({
                 success: false,
                 message: 'User not found'
             });
         }
+
+        const userData = userDoc.data();
+        console.log(`[UpdatePreferences] 📧 User ${userId} email: ${userData.email}`);
 
         // Update user document with event preferences
         await userRef.update({
@@ -1128,16 +1138,16 @@ exports.updateEventPreferences = async (req, res) => {
             updatedAt: admin.firestore.Timestamp.now()
         });
 
-        console.log(`Event preferences updated for user ${userId}:`, updatedPreferences);
+        console.log(`[UpdatePreferences] ✅ Event preferences updated for user ${userId} (${userData.email}):`, updatedPreferences);
 
         res.status(200).json({
             success: true,
             message: 'Event preferences updated successfully',
-            eventPreferences: updatedPreferences
+            preferences: updatedPreferences
         });
 
     } catch (error) {
-        console.error('Error updating event preferences:', error);
+        console.error('[UpdatePreferences] ❌ Error updating event preferences:', error);
         res.status(500).json({
             success: false,
             message: 'Error updating preferences',
@@ -1170,16 +1180,16 @@ exports.getEventPreferences = async (req, res) => {
             receiveEventReminders: true,
             preferredCategories: [],
             locationRadius: 50,
-            preferredLocation: null
+            preferredLocation: null,
+            eventTypePreference: null, // Phase 2B: free/paid preference
+            priceRange: null // Phase 2B: min/max price range
         };
 
         const preferences = userData.eventPreferences || defaultPreferences;
 
         res.status(200).json({
             success: true,
-            data: { 
-                eventPreferences: preferences 
-            }
+            preferences: preferences
         });
 
     } catch (error) {
@@ -1214,7 +1224,7 @@ exports.initializeEventPreferences = async (req, res) => {
             return res.status(200).json({
                 success: true,
                 message: 'Event preferences already exist',
-                eventPreferences: userData.eventPreferences
+                preferences: userData.eventPreferences
             });
         }
 
@@ -1226,7 +1236,9 @@ exports.initializeEventPreferences = async (req, res) => {
             receiveEventReminders: true,
             preferredCategories: [],
             locationRadius: 50,
-            preferredLocation: null
+            preferredLocation: null,
+            eventTypePreference: null, // Phase 2B: free/paid preference
+            priceRange: null // Phase 2B: min/max price range
         };
 
         await userRef.update({
@@ -1239,7 +1251,7 @@ exports.initializeEventPreferences = async (req, res) => {
         res.status(200).json({
             success: true,
             message: 'Event preferences initialized successfully',
-            eventPreferences: defaultPreferences
+            preferences: defaultPreferences
         });
 
     } catch (error) {
@@ -1247,6 +1259,76 @@ exports.initializeEventPreferences = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error initializing preferences',
+            error: error.message
+        });
+    }
+};
+
+// Set user subscription level for testing (Phase 2B)
+exports.setUserSubscriptionLevel = async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        const { subscriptionLevel } = req.body;
+
+        console.log(`[SubscriptionLevel] 🔍 Setting subscription level for user: ${userId}`);
+        console.log(`[SubscriptionLevel] 📝 Requested level: ${subscriptionLevel}`);
+
+        if (!subscriptionLevel || !['free', 'premium'].includes(subscriptionLevel)) {
+            console.log(`[SubscriptionLevel] ❌ Invalid subscription level: ${subscriptionLevel}`);
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid subscription level. Must be "free" or "premium"'
+            });
+        }
+
+        const userRef = db.collection('users').doc(userId);
+        const userDoc = await userRef.get();
+
+        if (!userDoc.exists) {
+            console.log(`[SubscriptionLevel] ❌ User not found: ${userId}`);
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Log current user data before update
+        const currentData = userDoc.data();
+        console.log(`[SubscriptionLevel] 📋 Current user data:`);
+        console.log(`[SubscriptionLevel]   - Current plan: ${currentData.plan || 'undefined'}`);
+        console.log(`[SubscriptionLevel]   - Email: ${currentData.email}`);
+
+        // Update user subscription level
+        console.log(`[SubscriptionLevel] 🔄 Updating plan field to: ${subscriptionLevel}`);
+        await userRef.update({
+            plan: subscriptionLevel,
+            updatedAt: admin.firestore.Timestamp.now()
+        });
+        console.log(`[SubscriptionLevel] ✅ Database update completed`);
+
+        // Verify the update by reading the document again
+        const updatedDoc = await userRef.get();
+        const updatedData = updatedDoc.data();
+        console.log(`[SubscriptionLevel] 🔍 Verification - Updated plan field: ${updatedData.plan}`);
+
+        console.log(`[SubscriptionLevel] ✅ User ${userId} subscription level set to: ${subscriptionLevel}`);
+
+        res.status(200).json({
+            success: true,
+            message: `User subscription level set to ${subscriptionLevel}`,
+            subscriptionLevel,
+            verification: {
+                oldPlan: currentData.plan || 'undefined',
+                newPlan: updatedData.plan,
+                userId: userId
+            }
+        });
+
+    } catch (error) {
+        console.error('[SubscriptionLevel] ❌ Error setting user subscription level:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error setting subscription level',
             error: error.message
         });
     }

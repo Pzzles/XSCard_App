@@ -1,13 +1,14 @@
 export const COLORS = {
-  primary: '#FF4B6E',
-  secondary: '#1B2B5B',  // Navy blue
-  light: '#FFFFFF',
-  gray: '#6B7280',
+  primary: '#1B2B5B',
+  secondary: '#4A90E2',
+  light: '#F8F9FA',
+  gray: '#888888',
   white: '#FFFFFF',
-  black: '#000000',
+  black: '#333333',
   background: '#F5F5F5',
-  error: '#FF0000',
-  disabled: '#D3D3D3',
+  error: '#FF4B6E',
+  disabled: '#CCCCCC',
+  border: '#E0E0E0',
 };
 
 export const CARD_COLORS = [
