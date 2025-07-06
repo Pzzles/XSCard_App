@@ -33,7 +33,7 @@ export type RootStackParamList = {
   MainTabs: undefined;
   CreateCard: undefined;
   CardPreview: { cardData: any };
-  QRScanner: undefined;
+  QRScanner: { event: any };
   SaveContact: { cardId: string; cardIndex?: number };
   AddCards: undefined;
   EditCard: undefined;
@@ -43,6 +43,8 @@ export type RootStackParamList = {
   EventPreferences: undefined;
   CreateEvent: undefined;
   MyEvents: undefined;
+  EventTicket: { event: any; ticket?: any };
+  CheckInDashboard: { event: any };
 };
 
 export type RootTabParamList = {

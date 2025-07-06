@@ -29,6 +29,9 @@ import {
 type RootStackParamList = {
   EventDetails: { eventId: string; event?: Event };
   Events: undefined;
+  EventTicket: { event: Event; ticket?: any };
+  QRScanner: { event: Event };
+  CheckInDashboard: { event: Event };
 };
 
 type EventDetailsRouteProp = RouteProp<RootStackParamList, 'EventDetails'>;
@@ -403,21 +406,49 @@ export default function EventDetailsScreen() {
 
       {/* Action Buttons */}
       <View style={styles.actionContainer}>
-        {userRegistration ? (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.unregisterButton]}
-            onPress={handleUnregister}
-            disabled={registering}
-          >
-            {registering ? (
-              <ActivityIndicator size="small" color={COLORS.white} />
-            ) : (
-              <>
-                <MaterialIcons name="cancel" size={24} color={COLORS.white} />
-                <Text style={styles.actionButtonText}>Unregister</Text>
-              </>
-            )}
-          </TouchableOpacity>
+        {isOrganizer ? (
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.ticketButton, { flex: 1, marginRight: 8 }]}
+              onPress={() => navigation.navigate('QRScanner', { event })}
+            >
+              <MaterialIcons name="qr-code-scanner" size={24} color={COLORS.white} />
+              <Text style={styles.actionButtonText}>Scan QR</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: COLORS.secondary, flex: 1, marginLeft: 8 }]}
+              onPress={() => navigation.navigate('CheckInDashboard', { event })}
+            >
+              <MaterialIcons name="dashboard" size={24} color={COLORS.white} />
+              <Text style={styles.actionButtonText}>Dashboard</Text>
+            </TouchableOpacity>
+          </View>
+        ) : userRegistration ? (
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.ticketButton, { flex: 1, marginRight: 8 }]}
+              onPress={() => navigation.navigate('EventTicket', { event, ticket: userRegistration })}
+            >
+              <MaterialIcons name="qr-code" size={24} color={COLORS.white} />
+              <Text style={styles.actionButtonText}>View Ticket</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[styles.actionButton, styles.unregisterButton, { flex: 1, marginLeft: 8 }]}
+              onPress={handleUnregister}
+              disabled={registering}
+            >
+              {registering ? (
+                <ActivityIndicator size="small" color={COLORS.white} />
+              ) : (
+                <>
+                  <MaterialIcons name="cancel" size={24} color={COLORS.white} />
+                  <Text style={styles.actionButtonText}>Unregister</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
         ) : canRegister ? (
           <TouchableOpacity
             style={[styles.actionButton, { backgroundColor: COLORS.primary }]}
@@ -606,5 +637,13 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  ticketButton: {
+    backgroundColor: COLORS.primary,
   },
 }); 

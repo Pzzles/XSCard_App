@@ -3,6 +3,7 @@ const { admin, db } = require('../firebase');
 exports.authenticateUser = async (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
+        
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
             return res.status(401).json({
                 message: 'Authentication required. Please provide a valid token.'
@@ -10,6 +11,12 @@ exports.authenticateUser = async (req, res, next) => {
         }
 
         const token = authHeader.split('Bearer ')[1];
+        
+        if (!token || token.trim() === '') {
+            return res.status(401).json({
+                message: 'Authentication token is empty.'
+            });
+        }
         
         // Check if token is blacklisted
         const blacklistDoc = await db.collection('tokenBlacklist').doc(token).get();

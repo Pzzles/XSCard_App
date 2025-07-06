@@ -248,6 +248,9 @@ export interface Ticket {
   qrGeneratedAt?: string;
 }
 
+// Alias for backwards compatibility and clarity
+export type EventTicket = Ticket;
+
 export interface QRCode {
   ticketId: string;
   qrCode: string; // Base64 data URL
@@ -261,7 +264,7 @@ export interface QRCodeData {
   ticketId: string;
   verificationToken: string;
   timestamp: number;
-  type: 'event_checkin';
+  type: 'event_ticket' | 'event_checkin';
   version: string;
 }
 
@@ -335,6 +338,12 @@ export interface BulkQRResult {
 }
 
 // API Response Types for QR System
+
+export interface GetTicketResponse {
+  success: boolean;
+  message?: string;
+  ticket: EventTicket;
+}
 
 export interface GenerateQRResponse {
   success: boolean;

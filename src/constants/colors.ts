@@ -9,6 +9,11 @@ export const COLORS = {
   error: '#FF4B6E',
   disabled: '#CCCCCC',
   border: '#E0E0E0',
+  success: '#4CAF50',
+  warning: '#FF9800',
+  info: '#2196F3',
+  text: '#333333',
+  textSecondary: '#888888',
 };
 
 export const CARD_COLORS = [

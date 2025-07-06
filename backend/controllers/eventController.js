@@ -846,10 +846,22 @@ exports.generateTicketQR = async (req, res) => {
     const { ticketId } = req.params;
     const userId = req.user.uid;
 
+    console.log('[generateTicketQR] Request params:', req.params);
+    console.log('[generateTicketQR] Ticket ID:', ticketId);
+    console.log('[generateTicketQR] User ID:', userId);
+
+    if (!ticketId) {
+      console.log('[generateTicketQR] No ticketId provided in params');
+      return sendError(res, 400, 'Ticket ID is required');
+    }
+
     // Get ticket data
     const ticketDoc = await db.collection('tickets').doc(ticketId).get();
+    console.log('[generateTicketQR] Ticket exists:', ticketDoc.exists);
+    
     if (!ticketDoc.exists) {
-      return sendError(res, 404, 'Ticket not found');
+      console.log('[generateTicketQR] Ticket not found:', ticketId);
+      return sendError(res, 404, `Ticket not found: ${ticketId}`);
     }
 
     const ticketData = ticketDoc.data();
@@ -977,17 +989,24 @@ exports.processCheckIn = async (req, res) => {
     }
 
     // Emit real-time notification for successful check-in
-    const socketService = require('../services/socketService');
-    if (socketService) {
-      const notificationData = {
-        type: 'attendee_checked_in',
-        eventId: validationResult.eventId,
-        attendeeName: userData?.name || 'Unknown',
-        checkedInAt: checkInResult.checkedInAt,
-        organizerId: organizerId
-      };
+    try {
+      const socketService = require('../services/socketService');
+      if (socketService && socketService.sendToUser) {
+        const notificationData = {
+          type: 'attendee_checked_in',
+          eventId: validationResult.eventId,
+          attendeeName: userData?.name || 'Unknown',
+          checkedInAt: checkInResult.checkedInAt,
+          organizerId: organizerId
+        };
 
-      socketService.broadcastToEventOrganizer(validationResult.eventId, organizerId, notificationData);
+        // Use sendToUser method instead of broadcastToEventOrganizer
+        socketService.sendToUser(organizerId, 'attendee_checked_in', notificationData);
+        console.log('[processCheckIn] Notification sent to organizer:', organizerId);
+      }
+    } catch (socketError) {
+      console.error('[processCheckIn] Socket notification failed (non-blocking):', socketError.message);
+      // Don't break the check-in process if socket notification fails
     }
 
     res.status(200).json({
@@ -1125,6 +1144,84 @@ exports.getEventAttendees = async (req, res) => {
 
   } catch (error) {
     sendError(res, 500, 'Error getting event attendees', error);
+  }
+};
+
+// Get user's ticket for a specific event
+exports.getMyTicketForEvent = async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const userId = req.user.uid;
+
+    console.log('[getMyTicketForEvent] Event ID:', eventId);
+    console.log('[getMyTicketForEvent] User ID:', userId);
+
+    // Check if user is registered for this event
+    const registrationSnapshot = await db.collection('event_registrations')
+      .where('eventId', '==', eventId)
+      .where('userId', '==', userId)
+      .get();
+    
+    console.log('[getMyTicketForEvent] User registrations for this event:', registrationSnapshot.size);
+    registrationSnapshot.docs.forEach(doc => {
+      const regData = doc.data();
+      console.log('[getMyTicketForEvent] Registration:', doc.id, 'ticketId:', regData.ticketId, 'status:', regData.status);
+    });
+
+    // First, let's see all tickets for this user
+    const allUserTickets = await db.collection('tickets')
+      .where('userId', '==', userId)
+      .get();
+    
+    console.log('[getMyTicketForEvent] User has', allUserTickets.size, 'total tickets');
+    allUserTickets.docs.forEach(doc => {
+      console.log('[getMyTicketForEvent] Ticket:', doc.id, 'for event:', doc.data().eventId);
+    });
+
+    // Find the user's ticket for this event
+    const ticketSnapshot = await db.collection('tickets')
+      .where('eventId', '==', eventId)
+      .where('userId', '==', userId)
+      .limit(1)
+      .get();
+
+    console.log('[getMyTicketForEvent] Tickets found for this event:', ticketSnapshot.size);
+
+    if (ticketSnapshot.empty) {
+      return res.status(404).json({
+        success: false,
+        message: 'No ticket found for this event'
+      });
+    }
+
+    const ticketDoc = ticketSnapshot.docs[0];
+    const ticketDocData = ticketDoc.data();
+    
+    console.log('[getMyTicketForEvent] Found ticket document ID:', ticketDoc.id);
+    console.log('[getMyTicketForEvent] Internal ticket ID field:', ticketDocData.id);
+    console.log('[getMyTicketForEvent] Ticket data keys:', Object.keys(ticketDocData));
+    
+    const ticketData = {
+      id: ticketDoc.id, // Always use the Firestore document ID
+      ...ticketDocData,
+      // Override any internal id field with the document ID
+      createdAt: ticketDocData.createdAt?.toDate().toISOString(),
+      updatedAt: ticketDocData.updatedAt?.toDate().toISOString(),
+      checkedInAt: ticketDocData.checkedInAt?.toDate().toISOString(),
+    };
+    
+    // Ensure the ID is the document ID
+    ticketData.id = ticketDoc.id;
+    
+    console.log('[getMyTicketForEvent] Final ticket ID being returned:', ticketData.id);
+
+    res.status(200).json({
+      success: true,
+      ticket: ticketData
+    });
+
+  } catch (error) {
+    sendError(res, 500, 'Error getting user ticket', error);
   }
 };
 

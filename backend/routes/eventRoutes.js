@@ -77,6 +77,9 @@ router.delete('/events/:eventId/unregister',
 router.get('/user/events', authenticateUser, eventController.getUserEvents);
 router.get('/user/registrations', authenticateUser, eventController.getUserRegistrations);
 
+// Get user's ticket for a specific event
+router.get('/events/:eventId/my-ticket', authenticateUser, eventController.getMyTicketForEvent);
+
 // QR Code Check-in System Routes (PROTECTED ROUTES)
 
 // Attendee routes - Generate QR codes for their tickets
