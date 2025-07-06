@@ -1,5 +1,5 @@
 const { db, admin } = require('../firebase.js');
-const { formatDate } = require('../utils/dateFormatter');
+const { formatDate, convertToISOString } = require('../utils/dateFormatter');
 const QRService = require('../services/qrService');
 
 // Helper function for error responses (following userController pattern)
@@ -86,12 +86,36 @@ exports.createEvent = async (req, res) => {
       return sendError(res, 400, 'Missing required fields: title, description, eventDate');
     }
 
-    // Convert date strings to Firestore Timestamps
+    // Convert date strings to Firestore Timestamps with validation
     if (typeof eventData.eventDate === 'string') {
-      eventData.eventDate = admin.firestore.Timestamp.fromDate(new Date(eventData.eventDate));
+      try {
+        const eventDate = new Date(eventData.eventDate);
+        if (isNaN(eventDate.getTime())) {
+          return sendError(res, 400, 'Invalid event date format');
+        }
+        // Ensure the date is valid for Firestore timestamp
+        const timestamp = Math.floor(eventDate.getTime() / 1000) * 1000; // Remove sub-millisecond precision
+        const validDate = new Date(timestamp);
+        eventData.eventDate = admin.firestore.Timestamp.fromDate(validDate);
+      } catch (error) {
+        console.error('Error converting eventDate:', error);
+        return sendError(res, 400, 'Invalid event date format');
+      }
     }
     if (eventData.endDate && typeof eventData.endDate === 'string') {
-      eventData.endDate = admin.firestore.Timestamp.fromDate(new Date(eventData.endDate));
+      try {
+        const endDate = new Date(eventData.endDate);
+        if (isNaN(endDate.getTime())) {
+          return sendError(res, 400, 'Invalid end date format');
+        }
+        // Ensure the date is valid for Firestore timestamp
+        const timestamp = Math.floor(endDate.getTime() / 1000) * 1000; // Remove sub-millisecond precision
+        const validDate = new Date(timestamp);
+        eventData.endDate = admin.firestore.Timestamp.fromDate(validDate);
+      } catch (error) {
+        console.error('Error converting endDate:', error);
+        return sendError(res, 400, 'Invalid end date format');
+      }
     }
 
     // Set default values
@@ -232,8 +256,11 @@ exports.getAllEvents = async (req, res) => {
       const eventData = doc.data();
       events.push({
         ...eventData,
+        // Send both formatted (for display) and ISO (for parsing) dates
         eventDate: formatDate(eventData.eventDate),
+        eventDateISO: convertToISOString(eventData.eventDate),
         endDate: eventData.endDate ? formatDate(eventData.endDate) : null,
+        endDateISO: eventData.endDate ? convertToISOString(eventData.endDate) : null,
         createdAt: formatDate(eventData.createdAt)
       });
     });
@@ -399,6 +426,16 @@ exports.updateEvent = async (req, res) => {
     const userId = req.user.uid;
     const updateData = req.body;
 
+    console.log('Update event request:', {
+      eventId,
+      userId,
+      updateData: {
+        ...updateData,
+        eventDate: updateData.eventDate,
+        endDate: updateData.endDate
+      }
+    });
+
     const eventRef = db.collection('events').doc(eventId);
     const eventDoc = await eventRef.get();
 
@@ -419,12 +456,42 @@ exports.updateEvent = async (req, res) => {
       updatedAt: admin.firestore.Timestamp.now()
     };
 
-    // Convert dates if provided
+    // Convert dates if provided with validation
     if (updates.eventDate && typeof updates.eventDate === 'string') {
-      updates.eventDate = admin.firestore.Timestamp.fromDate(new Date(updates.eventDate));
+      try {
+        const eventDate = new Date(updates.eventDate);
+        if (isNaN(eventDate.getTime())) {
+          return sendError(res, 400, 'Invalid event date format');
+        }
+        // Ensure the date is valid for Firestore timestamp
+        const timestamp = Math.floor(eventDate.getTime() / 1000) * 1000; // Remove sub-millisecond precision
+        const validDate = new Date(timestamp);
+        updates.eventDate = admin.firestore.Timestamp.fromDate(validDate);
+        console.log('Converted eventDate:', updates.eventDate);
+      } catch (error) {
+        console.error('Error converting eventDate:', error);
+        return sendError(res, 400, 'Invalid event date format');
+      }
     }
     if (updates.endDate && typeof updates.endDate === 'string') {
-      updates.endDate = admin.firestore.Timestamp.fromDate(new Date(updates.endDate));
+      try {
+        const endDate = new Date(updates.endDate);
+        if (isNaN(endDate.getTime())) {
+          return sendError(res, 400, 'Invalid end date format');
+        }
+        // Ensure the date is valid for Firestore timestamp
+        const timestamp = Math.floor(endDate.getTime() / 1000) * 1000; // Remove sub-millisecond precision
+        const validDate = new Date(timestamp);
+        updates.endDate = admin.firestore.Timestamp.fromDate(validDate);
+        console.log('Converted endDate:', updates.endDate);
+      } catch (error) {
+        console.error('Error converting endDate:', error);
+        return sendError(res, 400, 'Invalid end date format');
+      }
+    }
+    // Handle null endDate
+    if (updates.endDate === null) {
+      updates.endDate = admin.firestore.FieldValue.delete();
     }
 
     // Remove fields that shouldn't be updated
@@ -542,8 +609,11 @@ exports.searchEvents = async (req, res) => {
         
         events.push({
           ...eventData,
+          // Send both formatted (for display) and ISO (for parsing) dates
           eventDate: formatDate(eventData.eventDate),
-          endDate: eventData.endDate ? formatDate(eventData.endDate) : null
+          eventDateISO: convertToISOString(eventData.eventDate),
+          endDate: eventData.endDate ? formatDate(eventData.endDate) : null,
+          endDateISO: eventData.endDate ? convertToISOString(eventData.endDate) : null
         });
       }
     });
@@ -583,8 +653,11 @@ exports.getUserEvents = async (req, res) => {
       const eventData = doc.data();
       events.push({
         ...eventData,
+        // Send both formatted (for display) and ISO (for parsing) dates
         eventDate: formatDate(eventData.eventDate),
+        eventDateISO: convertToISOString(eventData.eventDate),
         endDate: eventData.endDate ? formatDate(eventData.endDate) : null,
+        endDateISO: eventData.endDate ? convertToISOString(eventData.endDate) : null,
         createdAt: formatDate(eventData.createdAt)
       });
     });
@@ -713,9 +786,13 @@ exports.getEventById = async (req, res) => {
       data: {
         event: {
           ...eventData,
+          // For display
           eventDate: formatDate(eventData.eventDate),
           endDate: eventData.endDate ? formatDate(eventData.endDate) : null,
-          createdAt: formatDate(eventData.createdAt)
+          createdAt: formatDate(eventData.createdAt),
+          // For editing - ISO strings
+          eventDateISO: convertToISOString(eventData.eventDate),
+          endDateISO: eventData.endDate ? convertToISOString(eventData.endDate) : null,
         },
         userRegistration: userRegistration ? {
           ...userRegistration,

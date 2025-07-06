@@ -42,6 +42,7 @@ export type RootStackParamList = {
   EventDetails: { eventId: string; event?: any };
   EventPreferences: undefined;
   CreateEvent: undefined;
+  EditEvent: { eventId: string; event?: any };
   MyEvents: undefined;
   EventTicket: { event: any; ticket?: any };
   CheckInDashboard: { event: any };

@@ -151,8 +151,11 @@ export const EventTicketScreen: React.FC = () => {
 
   const shareTicket = async () => {
     try {
+      const eventDate = event.eventDateISO ? new Date(event.eventDateISO) : new Date(event.eventDate);
+      const formattedDate = isNaN(eventDate.getTime()) ? 'Date TBD' : eventDate.toLocaleDateString();
+      
       await Share.share({
-        message: `My ticket for ${event.title}\n\nEvent: ${event.title}\nDate: ${new Date(event.eventDate).toLocaleDateString()}\nVenue: ${event.location.venue}\n\nTicket ID: ${ticket?.id}`,
+        message: `My ticket for ${event.title}\n\nEvent: ${event.title}\nDate: ${formattedDate}\nVenue: ${event.location.venue}\n\nTicket ID: ${ticket?.id}`,
         title: `XSCard Event Ticket - ${event.title}`,
       });
     } catch (error) {
@@ -165,22 +168,58 @@ export const EventTicketScreen: React.FC = () => {
     // TODO: Implement actual screen brightness control if needed
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+  const formatDate = (dateString: string, isoDateString?: string) => {
+    try {
+      let date: Date;
+      
+      // Use ISO string if available (more reliable)
+      if (isoDateString) {
+        date = new Date(isoDateString);
+      } else {
+        date = new Date(dateString);
+      }
+
+      if (isNaN(date.getTime())) {
+        console.error('Invalid date string:', { dateString, isoDateString });
+        return 'Invalid date';
+      }
+
+      return date.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return 'Invalid date';
+    }
   };
 
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+  const formatTime = (dateString: string, isoDateString?: string) => {
+    try {
+      let date: Date;
+      
+      // Use ISO string if available (more reliable)
+      if (isoDateString) {
+        date = new Date(isoDateString);
+      } else {
+        date = new Date(dateString);
+      }
+
+      if (isNaN(date.getTime())) {
+        console.error('Invalid time string:', { dateString, isoDateString });
+        return 'Invalid time';
+      }
+
+      return date.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch (error) {
+      console.error('Error formatting time:', error);
+      return 'Invalid time';
+    }
   };
 
   if (loading) {
@@ -231,11 +270,11 @@ export const EventTicketScreen: React.FC = () => {
           <View style={styles.eventDetails}>
             <View style={styles.detailRow}>
               <MaterialIcons name="event" size={20} color="#666" />
-              <Text style={styles.detailText}>{formatDate(event.eventDate)}</Text>
+              <Text style={styles.detailText}>{formatDate(event.eventDate, event.eventDateISO)}</Text>
             </View>
             <View style={styles.detailRow}>
               <MaterialIcons name="access-time" size={20} color="#666" />
-              <Text style={styles.detailText}>{formatTime(event.eventDate)}</Text>
+              <Text style={styles.detailText}>{formatTime(event.eventDate, event.eventDateISO)}</Text>
             </View>
             <View style={styles.detailRow}>
               <MaterialIcons name="location-on" size={20} color="#666" />

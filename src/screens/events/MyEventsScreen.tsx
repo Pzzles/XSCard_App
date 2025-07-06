@@ -15,11 +15,37 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { COLORS } from '../../constants/colors';
-import Header from '../../components/Header';
+import EventHeader from '../../components/EventHeader';
 import { useEventNotifications } from '../../context/EventNotificationContext';
 import { authenticatedFetchWithRefresh, ENDPOINTS } from '../../utils/api';
 import { useToast } from '../../hooks/useToast';
 import { Event, UserEventsResponse } from '../../types/events';
+
+// Helper function to safely parse dates
+const parseEventDate = (dateString: string, isoDateString?: string): Date => {
+  try {
+    // Prefer ISO string if available (more reliable)
+    if (isoDateString) {
+      const date = new Date(isoDateString);
+      if (!isNaN(date.getTime())) {
+        return date;
+      }
+    }
+    
+    // Fallback to formatted date string
+    const date = new Date(dateString);
+    if (!isNaN(date.getTime())) {
+      return date;
+    }
+    
+    // If both fail, return current date as fallback
+    console.error('Failed to parse date:', { dateString, isoDateString });
+    return new Date();
+  } catch (error) {
+    console.error('Error parsing event date:', error);
+    return new Date();
+  }
+};
 
 type NavigationProp = NativeStackNavigationProp<any>;
 
@@ -118,6 +144,87 @@ export default function MyEventsScreen() {
     loadMyEvents();
   };
 
+  // Handle duplicate event
+  const handleDuplicateEvent = async (eventId: string) => {
+    try {
+      const eventToDuplicate = events.find(e => e.id === eventId);
+      if (!eventToDuplicate) {
+        toast.error('Error', 'Event not found');
+        return;
+      }
+
+      // Create duplicate data with proper date handling
+      let eventDateISO: string;
+      let endDateISO: string | null = null;
+
+      // Use ISO dates if available, otherwise try to convert formatted dates
+      if (eventToDuplicate.eventDateISO) {
+        eventDateISO = eventToDuplicate.eventDateISO;
+      } else {
+        try {
+          eventDateISO = new Date(eventToDuplicate.eventDate).toISOString();
+        } catch (error) {
+          console.error('Error parsing event date:', error);
+          toast.error('Error', 'Invalid event date format');
+          return;
+        }
+      }
+
+      if (eventToDuplicate.endDate) {
+        if (eventToDuplicate.endDateISO) {
+          endDateISO = eventToDuplicate.endDateISO;
+        } else {
+          try {
+            endDateISO = new Date(eventToDuplicate.endDate).toISOString();
+          } catch (error) {
+            console.error('Error parsing end date:', error);
+            // Continue without end date rather than failing
+            endDateISO = null;
+          }
+        }
+      }
+
+      const duplicateData = {
+        title: `${eventToDuplicate.title} (Copy)`,
+        description: eventToDuplicate.description,
+        eventDate: eventDateISO,
+        endDate: endDateISO,
+        category: eventToDuplicate.category,
+        eventType: eventToDuplicate.eventType,
+        ticketPrice: eventToDuplicate.ticketPrice,
+        maxAttendees: eventToDuplicate.maxAttendees,
+        visibility: eventToDuplicate.visibility, // Keep same visibility
+        location: eventToDuplicate.location,
+        images: eventToDuplicate.images || [],
+        tags: eventToDuplicate.tags || [],
+      };
+
+      const response = await authenticatedFetchWithRefresh(
+        ENDPOINTS.CREATE_EVENT,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(duplicateData),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          toast.success('Success', 'Event duplicated successfully');
+          loadMyEvents(); // Refresh the list
+        } else {
+          throw new Error(data.message || 'Failed to duplicate event');
+        }
+      } else {
+        throw new Error(`Failed to duplicate event: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('Error duplicating event:', error);
+      toast.error('Error', 'Failed to duplicate event. Please try again.');
+    }
+  };
+
   // Handle event actions
   const handleEventAction = async (action: string, eventId: string) => {
     try {
@@ -125,6 +232,14 @@ export default function MyEventsScreen() {
       let successMessage = '';
 
       switch (action) {
+        case 'edit':
+          // Navigate to edit screen
+          const eventToEdit = events.find(e => e.id === eventId);
+          navigation.navigate('EditEvent', { eventId, event: eventToEdit });
+          setActionModalVisible(false);
+          setSelectedEvent(null);
+          return;
+
         case 'publish':
           response = await authenticatedFetchWithRefresh(
             ENDPOINTS.PUBLISH_EVENT.replace(':eventId', eventId),
@@ -133,6 +248,13 @@ export default function MyEventsScreen() {
           successMessage = 'Event published successfully';
           break;
 
+        case 'duplicate':
+          // Implement duplication logic
+          await handleDuplicateEvent(eventId);
+          setActionModalVisible(false);
+          setSelectedEvent(null);
+          return;
+
         case 'delete':
           response = await authenticatedFetchWithRefresh(
             ENDPOINTS.DELETE_EVENT.replace(':eventId', eventId),
@@ -140,11 +262,6 @@ export default function MyEventsScreen() {
           );
           successMessage = 'Event cancelled successfully';
           break;
-
-        case 'duplicate':
-          // TODO: Implement duplication
-          toast.info('Coming Soon', 'Event duplication will be available soon');
-          return;
 
         default:
           return;
@@ -163,6 +280,39 @@ export default function MyEventsScreen() {
 
     setActionModalVisible(false);
     setSelectedEvent(null);
+  };
+
+  // Duplicate event function
+  const duplicateEvent = async (eventId: string): Promise<Response> => {
+    const eventToDuplicate = events.find(e => e.id === eventId);
+    if (!eventToDuplicate) {
+      throw new Error('Event not found');
+    }
+
+    // Create a new event based on the existing one
+    const duplicateData = {
+      title: `${eventToDuplicate.title} (Copy)`,
+      description: eventToDuplicate.description,
+      eventDate: eventToDuplicate.eventDate,
+      endDate: eventToDuplicate.endDate,
+      location: eventToDuplicate.location,
+      category: eventToDuplicate.category,
+      eventType: eventToDuplicate.eventType,
+      ticketPrice: eventToDuplicate.ticketPrice,
+      maxAttendees: eventToDuplicate.maxAttendees,
+      visibility: eventToDuplicate.visibility,
+      images: eventToDuplicate.images || [],
+      tags: eventToDuplicate.tags || [],
+    };
+
+    return await authenticatedFetchWithRefresh(
+      ENDPOINTS.CREATE_EVENT,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(duplicateData),
+      }
+    );
   };
 
   // Render stats cards
@@ -196,7 +346,7 @@ export default function MyEventsScreen() {
             <View style={styles.metaItem}>
               <MaterialIcons name="schedule" size={16} color={COLORS.gray} />
               <Text style={styles.metaText}>
-                {new Date(item.eventDate).toLocaleDateString()}
+                {parseEventDate(item.eventDate, item.eventDateISO).toLocaleDateString()}
               </Text>
             </View>
             <View style={styles.metaItem}>
@@ -233,16 +383,6 @@ export default function MyEventsScreen() {
         </TouchableOpacity>
       </TouchableOpacity>
     );
-  };
-
-  // Get status color
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'published': return '#4CAF50';
-      case 'draft': return '#FF9800';
-      case 'cancelled': return '#F44336';
-      default: return COLORS.gray;
-    }
   };
 
   // Render empty state
@@ -305,7 +445,7 @@ export default function MyEventsScreen() {
 
   return (
     <View style={styles.container}>
-      <Header 
+      <EventHeader 
         title="My Events" 
         rightIcon={
           <TouchableOpacity onPress={() => navigation.navigate('CreateEvent')}>
@@ -366,9 +506,23 @@ export default function MyEventsScreen() {
   );
 }
 
+// Get status color helper function
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case 'published': return '#4CAF50';
+    case 'draft': return '#FF9800';
+    case 'cancelled': return '#F44336';
+    default: return COLORS.gray;
+  }
+};
+
 // Event Action Modal Component
 function EventActionModal({ visible, event, onClose, onAction }: EventActionModalProps) {
   if (!event) return null;
+
+  const isEventPast = parseEventDate(event.eventDate, event.eventDateISO) < new Date();
+  const isEventFuture = parseEventDate(event.eventDate, event.eventDateISO) > new Date();
+  const isEventActive = event.status === 'published' && !isEventPast;
 
   const actions = [
     { 
@@ -376,26 +530,29 @@ function EventActionModal({ visible, event, onClose, onAction }: EventActionModa
       label: 'Edit Event', 
       icon: 'edit', 
       color: COLORS.primary,
-      available: true 
+      available: event.status !== 'cancelled' && !isEventPast 
     },
     { 
       key: 'publish', 
       label: event.status === 'published' ? 'Republish' : 'Publish Event', 
       icon: 'publish', 
       color: '#4CAF50',
-      available: event.status !== 'cancelled' 
+      // Show republish for cancelled events or if event is past and was published
+      available: event.status === 'cancelled' || 
+                (event.status === 'draft') ||
+                (event.status === 'published' && isEventPast)
     },
     { 
       key: 'duplicate', 
       label: 'Duplicate Event', 
       icon: 'content-copy', 
       color: '#2196F3',
-      available: true 
+      available: true // Always available
     },
     { 
       key: 'delete', 
-      label: 'Cancel Event', 
-      icon: 'delete', 
+      label: event.status === 'published' ? 'Cancel Event' : 'Delete Event', 
+      icon: event.status === 'published' ? 'cancel' : 'delete', 
       color: '#F44336',
       available: event.status !== 'cancelled' 
     },
@@ -418,6 +575,19 @@ function EventActionModal({ visible, event, onClose, onAction }: EventActionModa
           </View>
 
           <Text style={styles.eventName} numberOfLines={2}>{event.title}</Text>
+          
+          {/* Event status info */}
+          <View style={styles.eventStatusInfo}>
+            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(event.status) }]}>
+              <Text style={styles.statusText}>{event.status.toUpperCase()}</Text>
+            </View>
+            <Text style={styles.eventDate}>
+              {parseEventDate(event.eventDate, event.eventDateISO).toLocaleDateString()} 
+              {isEventPast && ' (Past)'}
+              {isEventActive && ' (Active)'}
+              {isEventFuture && event.status === 'published' && ' (Upcoming)'}
+            </Text>
+          </View>
 
           <View style={styles.actionsList}>
             {actions.filter(action => action.available).map((action) => (
@@ -447,7 +617,7 @@ const styles = StyleSheet.create({
   },
   statsContainer: {
     paddingHorizontal: 16,
-    paddingTop: 120, // Account for header
+    paddingTop: 16,
     paddingBottom: 16,
   },
   statsRow: {
@@ -621,6 +791,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.gray,
     marginBottom: 16,
+  },
+  eventStatusInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  eventDate: {
+    fontSize: 14,
+    color: COLORS.gray,
   },
   actionsList: {
     gap: 8,

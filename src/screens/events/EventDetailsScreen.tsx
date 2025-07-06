@@ -15,7 +15,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { COLORS } from '../../constants/colors';
-import Header from '../../components/Header';
+import EventHeader from '../../components/EventHeader';
 import { authenticatedFetchWithRefresh, ENDPOINTS } from '../../utils/api';
 import { useToast } from '../../hooks/useToast';
 import {
@@ -202,31 +202,68 @@ export default function EventDetailsScreen() {
     );
   };
 
-  // Format date and time
-  const formatEventDateTime = (dateString: string, endDateString?: string) => {
-    const startDate = new Date(dateString);
-    const endDate = endDateString ? new Date(endDateString) : null;
+  // Format date and time with better error handling
+  const formatEventDateTime = (dateString: string, endDateString?: string, isoDateString?: string, isoEndDateString?: string) => {
+    try {
+      let startDate: Date;
+      let endDate: Date | null = null;
 
-    const dateOptions: Intl.DateTimeFormatOptions = {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    };
+      // Use ISO string if available (more reliable)
+      if (isoDateString) {
+        startDate = new Date(isoDateString);
+      } else {
+        startDate = new Date(dateString);
+      }
 
-    const timeOptions: Intl.DateTimeFormatOptions = {
-      hour: '2-digit',
-      minute: '2-digit',
-    };
+      if (endDateString) {
+        if (isoEndDateString) {
+          endDate = new Date(isoEndDateString);
+        } else {
+          endDate = new Date(endDateString);
+        }
+      }
 
-    const formattedDate = startDate.toLocaleDateString([], dateOptions);
-    const startTime = startDate.toLocaleTimeString([], timeOptions);
-    const endTime = endDate ? endDate.toLocaleTimeString([], timeOptions) : null;
+      // Validate dates
+      if (isNaN(startDate.getTime())) {
+        console.error('Invalid start date:', { dateString, isoDateString });
+        return {
+          date: 'Invalid date',
+          time: 'Invalid time',
+        };
+      }
 
-    return {
-      date: formattedDate,
-      time: endTime ? `${startTime} - ${endTime}` : startTime,
-    };
+      if (endDate && isNaN(endDate.getTime())) {
+        console.error('Invalid end date:', { endDateString, isoEndDateString });
+        endDate = null; // Continue without end date rather than failing
+      }
+
+      const dateOptions: Intl.DateTimeFormatOptions = {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      };
+
+      const timeOptions: Intl.DateTimeFormatOptions = {
+        hour: '2-digit',
+        minute: '2-digit',
+      };
+
+      const formattedDate = startDate.toLocaleDateString([], dateOptions);
+      const startTime = startDate.toLocaleTimeString([], timeOptions);
+      const endTime = endDate ? endDate.toLocaleTimeString([], timeOptions) : null;
+
+      return {
+        date: formattedDate,
+        time: endTime ? `${startTime} - ${endTime}` : startTime,
+      };
+    } catch (error) {
+      console.error('Error formatting event date time:', error);
+      return {
+        date: 'Invalid date',
+        time: 'Invalid time',
+      };
+    }
   };
 
   // Open location in maps
@@ -245,7 +282,7 @@ export default function EventDetailsScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <Header title="Event Details" />
+        <EventHeader title="Event Details" />
         <View style={styles.loading}>
           <ActivityIndicator size="large" color={COLORS.primary} />
           <Text style={styles.loadingText}>Loading event details...</Text>
@@ -257,7 +294,7 @@ export default function EventDetailsScreen() {
   if (!event) {
     return (
       <View style={styles.container}>
-        <Header title="Event Details" />
+        <EventHeader title="Event Details" />
         <View style={styles.error}>
           <MaterialIcons name="error" size={64} color={COLORS.error} />
           <Text style={styles.errorText}>Event not found</Text>
@@ -272,13 +309,13 @@ export default function EventDetailsScreen() {
     );
   }
 
-  const dateTime = formatEventDateTime(event.eventDate, event.endDate);
+  const dateTime = formatEventDateTime(event.eventDate, event.endDate, event.eventDateISO, event.endDateISO);
   const isEventFull = event.maxAttendees !== -1 && event.currentAttendees >= event.maxAttendees;
   const canRegister = !userRegistration && !isEventFull && event.status === 'published';
 
   return (
     <View style={styles.container}>
-      <Header 
+      <EventHeader 
         title="Event Details"
         rightIcon={
           isOrganizer ? (
@@ -483,7 +520,6 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-    marginTop: 100, // Account for header
   },
   eventImage: {
     width: '100%',

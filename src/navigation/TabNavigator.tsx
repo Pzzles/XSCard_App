@@ -17,6 +17,7 @@ import EventsScreen from '../screens/events/EventsScreen';
 import EventDetailsScreen from '../screens/events/EventDetailsScreen';
 import EventPreferencesScreen from '../screens/events/EventPreferencesScreen';
 import CreateEventScreen from '../screens/events/CreateEventScreen';
+import EditEventScreen from '../screens/events/EditEventScreen';
 import MyEventsScreen from '../screens/events/MyEventsScreen';
 import { EventTicketScreen } from '../screens/events/EventTicketScreen';
 import QRScannerScreen from '../screens/events/QRScannerScreen';
@@ -94,6 +95,7 @@ export default function AppNavigator() {
       <Stack.Screen name="EventDetails" component={EventDetailsScreen} />
       <Stack.Screen name="EventPreferences" component={EventPreferencesScreen} />
       <Stack.Screen name="CreateEvent" component={CreateEventScreen} />
+      <Stack.Screen name="EditEvent" component={EditEventScreen} />
       <Stack.Screen name="MyEvents" component={MyEventsScreen} />
       <Stack.Screen name="EventTicket" component={EventTicketScreen} />
       <Stack.Screen name="QRScanner" component={QRScannerScreen} />

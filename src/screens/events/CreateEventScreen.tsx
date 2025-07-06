@@ -18,7 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 import { COLORS } from '../../constants/colors';
-import Header from '../../components/Header';
+import EventHeader from '../../components/EventHeader';
 import { authenticatedFetchWithRefresh, ENDPOINTS } from '../../utils/api';
 import { useToast } from '../../hooks/useToast';
 import {
@@ -750,7 +750,7 @@ export default function CreateEventScreen() {
 
   return (
     <View style={styles.container}>
-      <Header title="Create Event" />
+      <EventHeader title="Create Event" />
 
       {/* Progress indicator */}
       <View style={styles.progressContainer}>
@@ -825,7 +825,7 @@ const styles = StyleSheet.create({
   },
   progressContainer: {
     paddingHorizontal: 16,
-    paddingTop: 120, // Account for header
+    paddingTop: 16,
     paddingBottom: 16,
   },
   progressBar: {

@@ -23,7 +23,9 @@ export interface Event {
   title: string;
   description: string;
   eventDate: string;
+  eventDateISO?: string; // ISO format for editing
   endDate?: string;
+  endDateISO?: string; // ISO format for editing
   location: EventLocation;
   category: string;
   eventType: 'free' | 'paid';

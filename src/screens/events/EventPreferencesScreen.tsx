@@ -14,7 +14,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { COLORS } from '../../constants/colors';
-import Header from '../../components/Header';
+import EventHeader from '../../components/EventHeader';
 import { EventPreferences } from '../../types/events';
 import { authenticatedFetchWithRefresh, ENDPOINTS } from '../../utils/api';
 import { useToast } from '../../hooks/useToast';
@@ -236,7 +236,7 @@ export default function EventPreferencesScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <Header title="Event Preferences" />
+        <EventHeader title="Event Preferences" />
         <View style={styles.loading}>
           <ActivityIndicator size="large" color={COLORS.primary} />
           <Text style={styles.loadingText}>Loading your preferences...</Text>
@@ -247,7 +247,7 @@ export default function EventPreferencesScreen() {
 
   return (
     <View style={styles.container}>
-      <Header title="Event Preferences" />
+      <EventHeader title="Event Preferences" />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Introduction */}
@@ -467,12 +467,11 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-    marginTop: 100, // Account for header
   },
   content: {
     width: '100%', // Remove side spacing - use full width
     padding: 16,
-    paddingTop: 120, // Add top padding to account for header
+    paddingTop: 16,
     paddingHorizontal: 16, // Smaller horizontal padding
     paddingBottom: 40,
   },

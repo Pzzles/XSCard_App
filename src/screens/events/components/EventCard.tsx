@@ -20,25 +20,51 @@ interface EventCardProps {
 export default function EventCard({ event, onPress }: EventCardProps) {
   const { colorScheme } = useColorScheme();
 
-  // Format date
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const today = new Date();
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
+  // Format date with better error handling
+  const formatDate = (dateString: string, isoDateString?: string) => {
+    try {
+      if (!dateString && !isoDateString) {
+        return 'Date TBD';
+      }
 
-    // Check if it's today or tomorrow
-    if (date.toDateString() === today.toDateString()) {
-      return `Today, ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    } else if (date.toDateString() === tomorrow.toDateString()) {
-      return `Tomorrow, ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    } else {
-      return date.toLocaleDateString([], { 
-        month: 'short', 
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
+      let date: Date;
+      
+      // Prefer ISO string if available (more reliable for parsing)
+      if (isoDateString) {
+        console.log('Using ISO date string:', isoDateString);
+        date = new Date(isoDateString);
+      } else {
+        console.log('Using formatted date string:', dateString);
+        // Try to parse the formatted date string
+        date = new Date(dateString);
+      }
+
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        console.error('Invalid date string:', { dateString, isoDateString });
+        return 'Invalid date';
+      }
+
+      const today = new Date();
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      // Check if it's today or tomorrow
+      if (date.toDateString() === today.toDateString()) {
+        return `Today, ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      } else if (date.toDateString() === tomorrow.toDateString()) {
+        return `Tomorrow, ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      } else {
+        return date.toLocaleDateString([], { 
+          month: 'short', 
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      }
+    } catch (error) {
+      console.error('Error formatting date:', error, 'Date strings:', { dateString, isoDateString });
+      return 'Invalid date';
     }
   };
 
@@ -129,7 +155,7 @@ export default function EventCard({ event, onPress }: EventCardProps) {
         {/* Date and Time */}
         <View style={styles.dateRow}>
           <MaterialIcons name="schedule" size={16} color={COLORS.gray} />
-          <Text style={styles.dateText}>{formatDate(event.eventDate)}</Text>
+          <Text style={styles.dateText}>{formatDate(event.eventDate, event.eventDateISO)}</Text>
         </View>
 
         {/* Location */}
