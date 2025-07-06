@@ -7,6 +7,7 @@ import AuthNavigator from './src/navigation/AuthNavigator';
 import TabNavigator from './src/navigation/TabNavigator';
 import { AuthProvider } from './src/context/AuthContext';
 import { EventNotificationProvider } from './src/context/EventNotificationContext';
+import ToastProvider from './src/components/ToastProvider';
 import { AuthManager } from './src/utils/authManager';
 import { setGlobalNavigationRef } from './src/utils/api';
 
@@ -50,13 +51,15 @@ export default function App() {
   return (
     <AuthProvider>
       <EventNotificationProvider>
-        <NavigationContainer ref={navigationRef}>
-          <StatusBar style="auto" />
-          <Stack.Navigator screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="Auth" component={AuthNavigator} />
-            <Stack.Screen name="MainApp" component={TabNavigator} />
-          </Stack.Navigator>
-        </NavigationContainer>
+        <ToastProvider>
+          <NavigationContainer ref={navigationRef}>
+            <StatusBar style="auto" />
+            <Stack.Navigator screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="Auth" component={AuthNavigator} />
+              <Stack.Screen name="MainApp" component={TabNavigator} />
+            </Stack.Navigator>
+          </NavigationContainer>
+        </ToastProvider>
       </EventNotificationProvider>
     </AuthProvider>
   );

@@ -1,11 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   StyleSheet,
   View,
   Text,
   FlatList,
   TouchableOpacity,
-  Alert,
   RefreshControl,
   ActivityIndicator,
   Switch,
@@ -17,7 +16,9 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
+import { useEventNotifications } from '../../context/EventNotificationContext';
 import { authenticatedFetchWithRefresh, ENDPOINTS } from '../../utils/api';
+import { useToast } from '../../hooks/useToast';
 import { Event, UserEventsResponse } from '../../types/events';
 
 type NavigationProp = NativeStackNavigationProp<any>;
@@ -39,6 +40,8 @@ interface EventActionModalProps {
 
 export default function MyEventsScreen() {
   const navigation = useNavigation<NavigationProp>();
+  const toast = useToast();
+  const { notifications } = useEventNotifications();
 
   // State management
   const [events, setEvents] = useState<Event[]>([]);
@@ -46,6 +49,7 @@ export default function MyEventsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
   const [bulkMode, setBulkMode] = useState(false);
+  const [lastProcessedNotificationId, setLastProcessedNotificationId] = useState<string | null>(null);
   const [stats, setStats] = useState<EventStats>({
     totalEvents: 0,
     publishedEvents: 0,
@@ -89,7 +93,7 @@ export default function MyEventsScreen() {
       }
     } catch (error) {
       console.error('Error loading my events:', error);
-      Alert.alert('Error', 'Failed to load your events. Please try again.');
+      toast.error('Error', 'Failed to load your events. Please try again.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -139,7 +143,7 @@ export default function MyEventsScreen() {
 
         case 'duplicate':
           // TODO: Implement duplication
-          Alert.alert('Coming Soon', 'Event duplication will be available soon');
+          toast.info('Coming Soon', 'Event duplication will be available soon');
           return;
 
         default:
@@ -147,14 +151,14 @@ export default function MyEventsScreen() {
       }
 
       if (response.ok) {
-        Alert.alert('Success', successMessage);
+        toast.success('Success', successMessage);
         loadMyEvents(); // Refresh the list
       } else {
         throw new Error(`Failed to ${action} event`);
       }
     } catch (error) {
       console.error(`Error ${action} event:`, error);
-      Alert.alert('Error', `Failed to ${action} event. Please try again.`);
+      toast.error('Error', `Failed to ${action} event. Please try again.`);
     }
 
     setActionModalVisible(false);
@@ -258,6 +262,46 @@ export default function MyEventsScreen() {
       </TouchableOpacity>
     </View>
   );
+
+  // Listen for real-time registration notifications (for organizers)
+  useEffect(() => {
+    if (notifications && notifications.length > 0) {
+      // Only process the latest notification if it's new
+      const latestNotification = notifications[0];
+      const notificationId = (latestNotification as any).id;
+      
+      // Skip if we've already processed this notification
+      if (notificationId && notificationId === lastProcessedNotificationId) {
+        return;
+      }
+      
+      // Update the last processed notification ID
+      if (notificationId) {
+        setLastProcessedNotificationId(notificationId);
+      }
+      
+      // Handle organizer notifications for registrations
+      if (latestNotification.type === 'new_registration') {
+        console.log('[MyEventsScreen] Received new registration notification');
+        toast.success(
+          '👤 New Registration',
+          `${latestNotification.registration?.userName} registered for your event "${latestNotification.event?.title}"`
+        );
+        // Refresh the events list to update registration counts
+        loadMyEvents();
+      }
+      
+      if (latestNotification.type === 'event_unregistration') {
+        console.log('[MyEventsScreen] Received unregistration notification');
+        toast.info(
+          '👋 Unregistration',
+          `${latestNotification.unregistration?.userName} unregistered from your event "${latestNotification.event?.title}"`
+        );
+        // Refresh the events list to update registration counts
+        loadMyEvents();
+      }
+    }
+  }, [notifications, lastProcessedNotificationId]);
 
   return (
     <View style={styles.container}>
@@ -601,4 +645,4 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.black,
   },
-}); 
+});

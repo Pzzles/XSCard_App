@@ -221,4 +221,189 @@ export interface EventAnalytics {
     date: string;
     count: number;
   }>;
-} 
+}
+
+// QR Code Check-in System Types
+
+export interface Ticket {
+  id: string;
+  eventId: string;
+  userId: string;
+  userInfo: {
+    name: string;
+    email: string;
+    phone?: string;
+  };
+  status: 'active' | 'cancelled' | 'pending_payment' | 'refunded';
+  createdAt: string;
+  updatedAt: string;
+  specialRequests?: string;
+  ticketType: 'free' | 'paid';
+  ticketPrice: number;
+  paymentReference?: string;
+  checkedIn: boolean;
+  checkedInAt?: string;
+  checkedInBy?: string;
+  qrGenerated: boolean;
+  qrGeneratedAt?: string;
+}
+
+export interface QRCode {
+  ticketId: string;
+  qrCode: string; // Base64 data URL
+  verificationToken: string;
+  expiresAt: string;
+}
+
+export interface QRCodeData {
+  eventId: string;
+  userId: string;
+  ticketId: string;
+  verificationToken: string;
+  timestamp: number;
+  type: 'event_checkin';
+  version: string;
+}
+
+export interface QRValidationResult {
+  success: boolean;
+  valid?: boolean;
+  error?: string;
+  message: string;
+  eventId?: string;
+  userId?: string;
+  ticketId?: string;
+  verificationToken?: string;
+  eventData?: Event;
+  ticketData?: Ticket;
+  userData?: {
+    name: string;
+    email: string;
+    profileImage?: string;
+    company?: string;
+  };
+  checkedInAt?: string;
+  checkedInBy?: string;
+}
+
+export interface CheckInStats {
+  eventId: string;
+  totalTickets: number;
+  checkedInCount: number;
+  pendingCheckIn: number;
+  checkInRate: number;
+  checkInDetails: Array<{
+    ticketId: string;
+    userId: string;
+    checkedInAt: string;
+    checkedInBy: string;
+  }>;
+}
+
+export interface EventAttendee {
+  ticketId: string;
+  userId: string;
+  userData: {
+    name: string;
+    email: string;
+    profileImage?: string;
+    company?: string;
+  } | null;
+  registeredAt: string;
+  checkedIn: boolean;
+  checkedInAt?: string;
+  ticketStatus: string;
+}
+
+export interface BulkQRResult {
+  eventId: string;
+  totalTickets: number;
+  generatedCount: number;
+  errorCount: number;
+  qrCodes: Array<{
+    ticketId: string;
+    userId: string;
+    qrCode: string;
+    verificationToken: string;
+    expiresAt: string;
+  }>;
+  errors: Array<{
+    ticketId: string;
+    userId: string;
+    error: string;
+  }>;
+}
+
+// API Response Types for QR System
+
+export interface GenerateQRResponse {
+  success: boolean;
+  message: string;
+  ticketId: string;
+  qrCode: string;
+  verificationToken: string;
+  expiresAt: string;
+}
+
+export interface CheckInResponse {
+  success: boolean;
+  message: string;
+  eventId: string;
+  ticketId: string;
+  userData: {
+    name: string;
+    email: string;
+    profileImage?: string;
+    company?: string;
+  } | null;
+  checkedInAt: string;
+}
+
+export interface AttendeesResponse {
+  success: boolean;
+  message: string;
+  eventId: string;
+  totalAttendees: number;
+  checkedInCount: number;
+  attendees: EventAttendee[];
+}
+
+export interface CheckInStatsResponse {
+  success: boolean;
+  message: string;
+  eventId: string;
+  totalTickets: number;
+  checkedInCount: number;
+  pendingCheckIn: number;
+  checkInRate: number;
+  checkInDetails: Array<{
+    ticketId: string;
+    userId: string;
+    checkedInAt: string;
+    checkedInBy: string;
+  }>;
+}
+
+// Notification Types for QR Check-in
+export interface CheckInNotification {
+  type: 'attendee_checked_in';
+  eventId: string;
+  attendeeName: string;
+  checkedInAt: string;
+  organizerId: string;
+}
+
+// Error Types for QR System
+export type QRErrorType = 
+  | 'INVALID_QR_FORMAT'
+  | 'MISSING_QR_FIELDS'
+  | 'INVALID_QR_TYPE'
+  | 'INVALID_TOKEN'
+  | 'EXPIRED_TOKEN'
+  | 'ALREADY_USED'
+  | 'EVENT_NOT_FOUND'
+  | 'UNAUTHORIZED_ORGANIZER'
+  | 'TICKET_NOT_FOUND'
+  | 'TICKET_MISMATCH'
+  | 'ALREADY_CHECKED_IN'
+  | 'VALIDATION_ERROR';

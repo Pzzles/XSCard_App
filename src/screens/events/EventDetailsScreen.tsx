@@ -6,9 +6,9 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
-  Alert,
   ActivityIndicator,
   Linking,
+  Alert,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -17,6 +17,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
 import { authenticatedFetchWithRefresh, ENDPOINTS } from '../../utils/api';
+import { useToast } from '../../hooks/useToast';
 import {
   Event,
   EventDetailsResponse,
@@ -36,6 +37,7 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 export default function EventDetailsScreen() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<EventDetailsRouteProp>();
+  const toast = useToast();
 
   const { eventId, event: passedEvent } = route.params;
 
@@ -80,14 +82,12 @@ export default function EventDetailsScreen() {
       }
     } catch (error) {
       console.error('Error loading event details:', error);
-      Alert.alert(
-        'Error',
-        'Failed to load event details. Please try again.',
-        [
-          { text: 'Retry', onPress: loadEventDetails },
-          { text: 'Go Back', onPress: () => navigation.goBack() },
-        ]
+      toast.error(
+        'Error loading event details', 
+        'Failed to load event details. Please try again.'
       );
+      // Automatically go back after showing error
+      setTimeout(() => navigation.goBack(), 2000);
     } finally {
       setLoading(false);
     }
@@ -102,7 +102,7 @@ export default function EventDetailsScreen() {
 
       // Check if event is full
       if (event.maxAttendees !== -1 && event.currentAttendees >= event.maxAttendees) {
-        Alert.alert('Event Full', 'This event is at full capacity.');
+        toast.warning('Event Full', 'This event is at full capacity.');
         return;
       }
 
@@ -135,20 +135,18 @@ export default function EventDetailsScreen() {
           currentAttendees: prev.currentAttendees + 1
         } : null);
 
-        Alert.alert(
+        toast.success(
           'Registration Successful!',
-          `You've successfully registered for ${event.title}. You should receive a confirmation email shortly.`,
-          [{ text: 'OK' }]
+          `You've successfully registered for ${event.title}. You should receive a confirmation email shortly.`
         );
       } else {
         throw new Error(data.message || 'Registration failed');
       }
     } catch (error) {
       console.error('Error registering for event:', error);
-      Alert.alert(
+      toast.error(
         'Registration Failed',
-        error instanceof Error ? error.message : 'Failed to register for event. Please try again.',
-        [{ text: 'OK' }]
+        error instanceof Error ? error.message : 'Failed to register for event. Please try again.'
       );
     } finally {
       setRegistering(false);
@@ -188,10 +186,10 @@ export default function EventDetailsScreen() {
                 currentAttendees: Math.max(0, prev.currentAttendees - 1)
               } : null);
 
-              Alert.alert('Unregistered', 'You have been unregistered from this event.');
+              toast.success('Unregistered', 'You have been unregistered from this event.');
             } catch (error) {
               console.error('Error unregistering from event:', error);
-              Alert.alert('Error', 'Failed to unregister from event. Please try again.');
+              toast.error('Error', 'Failed to unregister from event. Please try again.');
             } finally {
               setRegistering(false);
             }
@@ -237,7 +235,7 @@ export default function EventDetailsScreen() {
     const url = `https://maps.google.com/?q=${query}`;
     
     Linking.openURL(url).catch(() => {
-      Alert.alert('Error', 'Could not open maps application.');
+      toast.error('Error', 'Could not open maps application.');
     });
   };
 

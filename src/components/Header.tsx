@@ -263,22 +263,6 @@ export default function Header({ title, rightIcon, showAddButton = false }: Head
 
             <TouchableOpacity 
               style={styles.menuItem}
-              onPress={() => handleNavigate('MyEvents')}
-            >
-              <MaterialIcons name="event-note" size={24} color={COLORS.secondary} />
-              <Text style={[styles.menuText, { color: COLORS.secondary }]}>My Events</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => handleNavigate('EventPreferences')}
-            >
-              <MaterialIcons name="notifications" size={24} color={COLORS.secondary} />
-              <Text style={[styles.menuText, { color: COLORS.secondary }]}>Event Preferences</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.menuItem}
               onPress={() => handleNavigate('Contacts')}
             >
               <MaterialIcons name="people" size={24} color={COLORS.secondary} />

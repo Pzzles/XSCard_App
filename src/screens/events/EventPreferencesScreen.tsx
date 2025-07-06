@@ -17,6 +17,7 @@ import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
 import { EventPreferences } from '../../types/events';
 import { authenticatedFetchWithRefresh, ENDPOINTS } from '../../utils/api';
+import { useToast } from '../../hooks/useToast';
 
 type NavigationProp = NativeStackNavigationProp<any>;
 
@@ -39,6 +40,7 @@ const CATEGORIES = [
 
 export default function EventPreferencesScreen() {
   const navigation = useNavigation<NavigationProp>();
+  const toast = useToast();
 
   // State management
   const [loading, setLoading] = useState(true);
@@ -122,7 +124,7 @@ export default function EventPreferencesScreen() {
     if (!success) {
       // Revert on failure
       setLocalPreferences(localPreferences);
-      Alert.alert('Error', 'Failed to update preferences. Please try again.');
+      toast.error('Error', 'Failed to update preferences. Please try again.');
     }
   };
 
@@ -144,10 +146,9 @@ export default function EventPreferencesScreen() {
 
     // Show connection status
     if (enabled && !connected) {
-      Alert.alert(
+      toast.info(
         'Connecting...',
-        'Connecting to real-time notifications. This may take a moment.',
-        [{ text: 'OK' }]
+        'Connecting to real-time notifications. This may take a moment.'
       );
       connectToSocket();
     } else if (!enabled && connected) {
@@ -183,9 +184,9 @@ export default function EventPreferencesScreen() {
             setLoading(false);
 
             if (success) {
-              Alert.alert('Success', 'Preferences reset to defaults');
+              toast.success('Success', 'Preferences reset to defaults');
             } else {
-              Alert.alert('Error', 'Failed to reset preferences');
+              toast.error('Error', 'Failed to reset preferences');
             }
           }
         }
@@ -214,20 +215,18 @@ export default function EventPreferencesScreen() {
       const result = await response.json();
 
       if (result.success) {
-        Alert.alert(
+        toast.success(
           'Preferences Saved',
-          'Your event notification preferences have been updated successfully.',
-          [{ text: 'OK' }]
+          'Your event notification preferences have been updated successfully.'
         );
       } else {
         throw new Error(result.message || 'Failed to save preferences');
       }
     } catch (error) {
       console.error('Error saving preferences:', error);
-      Alert.alert(
+      toast.error(
         'Save Failed',
-        error instanceof Error ? error.message : 'Failed to save preferences. Please try again.',
-        [{ text: 'OK' }]
+        error instanceof Error ? error.message : 'Failed to save preferences. Please try again.'
       );
     } finally {
       setSaving(false);
@@ -471,7 +470,10 @@ const styles = StyleSheet.create({
     marginTop: 100, // Account for header
   },
   content: {
-    padding: 20,
+    width: '100%', // Remove side spacing - use full width
+    padding: 16,
+    paddingTop: 120, // Add top padding to account for header
+    paddingHorizontal: 16, // Smaller horizontal padding
     paddingBottom: 40,
   },
   loading: {
@@ -485,19 +487,19 @@ const styles = StyleSheet.create({
     color: COLORS.gray,
   },
   section: {
-    marginBottom: 32,
+    marginBottom: 36, // Slightly more spacing between sections
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 19, // Slightly larger for better hierarchy
     fontWeight: 'bold',
     color: COLORS.black,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   sectionDescription: {
-    fontSize: 14,
+    fontSize: 15, // Slightly larger for better readability
     color: COLORS.gray,
-    marginBottom: 16,
-    lineHeight: 20,
+    marginBottom: 20, // More space before content
+    lineHeight: 22, // Better line height for readability
   },
   connectionStatus: {
     flexDirection: 'row',
@@ -537,12 +539,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 16,
+    paddingHorizontal: 4, // Add small horizontal padding
     borderBottomWidth: 1,
     borderBottomColor: COLORS.background,
   },
   preferenceInfo: {
     flex: 1,
-    marginRight: 16,
+    marginRight: 8, // Reduced margin to give more space for toggle
   },
   preferenceLabel: {
     fontSize: 16,
@@ -619,23 +622,29 @@ const styles = StyleSheet.create({
   },
   introContainer: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 40, // More space after intro
+    paddingHorizontal: 16, // Add some horizontal padding
   },
   introTitle: {
-    fontSize: 24,
+    fontSize: 26, // Slightly larger title
     fontWeight: 'bold',
     color: COLORS.black,
-    marginBottom: 8,
+    marginBottom: 12,
+    textAlign: 'center',
   },
   introSubtitle: {
-    fontSize: 16,
+    fontSize: 17, // Larger for better readability
     color: COLORS.gray,
     textAlign: 'center',
+    lineHeight: 24, // Better line height
+    paddingHorizontal: 16, // Add padding instead of max width for better responsiveness
   },
   preferenceHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flex: 1, // Allow it to take available space but not overflow
+    marginRight: 12, // Space between content and switch
   },
   preferenceText: {
     flex: 1,
@@ -675,17 +684,22 @@ const styles = StyleSheet.create({
   },
   saveContainer: {
     alignItems: 'center',
-    marginTop: 32,
+    marginTop: 40, // More space before save button
+    paddingTop: 24, // Add some padding at the top
+    borderTopWidth: 1,
+    borderTopColor: COLORS.background, // Add a subtle separator
   },
   saveButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingHorizontal: 32, // Increased back for better proportions
+    paddingVertical: 16, // Taller button
+    borderRadius: 12, // More rounded corners
     backgroundColor: COLORS.primary,
+    minWidth: 200, // Increased minimum width
+    alignItems: 'center',
   },
   saveButtonText: {
     color: COLORS.white,
-    fontSize: 16,
+    fontSize: 17, // Slightly larger text
     fontWeight: 'bold',
   },
 }); 

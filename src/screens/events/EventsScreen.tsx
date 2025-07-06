@@ -6,7 +6,6 @@ import {
   FlatList,
   TouchableOpacity,
   TextInput,
-  Alert,
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
@@ -18,7 +17,8 @@ import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
 import { useColorScheme } from '../../context/ColorSchemeContext';
 import { useEventNotifications } from '../../context/EventNotificationContext';
-import { authenticatedFetchWithRefresh, ENDPOINTS } from '../../utils/api';
+import { authenticatedFetchWithRefresh, ENDPOINTS, API_BASE_URL } from '../../utils/api';
+import { useToast } from '../../hooks/useToast';
 import {
   Event,
   EventListResponse,
@@ -47,6 +47,7 @@ export default function EventsScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { colorScheme } = useColorScheme();
   const { connected, connectToSocket, notifications } = useEventNotifications();
+  const toast = useToast();
 
   // State management
   const [events, setEvents] = useState<Event[]>([]);
@@ -63,6 +64,7 @@ export default function EventsScreen() {
   });
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [lastProcessedNotificationId, setLastProcessedNotificationId] = useState<string | null>(null);
 
   // Load events when screen focuses
   useFocusEffect(
@@ -80,14 +82,44 @@ export default function EventsScreen() {
   // Listen for real-time event notifications
   useEffect(() => {
     if (notifications && notifications.length > 0) {
-      // Check for new event notifications and refresh list
+      // Only process the latest notification if it's new
       const latestNotification = notifications[0];
+      const notificationId = (latestNotification as any).id;
+      
+      // Skip if we've already processed this notification
+      if (notificationId && notificationId === lastProcessedNotificationId) {
+        return;
+      }
+      
+      // Update the last processed notification ID
+      if (notificationId) {
+        setLastProcessedNotificationId(notificationId);
+      }
+      
+      // Check for new event notifications and refresh list
       if (latestNotification.type === 'new_event' || latestNotification.type === 'event_update') {
         console.log('[EventsScreen] Received real-time event update, refreshing list...');
         loadEvents(true);
       }
+      
+      // Handle organizer notifications for registrations
+      if (latestNotification.type === 'new_registration') {
+        console.log('[EventsScreen] Received new registration notification for organizer');
+        toast.success(
+          '👤 New Registration',
+          `${latestNotification.registration?.userName} registered for your event "${latestNotification.event?.title}"`
+        );
+      }
+      
+      if (latestNotification.type === 'event_unregistration') {
+        console.log('[EventsScreen] Received unregistration notification for organizer');
+        toast.info(
+          '👋 Unregistration',
+          `${latestNotification.unregistration?.userName} unregistered from your event "${latestNotification.event?.title}"`
+        );
+      }
     }
-  }, [notifications]);
+  }, [notifications, lastProcessedNotificationId]);
 
   // Load events function
   const loadEvents = async (reset: boolean = false) => {
@@ -112,10 +144,10 @@ export default function EventsScreen() {
         : `${ENDPOINTS.GET_PUBLIC_EVENTS}?${queryParams.toString()}`;
 
       console.log('Loading events from:', endpoint);
-      console.log('Full URL:', `http://localhost:8383${endpoint}`);
+      console.log('Full URL:', `${API_BASE_URL}${endpoint}`);
 
       // Use regular fetch for public events (no authentication required)
-      const response = await fetch(`http://localhost:8383${endpoint}`, {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -152,10 +184,10 @@ export default function EventsScreen() {
       }
     } catch (error) {
       console.error('Error loading events:', error);
-      Alert.alert(
-        'Error',
-        'Failed to load events. Please check your internet connection and try again.',
-        [{ text: 'OK' }]
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      toast.error(
+        'Error loading events',
+        `Failed to load events: ${errorMessage}. Please check your internet connection and try again.`
       );
     } finally {
       setLoading(false);
@@ -231,7 +263,7 @@ export default function EventsScreen() {
         ...(filters.eventType && { eventType: filters.eventType }),
       });
 
-      const response = await fetch(`http://localhost:8383${EVENTS_ENDPOINT}?${queryParams}`);
+      const response = await fetch(`${API_BASE_URL}${EVENTS_ENDPOINT}?${queryParams}`);
       
       if (!response.ok) {
         throw new Error(`Failed to load more events: ${response.status}`);
@@ -252,6 +284,11 @@ export default function EventsScreen() {
       }
     } catch (error) {
       console.error('Error loading more events:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      toast.error(
+        'Error loading more events',
+        `Failed to load more events: ${errorMessage}`
+      );
     } finally {
       setLoadingMore(false);
     }
@@ -301,15 +338,6 @@ export default function EventsScreen() {
               styles.connectionIndicator,
               { backgroundColor: connected ? '#4CAF50' : '#FF5722' }
             ]} />
-            
-            {/* Preferences Button */}
-            <TouchableOpacity onPress={() => navigation.navigate('EventPreferences')}>
-              <MaterialIcons 
-                name="settings" 
-                size={24} 
-                color={COLORS.black} 
-              />
-            </TouchableOpacity>
             
             {/* Filter Button */}
             <TouchableOpacity onPress={() => setShowFilters(!showFilters)}>
@@ -426,14 +454,6 @@ export default function EventsScreen() {
           ListFooterComponent={renderFooter}
         />
       )}
-
-      {/* Floating Action Button for Create Event */}
-      <TouchableOpacity 
-        style={[styles.fab, { backgroundColor: COLORS.primary }]}
-        onPress={() => navigation.navigate('CreateEvent')}
-      >
-        <MaterialIcons name="add" size={28} color={COLORS.white} />
-      </TouchableOpacity>
     </View>
   );
 }
@@ -508,24 +528,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
   },
-  fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-  },
   headerIcons: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -587,12 +589,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.primary,
     fontWeight: '500',
-  },
-  statsIcon: {
-    marginRight: 8,
-  },
-  statsText: {
-    fontSize: 14,
-    color: COLORS.primary,
   },
 }); 

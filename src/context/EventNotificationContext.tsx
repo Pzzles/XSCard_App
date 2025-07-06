@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import socketService, { EventNotification, SocketServiceConfig } from '../services/socketService';
 import { authenticatedFetchWithRefresh, ENDPOINTS } from '../utils/api';
 import { EventPreferences } from '../types/events';
+import { toastService } from '../hooks/useToast';
 
 interface EventNotificationContextType {
   // Notification state
@@ -64,7 +65,7 @@ export function EventNotificationProvider({ children }: EventNotificationProvide
         if (Platform.OS === 'ios' || Platform.OS === 'android') {
           // Only show critical errors to users
           if (error.includes('Authentication failed')) {
-            Alert.alert('Connection Error', 'Failed to connect to real-time updates. Please restart the app.');
+            toastService.error('Connection Error', 'Failed to connect to real-time updates. Please restart the app.');
           }
         }
       }
@@ -130,17 +131,17 @@ export function EventNotificationProvider({ children }: EventNotificationProvide
    * Show toast notification to user
    */
   const showToastNotification = (notification: EventNotification & { id: string }) => {
-    // For React Native, we'll use Alert for now
-    // In a production app, you might want to use a toast library like react-native-toast-message
     const title = getNotificationTitle(notification.type);
     
     if (Platform.OS === 'ios' || Platform.OS === 'android') {
-      // Only show certain types of notifications as alerts
-      if (notification.type === 'new_event' || notification.type === 'event_cancelled') {
-        Alert.alert(title, notification.message || 'New notification', [
-          { text: 'OK', style: 'default' }
-        ]);
-      }
+      // Show all event notifications as toasts instead of disruptive alerts
+      const toastType = notification.type === 'event_cancelled' ? 'error' : 
+                       notification.type === 'new_event' ? 'success' : 'info';
+      
+      toastService.show(title, notification.message || notification.event?.title, { 
+        type: toastType,
+        duration: 5000 // Show for 5 seconds
+      });
     }
   };
 

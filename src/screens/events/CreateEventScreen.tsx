@@ -20,6 +20,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
 import { authenticatedFetchWithRefresh, ENDPOINTS } from '../../utils/api';
+import { useToast } from '../../hooks/useToast';
 import {
   CreateEventData,
   EVENT_CATEGORIES,
@@ -48,6 +49,7 @@ const STEP_TITLES = [
 
 export default function CreateEventScreen() {
   const navigation = useNavigation<NavigationProp>();
+  const toast = useToast();
 
   // Wizard state
   const [currentStep, setCurrentStep] = useState<number>(STEPS.BASIC_INFO);
@@ -168,7 +170,7 @@ export default function CreateEventScreen() {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Please grant permission to access your photo library.');
+        toast.warning('Permission needed', 'Please grant permission to access your photo library.');
         return;
       }
 
@@ -185,7 +187,7 @@ export default function CreateEventScreen() {
       }
     } catch (error) {
       console.error('Error picking images:', error);
-      Alert.alert('Error', 'Failed to pick images. Please try again.');
+      toast.error('Error', 'Failed to pick images. Please try again.');
     }
   };
 
@@ -217,7 +219,7 @@ export default function CreateEventScreen() {
 
       // Final validation
       if (!validateStep(STEPS.BASIC_INFO) || !validateStep(STEPS.DETAILS) || !validateStep(STEPS.LOCATION)) {
-        Alert.alert('Validation Error', 'Please fix the errors before creating the event.');
+        toast.warning('Validation Error', 'Please fix the errors before creating the event.');
         return;
       }
 
@@ -265,10 +267,9 @@ export default function CreateEventScreen() {
       }
     } catch (error) {
       console.error('Error creating event:', error);
-      Alert.alert(
+      toast.error(
         'Creation Failed',
-        error instanceof Error ? error.message : 'Failed to create event. Please try again.',
-        [{ text: 'OK' }]
+        error instanceof Error ? error.message : 'Failed to create event. Please try again.'
       );
     } finally {
       setLoading(false);
@@ -283,13 +284,12 @@ export default function CreateEventScreen() {
       );
 
       if (response.ok) {
-        Alert.alert('Success!', 'Your event has been published and is now visible to users.', [
-          { text: 'OK', onPress: () => navigation.goBack() }
-        ]);
+        toast.success('Success!', 'Your event has been published and is now visible to users.');
+        navigation.goBack();
       }
     } catch (error) {
       console.error('Error publishing event:', error);
-      Alert.alert('Published as Draft', 'Event created but could not be published. You can publish it later from your events.');
+      toast.warning('Published as Draft', 'Event created but could not be published. You can publish it later from your events.');
       navigation.goBack();
     }
   };
