@@ -77,4 +77,18 @@ router.delete('/events/:eventId/unregister',
 router.get('/user/events', authenticateUser, eventController.getUserEvents);
 router.get('/user/registrations', authenticateUser, eventController.getUserRegistrations);
 
-module.exports = router; 
+// QR Code Check-in System Routes (PROTECTED ROUTES)
+
+// Attendee routes - Generate QR codes for their tickets
+router.post('/tickets/:ticketId/qr', authenticateUser, eventController.generateTicketQR);
+
+// Organizer routes - QR code validation and check-in management
+router.post('/events/qr/validate', authenticateUser, eventController.validateQRCode);
+router.post('/events/qr/checkin', authenticateUser, eventController.processCheckIn);
+
+// Event check-in management for organizers
+router.get('/events/:eventId/checkin/stats', authenticateUser, eventController.getCheckInStats);
+router.get('/events/:eventId/attendees', authenticateUser, eventController.getEventAttendees);
+router.post('/events/:eventId/qr/bulk', authenticateUser, eventController.generateBulkQRCodes);
+
+module.exports = router;

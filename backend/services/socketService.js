@@ -221,6 +221,60 @@ class SocketService {
   }
 
   /**
+   * Broadcast new registration to event organizer
+   * @param {string} organizerId - The organizer's user ID
+   * @param {Object} eventData - Event information
+   * @param {Object} registrationData - Registration information
+   */
+  async broadcastNewRegistration(organizerId, eventData, registrationData) {
+    console.log(`👤 Broadcasting new registration to organizer ${organizerId} for event ${eventData.id}`);
+    
+    const organizerConnection = this.connectedUsers.get(organizerId);
+    if (organizerConnection) {
+      organizerConnection.socket.emit('new_registration', {
+        event: eventData,
+        registration: {
+          userId: registrationData.userId,
+          userName: registrationData.userInfo.name,
+          userEmail: registrationData.userInfo.email,
+          registeredAt: registrationData.registeredAt,
+          specialRequests: registrationData.specialRequests
+        },
+        timestamp: new Date().toISOString()
+      });
+      console.log(`✅ Registration notification sent to organizer ${organizerId}`);
+    } else {
+      console.log(`⚠️ Organizer ${organizerId} not connected, registration notification not sent`);
+    }
+  }
+
+  /**
+   * Broadcast unregistration to event organizer
+   * @param {string} organizerId - The organizer's user ID
+   * @param {Object} eventData - Event information
+   * @param {Object} unregistrationData - Unregistration information
+   */
+  async broadcastUnregistration(organizerId, eventData, unregistrationData) {
+    console.log(`👋 Broadcasting unregistration to organizer ${organizerId} for event ${eventData.id}`);
+    
+    const organizerConnection = this.connectedUsers.get(organizerId);
+    if (organizerConnection) {
+      organizerConnection.socket.emit('event_unregistration', {
+        event: eventData,
+        unregistration: {
+          userId: unregistrationData.userId,
+          userName: unregistrationData.userName,
+          unregisteredAt: unregistrationData.unregisteredAt
+        },
+        timestamp: new Date().toISOString()
+      });
+      console.log(`✅ Unregistration notification sent to organizer ${organizerId}`);
+    } else {
+      console.log(`⚠️ Organizer ${organizerId} not connected, unregistration notification not sent`);
+    }
+  }
+
+  /**
    * Get service health/status information
    * @returns {Object} Service status
    */
@@ -234,4 +288,4 @@ class SocketService {
   }
 }
 
-module.exports = SocketService; 
+module.exports = SocketService;

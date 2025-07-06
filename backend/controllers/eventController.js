@@ -1,5 +1,6 @@
 const { db, admin } = require('../firebase.js');
 const { formatDate } = require('../utils/dateFormatter');
+const QRService = require('../services/qrService');
 
 // Helper function for error responses (following userController pattern)
 const sendError = (res, status, message, error = null) => {
@@ -303,6 +304,31 @@ exports.registerForEvent = async (req, res) => {
     
     const userData = userDoc.data();
 
+    // Create ticket first
+    const ticketId = db.collection('tickets').doc().id;
+    const ticketData = {
+      id: ticketId,
+      eventId,
+      userId,
+      userInfo: {
+        name: `${userData.name} ${userData.surname}`.trim(),
+        email: userData.email,
+        phone: userData.phone || ''
+      },
+      status: eventData.eventType === 'paid' && eventData.ticketPrice > 0 ? 'pending_payment' : 'active',
+      createdAt: admin.firestore.Timestamp.now(),
+      updatedAt: admin.firestore.Timestamp.now(),
+      specialRequests,
+      ticketType: eventData.eventType === 'paid' ? 'paid' : 'free',
+      ticketPrice: eventData.eventType === 'paid' ? eventData.ticketPrice : 0,
+      paymentReference: null,
+      checkedIn: false,
+      checkedInAt: null,
+      checkedInBy: null,
+      qrGenerated: false,
+      qrGeneratedAt: null
+    };
+
     // Create registration
     const registrationData = {
       id: db.collection('event_registrations').doc().id,
@@ -313,20 +339,15 @@ exports.registerForEvent = async (req, res) => {
         email: userData.email,
         phone: userData.phone || ''
       },
-      status: 'registered',
+      status: eventData.eventType === 'paid' && eventData.ticketPrice > 0 ? 'pending_payment' : 'registered',
       registeredAt: admin.firestore.Timestamp.now(),
       specialRequests,
-      ticketId: null, // Will be set if paid event
+      ticketId: ticketId,
       paymentReference: null
     };
 
-    // Handle paid events
-    if (eventData.eventType === 'paid' && eventData.ticketPrice > 0) {
-      // TODO: Integrate with payment system later
-      registrationData.status = 'pending_payment';
-    }
-
-    // Save registration
+    // Save both ticket and registration
+    await db.collection('tickets').doc(ticketId).set(ticketData);
     await db.collection('event_registrations').doc(registrationData.id).set(registrationData);
 
     // Update event attendee count
@@ -335,12 +356,34 @@ exports.registerForEvent = async (req, res) => {
       attendeesList: admin.firestore.FieldValue.arrayUnion(userId)
     });
 
+    // Send real-time notification to organizer
+    if (global.socketService && eventData.organizerId) {
+      try {
+        await global.socketService.broadcastNewRegistration(
+          eventData.organizerId,
+          { 
+            id: eventId, 
+            title: eventData.title,
+            category: eventData.category 
+          },
+          registrationData
+        );
+      } catch (socketError) {
+        console.error('Error sending registration notification:', socketError);
+        // Don't fail the registration if socket notification fails
+      }
+    }
+
     res.status(201).json({
       success: true,
       message: 'Successfully registered for event',
       registration: {
         ...registrationData,
         registeredAt: formatDate(registrationData.registeredAt)
+      },
+      ticket: {
+        ...ticketData,
+        createdAt: formatDate(ticketData.createdAt)
       }
     });
 
@@ -707,6 +750,32 @@ exports.unregisterFromEvent = async (req, res) => {
     const registrationDoc = registrationSnapshot.docs[0];
     const registrationData = registrationDoc.data();
 
+    // Delete associated ticket if exists
+    if (registrationData.ticketId) {
+      try {
+        // Also delete any QR tokens associated with the ticket
+        const qrTokensSnapshot = await db.collection('qr_tokens')
+          .where('ticketId', '==', registrationData.ticketId)
+          .get();
+        
+        const deletePromises = [];
+        qrTokensSnapshot.forEach(doc => {
+          deletePromises.push(doc.ref.delete());
+        });
+        
+        // Delete ticket and QR tokens
+        deletePromises.push(db.collection('tickets').doc(registrationData.ticketId).delete());
+        await Promise.all(deletePromises);
+      } catch (ticketError) {
+        console.error('Error deleting ticket and QR tokens:', ticketError);
+        // Continue with unregistration even if ticket deletion fails
+      }
+    }
+
+    // Get event details for notification
+    const eventDoc = await db.collection('events').doc(eventId).get();
+    const eventData = eventDoc.exists ? eventDoc.data() : null;
+
     // Delete registration
     await registrationDoc.ref.delete();
 
@@ -715,6 +784,28 @@ exports.unregisterFromEvent = async (req, res) => {
       currentAttendees: admin.firestore.FieldValue.increment(-1),
       attendeesList: admin.firestore.FieldValue.arrayRemove(userId)
     });
+
+    // Send real-time notification to organizer
+    if (global.socketService && eventData && eventData.organizerId) {
+      try {
+        await global.socketService.broadcastUnregistration(
+          eventData.organizerId,
+          { 
+            id: eventId, 
+            title: eventData.title,
+            category: eventData.category 
+          },
+          {
+            userId: userId,
+            userName: registrationData.userInfo.name,
+            unregisteredAt: new Date().toISOString()
+          }
+        );
+      } catch (socketError) {
+        console.error('Error sending unregistration notification:', socketError);
+        // Don't fail the unregistration if socket notification fails
+      }
+    }
 
     res.status(200).json({
       success: true,
@@ -747,4 +838,294 @@ exports.initializeDatabase = async (req, res) => {
   }
 };
 
-module.exports = exports; 
+// QR Code Check-in System Controllers
+
+// Generate QR code for a specific ticket
+exports.generateTicketQR = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const userId = req.user.uid;
+
+    // Get ticket data
+    const ticketDoc = await db.collection('tickets').doc(ticketId).get();
+    if (!ticketDoc.exists) {
+      return sendError(res, 404, 'Ticket not found');
+    }
+
+    const ticketData = ticketDoc.data();
+
+    // Verify ticket belongs to user
+    if (ticketData.userId !== userId) {
+      return sendError(res, 403, 'Not authorized to generate QR code for this ticket');
+    }
+
+    // Check if ticket is valid
+    if (ticketData.status === 'cancelled') {
+      return sendError(res, 400, 'Cannot generate QR code for cancelled ticket');
+    }
+
+    // Generate QR code
+    const qrResult = await QRService.generateTicketQR(
+      ticketData.eventId,
+      userId,
+      ticketId
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'QR code generated successfully',
+      ticketId,
+      qrCode: qrResult.qrCode,
+      verificationToken: qrResult.verificationToken,
+      expiresAt: qrResult.expiresAt
+    });
+
+  } catch (error) {
+    sendError(res, 500, 'Error generating QR code', error);
+  }
+};
+
+// Validate QR code (for organizers)
+exports.validateQRCode = async (req, res) => {
+  try {
+    const { qrData } = req.body;
+    const organizerId = req.user.uid;
+
+    if (!qrData) {
+      return sendError(res, 400, 'QR code data is required');
+    }
+
+    // Validate QR code
+    const validationResult = await QRService.validateQRCode(qrData, organizerId);
+
+    if (!validationResult.success) {
+      return res.status(400).json({
+        success: false,
+        error: validationResult.error,
+        message: validationResult.message,
+        ...validationResult
+      });
+    }
+
+    // Get user data for the ticket holder
+    if (validationResult.userId) {
+      const userDoc = await db.collection('users').doc(validationResult.userId).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        validationResult.userData = {
+          name: `${userData.name} ${userData.surname}`.trim(),
+          email: userData.email,
+          profileImage: userData.profileImage || null,
+          company: userData.company || ''
+        };
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'QR code is valid',
+      ...validationResult
+    });
+
+  } catch (error) {
+    sendError(res, 500, 'Error validating QR code', error);
+  }
+};
+
+// Process check-in (for organizers)
+exports.processCheckIn = async (req, res) => {
+  try {
+    const { qrData } = req.body;
+    const organizerId = req.user.uid;
+
+    if (!qrData) {
+      return sendError(res, 400, 'QR code data is required');
+    }
+
+    // First validate the QR code
+    const validationResult = await QRService.validateQRCode(qrData, organizerId);
+
+    if (!validationResult.success) {
+      return res.status(400).json({
+        success: false,
+        error: validationResult.error,
+        message: validationResult.message,
+        ...validationResult
+      });
+    }
+
+    // Process the check-in
+    const checkInResult = await QRService.processCheckIn(
+      validationResult.ticketId,
+      validationResult.verificationToken,
+      organizerId
+    );
+
+    // Get user data for the ticket holder
+    let userData = null;
+    if (validationResult.userId) {
+      const userDoc = await db.collection('users').doc(validationResult.userId).get();
+      if (userDoc.exists) {
+        const userDataDoc = userDoc.data();
+        userData = {
+          name: `${userDataDoc.name} ${userDataDoc.surname}`.trim(),
+          email: userDataDoc.email,
+          profileImage: userDataDoc.profileImage || null,
+          company: userDataDoc.company || ''
+        };
+      }
+    }
+
+    // Emit real-time notification for successful check-in
+    const socketService = require('../services/socketService');
+    if (socketService) {
+      const notificationData = {
+        type: 'attendee_checked_in',
+        eventId: validationResult.eventId,
+        attendeeName: userData?.name || 'Unknown',
+        checkedInAt: checkInResult.checkedInAt,
+        organizerId: organizerId
+      };
+
+      socketService.broadcastToEventOrganizer(validationResult.eventId, organizerId, notificationData);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Check-in completed successfully',
+      eventId: validationResult.eventId,
+      ticketId: validationResult.ticketId,
+      userData,
+      checkedInAt: checkInResult.checkedInAt
+    });
+
+  } catch (error) {
+    sendError(res, 500, 'Error processing check-in', error);
+  }
+};
+
+// Get check-in statistics for an event (for organizers)
+exports.getCheckInStats = async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const organizerId = req.user.uid;
+
+    // Verify organizer owns the event
+    const eventDoc = await db.collection('events').doc(eventId).get();
+    if (!eventDoc.exists) {
+      return sendError(res, 404, 'Event not found');
+    }
+
+    const eventData = eventDoc.data();
+    if (eventData.organizerId !== organizerId) {
+      return sendError(res, 403, 'Not authorized to view check-in statistics for this event');
+    }
+
+    // Get check-in statistics
+    const stats = await QRService.getCheckInStats(eventId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Check-in statistics retrieved successfully',
+      ...stats
+    });
+
+  } catch (error) {
+    sendError(res, 500, 'Error getting check-in statistics', error);
+  }
+};
+
+// Generate QR codes for all event attendees (for organizers)
+exports.generateBulkQRCodes = async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const organizerId = req.user.uid;
+
+    // Generate bulk QR codes
+    const result = await QRService.generateBulkQRCodes(eventId, organizerId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Bulk QR codes generated successfully',
+      ...result
+    });
+
+  } catch (error) {
+    sendError(res, 500, 'Error generating bulk QR codes', error);
+  }
+};
+
+// Get attendee list with check-in status (for organizers)
+exports.getEventAttendees = async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const organizerId = req.user.uid;
+
+    // Verify organizer owns the event
+    const eventDoc = await db.collection('events').doc(eventId).get();
+    if (!eventDoc.exists) {
+      return sendError(res, 404, 'Event not found');
+    }
+
+    const eventData = eventDoc.data();
+    if (eventData.organizerId !== organizerId) {
+      return sendError(res, 403, 'Not authorized to view attendees for this event');
+    }
+
+    // Get all tickets for the event
+    const ticketsSnapshot = await db.collection('tickets')
+      .where('eventId', '==', eventId)
+      .get();
+
+    const attendees = [];
+
+    for (const ticketDoc of ticketsSnapshot.docs) {
+      const ticket = ticketDoc.data();
+      
+      // Get user data
+      const userDoc = await db.collection('users').doc(ticket.userId).get();
+      let userData = null;
+      if (userDoc.exists) {
+        const user = userDoc.data();
+        userData = {
+          name: `${user.name} ${user.surname}`.trim(),
+          email: user.email,
+          profileImage: user.profileImage || null,
+          company: user.company || ''
+        };
+      }
+
+      attendees.push({
+        ticketId: ticketDoc.id,
+        userId: ticket.userId,
+        userData,
+        registeredAt: formatDate(ticket.createdAt),
+        checkedIn: ticket.checkedIn || false,
+        checkedInAt: ticket.checkedInAt ? formatDate(ticket.checkedInAt) : null,
+        ticketStatus: ticket.status || 'active'
+      });
+    }
+
+    // Sort by check-in status and registration date
+    attendees.sort((a, b) => {
+      if (a.checkedIn !== b.checkedIn) {
+        return b.checkedIn - a.checkedIn; // Checked-in first
+      }
+      return new Date(b.registeredAt) - new Date(a.registeredAt); // Most recent first
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Event attendees retrieved successfully',
+      eventId,
+      totalAttendees: attendees.length,
+      checkedInCount: attendees.filter(a => a.checkedIn).length,
+      attendees
+    });
+
+  } catch (error) {
+    sendError(res, 500, 'Error getting event attendees', error);
+  }
+};
+
+module.exports = exports;
