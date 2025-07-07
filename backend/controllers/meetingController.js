@@ -1,5 +1,6 @@
 const { db } = require('../firebase.js');
 const { formatDate } = require('../utils/dateFormatter');
+const { getUserInfo } = require('../utils/userUtils');
 const { sendMailWithStatus } = require('../public/Utils/emailService');
 const { createCalendarEvent } = require('../public/Utils/calendarService');
 
@@ -289,17 +290,10 @@ exports.sendMeetingInvite = async (req, res) => {
         // Get user info to use as organizer if not provided
         let organizerInfo = organizer;
         if (!organizerInfo || !organizerInfo.name || !organizerInfo.email) {
-            const userDoc = await db.collection('users').doc(userId).get();
-            if (!userDoc.exists) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'User not found'
-                });
-            }
-            const userData = userDoc.data();
+            const userInfo = await getUserInfo(userId);
             organizerInfo = {
-                name: `${userData.name} ${userData.surname || ''}`.trim(),
-                email: userData.email
+                name: userInfo.name,
+                email: userInfo.email
             };
         }
         

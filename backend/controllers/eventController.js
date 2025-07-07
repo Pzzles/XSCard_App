@@ -1,5 +1,6 @@
 const { db, admin } = require('../firebase.js');
 const { formatDate, convertToISOString } = require('../utils/dateFormatter');
+const { getUserInfo } = require('../utils/userUtils');
 const QRService = require('../services/qrService');
 
 // Helper function for error responses (following userController pattern)
@@ -56,29 +57,83 @@ exports.createEvent = async (req, res) => {
     // Initialize collections if needed
     await initializeEventCollections();
     
+    console.log('Create event request:', {
+      body: req.body,
+      files: req.files,
+      firebaseStorageUrls: req.firebaseStorageUrls
+    });
+    
+    // Handle image URLs from Firebase Storage
+    let bannerImageUrl = null;
+    let eventImagesUrls = [];
+    
+    if (req.firebaseStorageUrls) {
+      bannerImageUrl = req.firebaseStorageUrls.bannerImage || null;
+      
+      // Handle multiple event images
+      if (req.firebaseStorageUrls.eventImages) {
+        if (Array.isArray(req.firebaseStorageUrls.eventImages)) {
+          eventImagesUrls = req.firebaseStorageUrls.eventImages;
+        } else {
+          eventImagesUrls = [req.firebaseStorageUrls.eventImages];
+        }
+      }
+    }
+    
+    // Parse JSON fields that were stringified in FormData
+    let location = {};
+    let tags = [];
+    
+    try {
+      if (req.body.location) {
+        location = JSON.parse(req.body.location);
+      }
+      if (req.body.tags) {
+        tags = JSON.parse(req.body.tags);
+      }
+    } catch (parseError) {
+      console.warn('Error parsing JSON fields:', parseError);
+      // Use defaults if parsing fails
+      location = {
+        venue: req.body.venue || '',
+        address: req.body.address || '',
+        city: req.body.city || '',
+        country: req.body.country || 'South Africa'
+      };
+    }
+    
+    // Get organizer info from users collection with fallback to cards
+    const organizerInfo = await getUserInfo(userId);
+    
     const eventData = {
-      ...req.body,
       id: db.collection('events').doc().id,
       organizerId: userId,
+      title: req.body.title,
+      description: req.body.description,
+      eventDate: req.body.eventDate,
+      endDate: req.body.endDate || null,
+      category: req.body.category || 'other',
+      eventType: req.body.eventType || 'free',
+      ticketPrice: parseFloat(req.body.ticketPrice) || 0,
+      maxAttendees: parseInt(req.body.maxAttendees) || 50,
+      visibility: req.body.visibility || 'public',
+      location: location,
+      tags: tags,
       currentAttendees: 0,
       attendeesList: [],
       status: 'draft',
+      // Image data from Firebase Storage
+      bannerImage: bannerImageUrl,
+      images: eventImagesUrls,
+      // Enhanced organizer info from getUserInfo function
+      organizerInfo: {
+        name: organizerInfo.name,
+        email: organizerInfo.email,
+        profileImage: organizerInfo.profileImage,
+        company: organizerInfo.company
+      },
       createdAt: admin.firestore.Timestamp.now(),
       updatedAt: admin.firestore.Timestamp.now()
-    };
-
-    // Get organizer info from users collection
-    const userDoc = await db.collection('users').doc(userId).get();
-    if (!userDoc.exists) {
-      return sendError(res, 404, 'User not found');
-    }
-    
-    const userData = userDoc.data();
-    eventData.organizerInfo = {
-      name: `${userData.name} ${userData.surname}`.trim(),
-      email: userData.email,
-      profileImage: userData.profileImage || null,
-      company: userData.company || ''
     };
 
     // Validate required fields
@@ -93,8 +148,7 @@ exports.createEvent = async (req, res) => {
         if (isNaN(eventDate.getTime())) {
           return sendError(res, 400, 'Invalid event date format');
         }
-        // Ensure the date is valid for Firestore timestamp
-        const timestamp = Math.floor(eventDate.getTime() / 1000) * 1000; // Remove sub-millisecond precision
+        const timestamp = Math.floor(eventDate.getTime() / 1000) * 1000;
         const validDate = new Date(timestamp);
         eventData.eventDate = admin.firestore.Timestamp.fromDate(validDate);
       } catch (error) {
@@ -102,14 +156,14 @@ exports.createEvent = async (req, res) => {
         return sendError(res, 400, 'Invalid event date format');
       }
     }
+    
     if (eventData.endDate && typeof eventData.endDate === 'string') {
       try {
         const endDate = new Date(eventData.endDate);
         if (isNaN(endDate.getTime())) {
           return sendError(res, 400, 'Invalid end date format');
         }
-        // Ensure the date is valid for Firestore timestamp
-        const timestamp = Math.floor(endDate.getTime() / 1000) * 1000; // Remove sub-millisecond precision
+        const timestamp = Math.floor(endDate.getTime() / 1000) * 1000;
         const validDate = new Date(timestamp);
         eventData.endDate = admin.firestore.Timestamp.fromDate(validDate);
       } catch (error) {
@@ -117,15 +171,6 @@ exports.createEvent = async (req, res) => {
         return sendError(res, 400, 'Invalid end date format');
       }
     }
-
-    // Set default values
-    eventData.category = eventData.category || 'other';
-    eventData.eventType = eventData.eventType || 'free';
-    eventData.ticketPrice = eventData.ticketPrice || 0;
-    eventData.maxAttendees = eventData.maxAttendees || -1; // -1 for unlimited
-    eventData.visibility = eventData.visibility || 'public';
-    eventData.images = eventData.images || [];
-    eventData.tags = eventData.tags || [];
 
     // Save to database
     await db.collection('events').doc(eventData.id).set(eventData);
@@ -135,8 +180,15 @@ exports.createEvent = async (req, res) => {
       ...eventData,
       eventDate: formatDate(eventData.eventDate),
       endDate: eventData.endDate ? formatDate(eventData.endDate) : null,
-      createdAt: formatDate(eventData.createdAt)
+      createdAt: formatDate(eventData.createdAt),
+      // Include image URLs in response
+      imageCount: eventImagesUrls.length + (bannerImageUrl ? 1 : 0)
     };
+
+    console.log('Event created successfully with images:', {
+      bannerImage: !!bannerImageUrl,
+      eventImages: eventImagesUrls.length
+    });
 
     res.status(201).json({
       success: true,
@@ -324,12 +376,7 @@ exports.registerForEvent = async (req, res) => {
     }
 
     // Get user info
-    const userDoc = await db.collection('users').doc(userId).get();
-    if (!userDoc.exists) {
-      return sendError(res, 404, 'User not found');
-    }
-    
-    const userData = userDoc.data();
+    const userInfo = await getUserInfo(userId);
 
     // Create ticket first
     const ticketId = db.collection('tickets').doc().id;
@@ -338,9 +385,9 @@ exports.registerForEvent = async (req, res) => {
       eventId,
       userId,
       userInfo: {
-        name: `${userData.name} ${userData.surname}`.trim(),
-        email: userData.email,
-        phone: userData.phone || ''
+        name: userInfo.name,
+        email: userInfo.email,
+        phone: userInfo.phone
       },
       status: eventData.eventType === 'paid' && eventData.ticketPrice > 0 ? 'pending_payment' : 'active',
       createdAt: admin.firestore.Timestamp.now(),
@@ -362,9 +409,9 @@ exports.registerForEvent = async (req, res) => {
       eventId,
       userId,
       userInfo: {
-        name: `${userData.name} ${userData.surname}`.trim(),
-        email: userData.email,
-        phone: userData.phone || ''
+        name: userInfo.name,
+        email: userInfo.email,
+        phone: userInfo.phone
       },
       status: eventData.eventType === 'paid' && eventData.ticketPrice > 0 ? 'pending_payment' : 'registered',
       registeredAt: admin.firestore.Timestamp.now(),
@@ -998,16 +1045,13 @@ exports.validateQRCode = async (req, res) => {
 
     // Get user data for the ticket holder
     if (validationResult.userId) {
-      const userDoc = await db.collection('users').doc(validationResult.userId).get();
-      if (userDoc.exists) {
-        const userData = userDoc.data();
+      const userInfo = await getUserInfo(validationResult.userId);
         validationResult.userData = {
-          name: `${userData.name} ${userData.surname}`.trim(),
-          email: userData.email,
-          profileImage: userData.profileImage || null,
-          company: userData.company || ''
+        name: userInfo.name,
+        email: userInfo.email,
+        profileImage: userInfo.profileImage,
+        company: userInfo.company
         };
-      }
     }
 
     res.status(200).json({
@@ -1053,16 +1097,13 @@ exports.processCheckIn = async (req, res) => {
     // Get user data for the ticket holder
     let userData = null;
     if (validationResult.userId) {
-      const userDoc = await db.collection('users').doc(validationResult.userId).get();
-      if (userDoc.exists) {
-        const userDataDoc = userDoc.data();
+      const userInfo = await getUserInfo(validationResult.userId);
         userData = {
-          name: `${userDataDoc.name} ${userDataDoc.surname}`.trim(),
-          email: userDataDoc.email,
-          profileImage: userDataDoc.profileImage || null,
-          company: userDataDoc.company || ''
+        name: userInfo.name,
+        email: userInfo.email,
+        profileImage: userInfo.profileImage,
+        company: userInfo.company
         };
-      }
     }
 
     // Emit real-time notification for successful check-in
@@ -1178,23 +1219,18 @@ exports.getEventAttendees = async (req, res) => {
     for (const ticketDoc of ticketsSnapshot.docs) {
       const ticket = ticketDoc.data();
       
-      // Get user data
-      const userDoc = await db.collection('users').doc(ticket.userId).get();
-      let userData = null;
-      if (userDoc.exists) {
-        const user = userDoc.data();
-        userData = {
-          name: `${user.name} ${user.surname}`.trim(),
-          email: user.email,
-          profileImage: user.profileImage || null,
-          company: user.company || ''
-        };
-      }
+      // Get user data using enhanced getUserInfo function
+      const userInfo = await getUserInfo(ticket.userId);
 
       attendees.push({
         ticketId: ticketDoc.id,
         userId: ticket.userId,
-        userData,
+        userData: {
+          name: userInfo.name,
+          email: userInfo.email,
+          profileImage: userInfo.profileImage,
+          company: userInfo.company
+        },
         registeredAt: formatDate(ticket.createdAt),
         checkedIn: ticket.checkedIn || false,
         checkedInAt: ticket.checkedInAt ? formatDate(ticket.checkedInAt) : null,

@@ -41,7 +41,7 @@ export const setGlobalNavigationRef = (navigationRef: any) => {
 const getBaseUrl = () => {
 
   // return 'https://xscard-app.onrender.com';
-     return 'http://192.168.2.237:8383';
+     return 'http://192.168.8.8:8383';
  //return 'http://192.168.68.101:8383';
 
 };

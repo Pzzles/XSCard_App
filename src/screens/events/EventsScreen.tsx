@@ -8,10 +8,14 @@ import {
   TextInput,
   RefreshControl,
   ActivityIndicator,
+  Image,
+  ScrollView,
+  Animated,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { COLORS } from '../../constants/colors';
 import Header from '../../components/Header';
@@ -19,6 +23,7 @@ import { useColorScheme } from '../../context/ColorSchemeContext';
 import { useEventNotifications } from '../../context/EventNotificationContext';
 import { authenticatedFetchWithRefresh, ENDPOINTS, API_BASE_URL } from '../../utils/api';
 import { useToast } from '../../hooks/useToast';
+import { getRecentEvents, RecentEvent } from '../../utils/recentEvents';
 import {
   Event,
   EventListResponse,
@@ -26,6 +31,7 @@ import {
   EVENT_CATEGORIES,
   EventCategory,
 } from '../../types/events';
+import { enhanceEventsWithOrganizerInfo } from '../../services/eventService';
 import EventCard from './components/EventCard';
 import EventFiltersComponent from './components/EventFilters';
 import EventNotificationToast from '../../components/EventNotificationToast';
@@ -65,11 +71,18 @@ export default function EventsScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [lastProcessedNotificationId, setLastProcessedNotificationId] = useState<string | null>(null);
+  const [recentEvents, setRecentEvents] = useState<RecentEvent[]>([]);
+
+  // Collapsible recently viewed section state
+  const [isRecentEventsExpanded, setIsRecentEventsExpanded] = useState(true);
+  const [recentEventsHeight] = useState(new Animated.Value(1)); // Start expanded
+  const [recentEventsRotation] = useState(new Animated.Value(0)); // For chevron rotation
 
   // Load events when screen focuses
   useFocusEffect(
     React.useCallback(() => {
       loadEvents(true);
+      loadRecentEvents();
       
       // Auto-connect to real-time updates if not connected
       if (!connected) {
@@ -143,9 +156,6 @@ export default function EventsScreen() {
         ? `${ENDPOINTS.SEARCH_EVENTS}?${queryParams.toString()}`
         : `${ENDPOINTS.GET_PUBLIC_EVENTS}?${queryParams.toString()}`;
 
-      console.log('Loading events from:', endpoint);
-      console.log('Full URL:', `${API_BASE_URL}${endpoint}`);
-
       // Use regular fetch for public events (no authentication required)
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'GET',
@@ -154,9 +164,6 @@ export default function EventsScreen() {
         },
       });
 
-      console.log('Response status:', response.status);
-      console.log('Response headers:', response.headers);
-
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Error response:', errorText);
@@ -164,16 +171,17 @@ export default function EventsScreen() {
       }
 
       const data: EventListResponse = await response.json();
-      console.log('Events data received:', data);
 
       if (data.success) {
         const newEvents = data.data.events;
-        console.log('Number of events received:', newEvents.length);
+        
+        // Enhance events with correct organizer information
+        const enhancedEvents = await enhanceEventsWithOrganizerInfo(newEvents);
         
         if (reset) {
-          setEvents(newEvents);
+          setEvents(enhancedEvents);
         } else {
-          setEvents(prev => [...prev, ...newEvents]);
+          setEvents(prev => [...prev, ...enhancedEvents]);
         }
 
         // Check if there are more events to load
@@ -194,6 +202,64 @@ export default function EventsScreen() {
       setRefreshing(false);
       setLoadingMore(false);
     }
+  };
+
+  // Load recent events
+  const loadRecentEvents = async () => {
+    try {
+      const recents = await getRecentEvents();
+      setRecentEvents(recents);
+    } catch (error) {
+      console.error('Error loading recent events:', error);
+    }
+  };
+
+  // Load and save recent events collapse state
+  useEffect(() => {
+    loadRecentEventsState();
+  }, []);
+
+  const loadRecentEventsState = async () => {
+    try {
+      const savedState = await AsyncStorage.getItem('recentEventsExpanded');
+      if (savedState !== null) {
+        const isExpanded = JSON.parse(savedState);
+        setIsRecentEventsExpanded(isExpanded);
+        // Set initial animation values
+        recentEventsHeight.setValue(isExpanded ? 1 : 0);
+        recentEventsRotation.setValue(isExpanded ? 0 : 1);
+      }
+    } catch (error) {
+      console.error('Error loading recent events state:', error);
+    }
+  };
+
+  const saveRecentEventsState = async (isExpanded: boolean) => {
+    try {
+      await AsyncStorage.setItem('recentEventsExpanded', JSON.stringify(isExpanded));
+    } catch (error) {
+      console.error('Error saving recent events state:', error);
+    }
+  };
+
+  const toggleRecentEventsExpanded = () => {
+    const newExpandedState = !isRecentEventsExpanded;
+    setIsRecentEventsExpanded(newExpandedState);
+    saveRecentEventsState(newExpandedState);
+
+    // Animate height and rotation
+    Animated.parallel([
+      Animated.timing(recentEventsHeight, {
+        toValue: newExpandedState ? 1 : 0,
+        duration: 300,
+        useNativeDriver: false,
+      }),
+      Animated.timing(recentEventsRotation, {
+        toValue: newExpandedState ? 0 : 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
   };
 
   // Handle search
@@ -248,6 +314,13 @@ export default function EventsScreen() {
     });
   };
 
+  // Handle recent event press
+  const handleRecentEventPress = (recentEvent: RecentEvent) => {
+    navigation.navigate('EventDetails', { 
+      eventId: recentEvent.id
+    });
+  };
+
   // Load more events for pagination
   const loadMoreEvents = async () => {
     if (loadingMore || !hasMore) return;
@@ -272,7 +345,10 @@ export default function EventsScreen() {
       const data: EventListResponse = await response.json();
 
       if (data.success && data.data.events.length > 0) {
-        setEvents(prev => [...prev, ...data.data.events]);
+        // Enhance events with correct organizer information
+        const enhancedEvents = await enhanceEventsWithOrganizerInfo(data.data.events);
+        
+        setEvents(prev => [...prev, ...enhancedEvents]);
         setFilters(prev => ({ ...prev, page: nextPage }));
         
         // Check if there are more pages
@@ -301,6 +377,92 @@ export default function EventsScreen() {
       onPress={() => handleEventPress(item)}
     />
   );
+
+  // Render recent events section
+  const renderRecentEvents = () => {
+    if (recentEvents.length === 0) return null;
+
+    const chevronRotation = recentEventsRotation.interpolate({
+      inputRange: [0, 1],
+      outputRange: ['0deg', '180deg'],
+    });
+
+    return (
+      <View style={styles.recentSection}>
+        {/* Collapsible Header */}
+        <TouchableOpacity 
+          style={styles.recentHeader}
+          onPress={toggleRecentEventsExpanded}
+          activeOpacity={0.7}
+        >
+          <View style={styles.recentHeaderContent}>
+            <Text style={styles.recentTitle}>Recently Viewed</Text>
+            <Text style={styles.recentCount}>({recentEvents.length})</Text>
+          </View>
+          <Animated.View style={{ transform: [{ rotate: chevronRotation }] }}>
+            <MaterialIcons 
+              name="expand-more" 
+              size={24} 
+              color={COLORS.gray} 
+            />
+          </Animated.View>
+        </TouchableOpacity>
+
+        {/* Collapsible Content */}
+        <Animated.View
+          style={[
+            styles.recentContent,
+            {
+              opacity: recentEventsHeight,
+              maxHeight: recentEventsHeight.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 200], // Adjust based on your content height
+              }),
+              overflow: 'hidden',
+            },
+          ]}
+        >
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            style={styles.recentScroll}
+            contentContainerStyle={styles.recentScrollContent}
+          >
+            {recentEvents.map((recentEvent) => (
+              <TouchableOpacity
+                key={recentEvent.id}
+                style={styles.recentCard}
+                onPress={() => handleRecentEventPress(recentEvent)}
+              >
+                {recentEvent.bannerImage ? (
+                  <Image 
+                    source={{ uri: recentEvent.bannerImage }} 
+                    style={styles.recentImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={[styles.recentImage, styles.recentImagePlaceholder]}>
+                    <MaterialIcons name="event" size={24} color={COLORS.gray} />
+                  </View>
+                )}
+                <View style={styles.recentInfo}>
+                  <Text style={styles.recentEventTitle} numberOfLines={2}>
+                    {recentEvent.title}
+                  </Text>
+                  <Text style={styles.recentEventVenue} numberOfLines={1}>
+                    {recentEvent.location.venue}
+                  </Text>
+                  <Text style={styles.recentEventCity} numberOfLines={1}>
+                    {recentEvent.location.city}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </Animated.View>
+      </View>
+    );
+  };
 
   // Render empty state
   const renderEmptyState = () => (
@@ -454,6 +616,8 @@ export default function EventsScreen() {
           ListFooterComponent={renderFooter}
         />
       )}
+
+      {renderRecentEvents()}
     </View>
   );
 }
@@ -589,5 +753,84 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.primary,
     fontWeight: '500',
+  },
+  recentSection: {
+    padding: 16,
+  },
+  recentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    marginHorizontal: 4,
+    borderRadius: 8,
+    backgroundColor: COLORS.background,
+  },
+  recentHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  recentTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.black,
+  },
+  recentCount: {
+    fontSize: 14,
+    color: COLORS.gray,
+  },
+  recentContent: {
+    padding: 8,
+  },
+  recentScroll: {
+    padding: 8,
+  },
+  recentScrollContent: {
+    gap: 12,
+  },
+  recentCard: {
+    width: 140,
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    padding: 8,
+    marginRight: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  recentImage: {
+    width: '100%',
+    height: 80,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  recentImagePlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.border,
+  },
+  recentInfo: {
+    flex: 1,
+  },
+  recentEventTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.black,
+    marginBottom: 4,
+  },
+  recentEventVenue: {
+    fontSize: 12,
+    color: COLORS.gray,
+    marginBottom: 2,
+  },
+  recentEventCity: {
+    fontSize: 12,
+    color: COLORS.gray,
   },
 }); 

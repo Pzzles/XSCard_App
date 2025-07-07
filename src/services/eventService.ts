@@ -1,5 +1,6 @@
 import { API_BASE_URL } from '../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Share } from 'react-native';
 import {
   Event,
   EventRegistration,
@@ -14,6 +15,7 @@ import {
   AttendeesResponse,
   CheckInStatsResponse,
   BulkQRResult,
+  EventAttendee,
 } from '../types/events';
 
 const BASE_URL = `${API_BASE_URL}/events`;
@@ -304,7 +306,7 @@ export const getEventAttendees = async (eventId: string): Promise<AttendeesRespo
 
 export const getCheckInStats = async (eventId: string): Promise<CheckInStatsResponse> => {
   try {
-    const response = await fetch(`${BASE_URL}/${eventId}/checkin-stats`, {
+    const response = await fetch(`${BASE_URL}/${eventId}/checkin/stats`, {
       method: 'GET',
       headers: await getAuthHeaders(),
     });
@@ -319,7 +321,7 @@ export const getCheckInStats = async (eventId: string): Promise<CheckInStatsResp
 
 export const generateBulkQRCodes = async (eventId: string): Promise<BulkQRResult> => {
   try {
-    const response = await fetch(`${BASE_URL}/${eventId}/qr/bulk-generate`, {
+    const response = await fetch(`${BASE_URL}/${eventId}/qr/bulk`, {
       method: 'POST',
       headers: await getAuthHeaders(),
     });
@@ -332,18 +334,107 @@ export const generateBulkQRCodes = async (eventId: string): Promise<BulkQRResult
   }
 };
 
-export const exportAttendeesToCSV = async (eventId: string) => {
+export const exportAttendeesToCSV = async (eventId: string, attendees: EventAttendee[], eventTitle: string) => {
   try {
-    const response = await fetch(`${BASE_URL}/${eventId}/attendees/export`, {
-      method: 'GET',
-      headers: await getAuthHeaders(),
-    });
+    if (!attendees || attendees.length === 0) {
+      return {
+        success: false,
+        message: 'No attendees to export'
+      };
+    }
 
-    const data = await response.json();
-    return data;
+    // Calculate summary stats
+    const totalAttendees = attendees.length;
+    const checkedInCount = attendees.filter(a => a.checkedIn).length;
+    const pendingCount = totalAttendees - checkedInCount;
+    const checkInRate = totalAttendees > 0 ? ((checkedInCount / totalAttendees) * 100).toFixed(1) : '0.0';
+
+    // Generate CSV content with metadata
+    const csvHeaders = [
+      'Name',
+      'Email',
+      'Company',
+      'Ticket ID',
+      'Status',
+      'Registered At',
+      'Checked In At'
+    ];
+
+    const csvRows = attendees.map(attendee => [
+      attendee.userData?.name || 'N/A',
+      attendee.userData?.email || 'N/A',
+      attendee.userData?.company || 'N/A',
+      attendee.ticketId || 'N/A',
+      attendee.checkedIn ? 'Checked In' : 'Pending',
+      attendee.registeredAt ? new Date(attendee.registeredAt).toLocaleString() : 'N/A',
+      attendee.checkedInAt ? new Date(attendee.checkedInAt).toLocaleString() : 'N/A'
+    ]);
+
+    // Create CSV string with metadata
+    const timestamp = new Date().toISOString().split('T')[0];
+    const exportTime = new Date().toLocaleString();
+    
+    const csvContent = [
+      `Event: ${eventTitle}`,
+      `Export Date: ${exportTime}`,
+      `Total Attendees: ${totalAttendees}`,
+      `Checked In: ${checkedInCount}`,
+      `Pending: ${pendingCount}`,
+      `Check-in Rate: ${checkInRate}%`,
+      '', // Empty line separator
+      csvHeaders.join(','),
+      ...csvRows.map(row => 
+        row.map(cell => {
+          // Escape commas and quotes in CSV
+          const escaped = String(cell).replace(/"/g, '""');
+          return escaped.includes(',') || escaped.includes('"') || escaped.includes('\n') 
+            ? `"${escaped}"` 
+            : escaped;
+        }).join(',')
+      )
+    ].join('\n');
+
+    // Generate filename with timestamp
+    const filename = `${eventTitle.replace(/[^a-zA-Z0-9]/g, '_')}_attendees_${timestamp}.csv`;
+
+    // Use React Native Share API
+    const shareOptions = {
+      title: 'Export Attendees',
+      message: `${eventTitle} - Attendees List (${attendees.length} total, ${checkedInCount} checked in)`,
+      url: `data:text/csv;charset=utf-8,${encodeURIComponent(csvContent)}`,
+      subject: `${eventTitle} - Attendees Export`,
+      filename: filename,
+    };
+
+    const result = await Share.share(shareOptions);
+
+    // Handle different share results
+    if (result.action === Share.sharedAction) {
+      return {
+        success: true,
+        message: 'Attendees exported successfully',
+        result: result
+      };
+    } else if (result.action === Share.dismissedAction) {
+      return {
+        success: false,
+        message: 'Export cancelled by user',
+        result: result
+      };
+    } else {
+      return {
+        success: true,
+        message: 'Export completed',
+        result: result
+      };
+    }
   } catch (error) {
     console.error('Error exporting attendees:', error);
-    throw error;
+    return {
+      success: false,
+      message: 'Failed to export attendees. Please try again.',
+      error: error
+    };
   }
 };
 
@@ -364,5 +455,74 @@ export const subscribeToEventNotifications = (eventId: string, callback: (notifi
 export const unsubscribeFromEventNotifications = (subscriptionId: NodeJS.Timeout) => {
   if (subscriptionId) {
     clearInterval(subscriptionId);
+  }
+};
+
+// NEW: Function to get organizer info from backend
+export const getOrganizerInfo = async (userId: string) => {
+  try {
+    console.log(`[EventService] Getting organizer info for userId: ${userId}`);
+    const response = await fetch(`${API_BASE_URL}/api/test-user-info/${userId}`, {
+      method: 'GET',
+      headers: await getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      console.warn(`[EventService] Failed to get organizer info for ${userId}: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    console.log(`[EventService] Got organizer info:`, data.data.userInfo);
+    return data.data.userInfo;
+  } catch (error) {
+    console.error(`[EventService] Error getting organizer info for ${userId}:`, error);
+    return null;
+  }
+};
+
+// NEW: Function to enhance events with correct organizer information
+export const enhanceEventsWithOrganizerInfo = async (events: Event[]): Promise<Event[]> => {
+  try {
+    const enhancedEvents = await Promise.all(
+      events.map(async (event) => {
+        // Check if event has undefined or generic organizer name
+        const organizerName = event.organizerInfo?.name;
+        const needsEnhancement = (
+          !organizerName ||
+          organizerName === 'undefined' ||
+          organizerName === 'undefined undefined' ||
+          organizerName === 'User' ||
+          organizerName.includes('undefined')
+        );
+
+        if (!needsEnhancement) {
+          return event;
+        }
+
+        // Get correct organizer info from backend
+        const correctOrganizerInfo = await getOrganizerInfo(event.organizerId);
+        
+        if (correctOrganizerInfo && correctOrganizerInfo.name !== 'User') {
+          return {
+            ...event,
+            organizerInfo: {
+              name: correctOrganizerInfo.name,
+              email: correctOrganizerInfo.email || event.organizerInfo?.email || '',
+              company: correctOrganizerInfo.company || event.organizerInfo?.company || '',
+              profileImage: correctOrganizerInfo.profileImage || event.organizerInfo?.profileImage || null,
+            }
+          };
+        } else {
+          return event;
+        }
+      })
+    );
+
+    return enhancedEvents;
+  } catch (error) {
+    console.error('[EventService] Error enhancing events with organizer info:', error);
+    // Return original events if enhancement fails
+    return events;
   }
 };

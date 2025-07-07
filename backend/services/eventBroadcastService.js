@@ -289,7 +289,13 @@ class EventBroadcastService {
                     location: eventData.location,
                     organizerInfo: eventData.organizerInfo,
                     eventType: eventData.eventType,
-                    ticketPrice: eventData.ticketPrice
+                    ticketPrice: eventData.ticketPrice,
+                    // Include image data for rich notifications
+                    bannerImage: eventData.bannerImage,
+                    images: eventData.images || [],
+                    currentAttendees: eventData.currentAttendees || 0,
+                    maxAttendees: eventData.maxAttendees || -1,
+                    visibility: eventData.visibility || 'public'
                 },
                 timestamp: new Date().toISOString()
             };
@@ -530,7 +536,13 @@ class EventBroadcastService {
                 location: eventData.location,
                 organizerInfo: eventData.organizerInfo,
                 eventType: eventData.eventType,
-                ticketPrice: eventData.ticketPrice
+                ticketPrice: eventData.ticketPrice,
+                // Include image data for rich notifications
+                bannerImage: eventData.bannerImage,
+                images: eventData.images || [],
+                currentAttendees: eventData.currentAttendees || 0,
+                maxAttendees: eventData.maxAttendees || -1,
+                visibility: eventData.visibility || 'public'
             },
             timestamp: new Date().toISOString()
         };

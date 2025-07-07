@@ -45,7 +45,7 @@
     "react-native-safe-area-context": "*",
     "react-native-screens": "*",
     "react-native-share": "^12.0.11",
-    "react-native-svg": "^15.8.0",
+    "react-native-svg": "^15.12.0",
     "react-native-webview": "13.12.5",
     "socket.io-client": "^4.8.1"
   },

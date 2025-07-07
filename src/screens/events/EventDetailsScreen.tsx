@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Linking,
   Alert,
+  Modal,
+  Dimensions,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -18,12 +20,14 @@ import { COLORS } from '../../constants/colors';
 import EventHeader from '../../components/EventHeader';
 import { authenticatedFetchWithRefresh, ENDPOINTS } from '../../utils/api';
 import { useToast } from '../../hooks/useToast';
+import { addToRecentEvents } from '../../utils/recentEvents';
 import {
   Event,
   EventDetailsResponse,
   EventRegistration,
   EventRegistrationResponse,
 } from '../../types/events';
+import { enhanceEventsWithOrganizerInfo } from '../../services/eventService';
 
 // Navigation types
 type RootStackParamList = {
@@ -32,6 +36,8 @@ type RootStackParamList = {
   EventTicket: { event: Event; ticket?: any };
   QRScanner: { event: Event };
   CheckInDashboard: { event: Event };
+  CreateEvent: { editEvent?: Event };
+  EventAnalytics: { event: Event };
 };
 
 type EventDetailsRouteProp = RouteProp<RootStackParamList, 'EventDetails'>;
@@ -50,6 +56,8 @@ export default function EventDetailsScreen() {
   const [registering, setRegistering] = useState(false);
   const [userRegistration, setUserRegistration] = useState<EventRegistration | null>(null);
   const [isOrganizer, setIsOrganizer] = useState(false);
+  const [imageModalVisible, setImageModalVisible] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   // Load event details
   useEffect(() => {
@@ -77,9 +85,16 @@ export default function EventDetailsScreen() {
       const data: EventDetailsResponse = await response.json();
 
       if (data.success) {
-        setEvent(data.data.event);
+        let eventData = data.data.event;
+        
+        // Enhance event with correct organizer information
+        const enhancedEvents = await enhanceEventsWithOrganizerInfo([eventData]);
+        eventData = enhancedEvents[0];
+        
+        setEvent(eventData);
         setUserRegistration(data.data.userRegistration || null);
         setIsOrganizer(data.data.isOrganizer);
+        addToRecentEvents(eventData);
       } else {
         throw new Error('Failed to load event details');
       }
@@ -205,6 +220,17 @@ export default function EventDetailsScreen() {
   // Format date and time with better error handling
   const formatEventDateTime = (dateString: string, endDateString?: string, isoDateString?: string, isoEndDateString?: string) => {
     try {
+      // Check if start date is already formatted
+      const startDateStr = isoDateString || dateString;
+      if (startDateStr && startDateStr.includes(' at ')) {
+        // If already formatted, try to extract just the date part for consistency
+        const parts = startDateStr.split(' at ');
+        return {
+          date: parts[0] || startDateStr,
+          time: parts[1] || 'Time not available',
+        };
+      }
+
       let startDate: Date;
       let endDate: Date | null = null;
 
@@ -216,10 +242,17 @@ export default function EventDetailsScreen() {
       }
 
       if (endDateString) {
-        if (isoEndDateString) {
-          endDate = new Date(isoEndDateString);
+        // Check if end date is already formatted
+        const endDateStr = isoEndDateString || endDateString;
+        if (endDateStr && endDateStr.includes(' at ')) {
+          // Skip end date processing if it's already formatted
+          // We'll just use the start date
         } else {
-          endDate = new Date(endDateString);
+          if (isoEndDateString) {
+            endDate = new Date(isoEndDateString);
+          } else {
+            endDate = new Date(endDateString);
+          }
         }
       }
 
@@ -227,7 +260,7 @@ export default function EventDetailsScreen() {
       if (isNaN(startDate.getTime())) {
         console.error('Invalid start date:', { dateString, isoDateString });
         return {
-          date: 'Invalid date',
+          date: startDateStr || 'Invalid date',
           time: 'Invalid time',
         };
       }
@@ -260,7 +293,7 @@ export default function EventDetailsScreen() {
     } catch (error) {
       console.error('Error formatting event date time:', error);
       return {
-        date: 'Invalid date',
+        date: dateString || 'Invalid date',
         time: 'Invalid time',
       };
     }
@@ -277,6 +310,29 @@ export default function EventDetailsScreen() {
     Linking.openURL(url).catch(() => {
       toast.error('Error', 'Could not open maps application.');
     });
+  };
+
+  // Handle image press to open modal
+  const handleImagePress = (index: number) => {
+    setSelectedImageIndex(index);
+    setImageModalVisible(true);
+  };
+
+  // Get all event images (banner + additional images)
+  const getAllEventImages = () => {
+    const images: string[] = [];
+    if (event?.bannerImage) {
+      images.push(event.bannerImage);
+    }
+    if (event?.images && event.images.length > 0) {
+      // Add non-banner images (avoid duplicates)
+      event.images.forEach(img => {
+        if (img !== event.bannerImage) {
+          images.push(img);
+        }
+      });
+    }
+    return images;
   };
 
   if (loading) {
@@ -313,13 +369,15 @@ export default function EventDetailsScreen() {
   const isEventFull = event.maxAttendees !== -1 && event.currentAttendees >= event.maxAttendees;
   const canRegister = !userRegistration && !isEventFull && event.status === 'published';
 
+  const allImages = getAllEventImages();
+
   return (
     <View style={styles.container}>
       <EventHeader 
         title="Event Details"
         rightIcon={
           isOrganizer ? (
-            <TouchableOpacity onPress={() => {/* Navigate to edit */}}>
+            <TouchableOpacity onPress={() => navigation.navigate('CreateEvent', { editEvent: event })}>
               <MaterialIcons name="edit" size={24} color={COLORS.black} />
             </TouchableOpacity>
           ) : undefined
@@ -327,13 +385,64 @@ export default function EventDetailsScreen() {
       />
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Event Image */}
-        {event.bannerImage || (event.images && event.images.length > 0) ? (
-          <Image
-            source={{ uri: event.bannerImage || event.images![0] }}
-            style={styles.eventImage}
-            resizeMode="cover"
-          />
+        {/* Event Image(s) */}
+        {allImages.length > 0 ? (
+          <View style={styles.imageSection}>
+            {/* Main Banner Image */}
+            <TouchableOpacity onPress={() => handleImagePress(0)}>
+              <Image
+                source={{ uri: allImages[0] }}
+                style={styles.eventImage}
+                resizeMode="cover"
+              />
+              {allImages.length > 1 && (
+                <View style={styles.imageCountBadge}>
+                  <MaterialIcons name="photo-library" size={16} color={COLORS.white} />
+                  <Text style={styles.imageCountText}>{allImages.length}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* Additional Images Thumbnail Row */}
+            {allImages.length > 1 && (
+              <View style={styles.thumbnailContainer}>
+                <ScrollView 
+                  horizontal 
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.thumbnailScroll}
+                >
+                  {allImages.slice(1, 4).map((imageUri, index) => (
+                    <TouchableOpacity
+                      key={index + 1}
+                      onPress={() => handleImagePress(index + 1)}
+                      style={styles.thumbnailWrapper}
+                    >
+                      <Image
+                        source={{ uri: imageUri }}
+                        style={styles.thumbnail}
+                        resizeMode="cover"
+                      />
+                      {index === 2 && allImages.length > 4 && (
+                        <View style={styles.moreImagesOverlay}>
+                          <Text style={styles.moreImagesText}>+{allImages.length - 4}</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                  
+                  {allImages.length > 4 && (
+                    <TouchableOpacity
+                      onPress={() => handleImagePress(4)}
+                      style={styles.viewAllButton}
+                    >
+                      <MaterialIcons name="grid-view" size={20} color={COLORS.primary} />
+                      <Text style={styles.viewAllText}>View All</Text>
+                    </TouchableOpacity>
+                  )}
+                </ScrollView>
+              </View>
+            )}
+          </View>
         ) : (
           <View style={[styles.imagePlaceholder, { backgroundColor: COLORS.primary }]}>
             <MaterialIcons name="event" size={48} color={COLORS.white} />
@@ -446,28 +555,28 @@ export default function EventDetailsScreen() {
         {isOrganizer ? (
           <View style={styles.buttonRow}>
             <TouchableOpacity
-              style={[styles.actionButton, styles.ticketButton, { flex: 1, marginRight: 8 }]}
+              style={[styles.actionButton, styles.primaryButton, { flex: 1, marginRight: 8 }]}
               onPress={() => navigation.navigate('QRScanner', { event })}
             >
-              <MaterialIcons name="qr-code-scanner" size={24} color={COLORS.white} />
+              <MaterialIcons name="qr-code-scanner" size={20} color={COLORS.white} />
               <Text style={styles.actionButtonText}>Scan QR</Text>
             </TouchableOpacity>
             
             <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: COLORS.secondary, flex: 1, marginLeft: 8 }]}
+              style={[styles.actionButton, styles.secondaryButton, { flex: 1, marginLeft: 8 }]}
               onPress={() => navigation.navigate('CheckInDashboard', { event })}
             >
-              <MaterialIcons name="dashboard" size={24} color={COLORS.white} />
+              <MaterialIcons name="dashboard" size={20} color={COLORS.white} />
               <Text style={styles.actionButtonText}>Dashboard</Text>
             </TouchableOpacity>
           </View>
         ) : userRegistration ? (
           <View style={styles.buttonRow}>
             <TouchableOpacity
-              style={[styles.actionButton, styles.ticketButton, { flex: 1, marginRight: 8 }]}
+              style={[styles.actionButton, styles.primaryButton, { flex: 1, marginRight: 8 }]}
               onPress={() => navigation.navigate('EventTicket', { event, ticket: userRegistration })}
             >
-              <MaterialIcons name="qr-code" size={24} color={COLORS.white} />
+              <MaterialIcons name="qr-code" size={20} color={COLORS.white} />
               <Text style={styles.actionButtonText}>View Ticket</Text>
             </TouchableOpacity>
             
@@ -480,7 +589,7 @@ export default function EventDetailsScreen() {
                 <ActivityIndicator size="small" color={COLORS.white} />
               ) : (
                 <>
-                  <MaterialIcons name="cancel" size={24} color={COLORS.white} />
+                  <MaterialIcons name="cancel" size={20} color={COLORS.white} />
                   <Text style={styles.actionButtonText}>Unregister</Text>
                 </>
               )}
@@ -488,7 +597,7 @@ export default function EventDetailsScreen() {
           </View>
         ) : canRegister ? (
           <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: COLORS.primary }]}
+            style={[styles.actionButton, styles.primaryButton]}
             onPress={handleRegister}
             disabled={registering}
           >
@@ -496,7 +605,7 @@ export default function EventDetailsScreen() {
               <ActivityIndicator size="small" color={COLORS.white} />
             ) : (
               <>
-                <MaterialIcons name="event-available" size={24} color={COLORS.white} />
+                <MaterialIcons name="event-available" size={20} color={COLORS.white} />
                 <Text style={styles.actionButtonText}>Register for Event</Text>
               </>
             )}
@@ -509,6 +618,47 @@ export default function EventDetailsScreen() {
           </View>
         )}
       </View>
+
+      {/* Image Modal */}
+      <Modal
+        visible={imageModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setImageModalVisible(false)}
+      >
+        <View style={styles.imageModalContainer}>
+          <TouchableOpacity
+            style={styles.closeModalButton}
+            onPress={() => setImageModalVisible(false)}
+          >
+            <MaterialIcons name="close" size={30} color={COLORS.white} />
+          </TouchableOpacity>
+
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            style={styles.imageModalScroll}
+            contentOffset={{ x: selectedImageIndex * Dimensions.get('window').width, y: 0 }}
+          >
+            {allImages.map((imageUri, index) => (
+              <View key={index} style={styles.modalImageContainer}>
+                <Image
+                  source={{ uri: imageUri }}
+                  style={styles.modalImage}
+                  resizeMode="contain"
+                />
+              </View>
+            ))}
+          </ScrollView>
+
+          <View style={styles.imageModalFooter}>
+            <Text style={styles.imageModalCounter}>
+              {selectedImageIndex + 1} of {allImages.length}
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -626,9 +776,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
-    borderRadius: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 25,
     gap: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   unregisterButton: {
     backgroundColor: COLORS.error,
@@ -638,7 +797,7 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
     color: COLORS.white,
   },
   loading: {
@@ -679,7 +838,111 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  ticketButton: {
+  primaryButton: {
     backgroundColor: COLORS.primary,
+  },
+  secondaryButton: {
+    backgroundColor: COLORS.secondary,
+  },
+  imageSection: {
+    marginBottom: 24,
+  },
+  imageCountBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    padding: 4,
+    borderRadius: 12,
+  },
+  imageCountText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  thumbnailContainer: {
+    marginTop: 12,
+  },
+  thumbnailScroll: {
+    padding: 4,
+  },
+  thumbnailWrapper: {
+    width: 100,
+    height: 100,
+    marginRight: 8,
+  },
+  thumbnail: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+  },
+  moreImagesOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  moreImagesText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  viewAllButton: {
+    backgroundColor: COLORS.primary,
+    padding: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewAllText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  imageModalContainer: {
+    flex: 1,
+    backgroundColor: 'black',
+  },
+  closeModalButton: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    padding: 12,
+    borderRadius: 12,
+    zIndex: 1,
+  },
+  imageModalScroll: {
+    flex: 1,
+  },
+  modalImageContainer: {
+    width: Dimensions.get('window').width,
+    height: Dimensions.get('window').height,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalImage: {
+    width: '100%',
+    height: '100%',
+  },
+  imageModalFooter: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+  },
+  imageModalCounter: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 }); 

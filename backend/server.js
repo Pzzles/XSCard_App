@@ -37,6 +37,7 @@ const paymentRoutes = require('./routes/paymentRoutes');
 const subscriptionRoutes = require('./routes/subscriptionRoutes'); // Add subscription routes
 const apkRoutes = require('./routes/apkRoutes'); // Add APK routes
 const eventRoutes = require('./routes/eventRoutes'); // Add event routes
+const testRoutes = require('./routes/testRoutes'); // Add test routes for debugging
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -54,6 +55,7 @@ app.use('/', apkRoutes); // Add APK routes for public download
 app.use('/', eventRoutes); // Move event routes to public section for /api/events/public
 app.use('/', userRoutes); // Move user routes to public section so SignIn works
 app.use('/', contactRoutes); // Move contact routes to public section to keep save contact public
+app.use('/api', testRoutes); // Add test routes for debugging
 
 // Add the AddContact endpoint directly to server.js
 // This bypasses any router or authentication middleware issues

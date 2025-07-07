@@ -46,6 +46,7 @@ export type RootStackParamList = {
   MyEvents: undefined;
   EventTicket: { event: any; ticket?: any };
   CheckInDashboard: { event: any };
+  EventAnalytics: { event: any };
 };
 
 export type RootTabParamList = {

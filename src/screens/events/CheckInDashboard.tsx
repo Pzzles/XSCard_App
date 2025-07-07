@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Modal,
   FlatList,
+  TextInput,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LineChart, PieChart } from 'react-native-chart-kit';
@@ -43,6 +44,7 @@ interface CheckInDashboardProps {
 type RootStackParamList = {
   QRScanner: { event: Event };
   CheckInDashboard: { event: Event };
+  EventAnalytics: { event: Event };
 };
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
@@ -65,6 +67,114 @@ const chartConfig = {
   },
 };
 
+// Helper function to safely format dates
+const formatDate = (dateString: string | undefined | null, isoDateString?: string): string => {
+  try {
+    if (!dateString && !isoDateString) {
+      return 'Date not available';
+    }
+
+    const rawDate = isoDateString || dateString;
+    if (!rawDate) {
+      return 'Date not available';
+    }
+
+    // Check if it's already a formatted string (contains "at")
+    if (rawDate.includes(' at ')) {
+      return rawDate; // Return as-is if already formatted
+    }
+
+    let date: Date;
+    
+    // Try to parse as a proper date
+    if (isoDateString) {
+      date = new Date(isoDateString);
+    } else {
+      date = new Date(dateString!);
+    }
+
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      console.error('Invalid date string:', { dateString, isoDateString });
+      return rawDate; // Return original string if we can't parse it
+    }
+
+    return date.toLocaleDateString();
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return dateString || 'Invalid date';
+  }
+};
+
+const formatDateTime = (dateString: string | undefined | null, isoDateString?: string): string => {
+  try {
+    if (!dateString && !isoDateString) {
+      return 'Date not available';
+    }
+
+    const rawDate = isoDateString || dateString;
+    if (!rawDate) {
+      return 'Date not available';
+    }
+
+    // Check if it's already a formatted string (contains "at")
+    if (rawDate.includes(' at ')) {
+      return rawDate; // Return as-is if already formatted
+    }
+
+    let date: Date;
+    
+    // Try to parse as a proper date
+    if (isoDateString) {
+      date = new Date(isoDateString);
+    } else {
+      date = new Date(dateString!);
+    }
+
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      console.error('Invalid date string:', { dateString, isoDateString });
+      return rawDate; // Return original string if we can't parse it
+    }
+
+    return date.toLocaleString();
+  } catch (error) {
+    console.error('Error formatting datetime:', error);
+    return dateString || 'Invalid date';
+  }
+};
+
+const formatTime = (dateString: string | undefined | null): string => {
+  try {
+    if (!dateString) {
+      return 'Time not available';
+    }
+
+    // Check if it's already a formatted string (contains "at")
+    if (dateString.includes(' at ')) {
+      // Extract time part from formatted string like "July 7 2025 at 12:21:20 PM GMT+2"
+      const parts = dateString.split(' at ');
+      if (parts.length > 1) {
+        return parts[1]; // Return the time part
+      }
+      return dateString; // Return as-is if we can't split
+    }
+
+    const date = new Date(dateString);
+
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      console.error('Invalid time string:', dateString);
+      return dateString; // Return original string if we can't parse it
+    }
+
+    return date.toLocaleTimeString();
+  } catch (error) {
+    console.error('Error formatting time:', error);
+    return dateString || 'Invalid time';
+  }
+};
+
 export const CheckInDashboard: React.FC = () => {
   const route = useRoute() as CheckInDashboardProps['route'];
   const navigation = useNavigation<NavigationProp>();
@@ -74,22 +184,82 @@ export const CheckInDashboard: React.FC = () => {
 
   const [event, setEvent] = useState<Event>(initialEvent);
   const [attendees, setAttendees] = useState<EventAttendee[]>([]);
+  const [filteredAttendees, setFilteredAttendees] = useState<EventAttendee[]>([]);
   const [stats, setStats] = useState<CheckInStatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedAttendee, setSelectedAttendee] = useState<EventAttendee | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'checked-in' | 'pending'>('all');
+  const [silentRefreshTimer, setSilentRefreshTimer] = useState<NodeJS.Timeout | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       loadDashboardData();
+      
+      // Set up auto-refresh for real-time updates
+      const interval = setInterval(() => {
+        loadDashboardData(true); // Silent refresh
+      }, 30000); // Refresh every 30 seconds
+      
+      setSilentRefreshTimer(interval);
+      
+      return () => {
+        clearInterval(interval);
+        if (silentRefreshTimer) {
+          clearInterval(silentRefreshTimer);
+        }
+      };
     }, [])
   );
 
-  const loadDashboardData = async () => {
+  // Cleanup timer when component unmounts
+  useEffect(() => {
+    return () => {
+      if (silentRefreshTimer) {
+        clearInterval(silentRefreshTimer);
+      }
+    };
+  }, [silentRefreshTimer]);
+
+  // Filter attendees based on search and status
+  useEffect(() => {
+    let filtered = attendees;
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      filtered = filtered.filter(attendee => {
+        const searchTerm = searchQuery.toLowerCase();
+        return (
+          attendee.userData?.name?.toLowerCase().includes(searchTerm) ||
+          attendee.userData?.email?.toLowerCase().includes(searchTerm) ||
+          attendee.userData?.company?.toLowerCase().includes(searchTerm)
+        );
+      });
+    }
+
+    // Apply status filter
+    if (filterStatus !== 'all') {
+      filtered = filtered.filter(attendee => {
+        if (filterStatus === 'checked-in') {
+          return attendee.checkedIn;
+        } else if (filterStatus === 'pending') {
+          return !attendee.checkedIn;
+        }
+        return true;
+      });
+    }
+
+    setFilteredAttendees(filtered);
+  }, [attendees, searchQuery, filterStatus]);
+
+  const loadDashboardData = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       await Promise.all([
         loadEventDetails(),
         loadAttendees(),
@@ -99,7 +269,9 @@ export const CheckInDashboard: React.FC = () => {
       console.error('Error loading dashboard data:', error);
       showError('Failed to load dashboard data');
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -149,15 +321,28 @@ export const CheckInDashboard: React.FC = () => {
   const exportAttendees = async () => {
     try {
       setExporting(true);
-      const result = await exportAttendeesToCSV(event.id);
+      
+      // Check if we have attendees data
+      if (!attendees || attendees.length === 0) {
+        showError('No attendees to export');
+        return;
+      }
+
+      const result = await exportAttendeesToCSV(event.id, attendees, event.title);
+      
       if (result.success) {
         success('Attendees exported successfully');
-        // Here you could implement file sharing or save to device
       } else {
-        throw new Error(result.message);
+        // Don't show error for user cancellation
+        if (result.message && result.message.includes('cancelled by user')) {
+          // User cancelled, no need to show error
+          return;
+        }
+        showError(result.message || 'Failed to export attendees');
       }
-    } catch (error: any) {
-      showError(error.message || 'Failed to export attendees');
+    } catch (error) {
+      console.error('Export error:', error);
+      showError('Unable to export attendee list. Please try again.');
     } finally {
       setExporting(false);
     }
@@ -168,117 +353,14 @@ export const CheckInDashboard: React.FC = () => {
     setModalVisible(true);
   };
 
-  const renderStatsCards = () => {
-    if (!stats) return null;
-
-    const cards = [
-      {
-        title: 'Total Tickets',
-        value: stats.totalTickets,
-        icon: 'confirmation-number',
-        color: COLORS.primary,
-      },
-      {
-        title: 'Checked In',
-        value: stats.checkedInCount,
-        icon: 'check-circle',
-        color: COLORS.success,
-      },
-      {
-        title: 'Pending',
-        value: stats.pendingCheckIn,
-        icon: 'schedule',
-        color: COLORS.warning,
-      },
-      {
-        title: 'Check-in Rate',
-        value: `${Math.round(stats.checkInRate)}%`,
-        icon: 'trending-up',
-        color: COLORS.info,
-      },
-    ];
-
-    return (
-      <View style={styles.statsGrid}>
-        {cards.map((card, index) => (
-          <View key={index} style={styles.statCard}>
-            <MaterialIcons name={card.icon as any} size={24} color={card.color} />
-            <Text style={styles.statValue}>{card.value}</Text>
-            <Text style={styles.statTitle}>{card.title}</Text>
-          </View>
-        ))}
-      </View>
-    );
-  };
-
   const renderCheckInChart = () => {
-    if (!stats || stats.checkInDetails.length === 0) return null;
-
-    // Group check-ins by hour
-    const checkInsByHour = stats.checkInDetails.reduce((acc, detail) => {
-      const hour = new Date(detail.checkedInAt).getHours();
-      acc[hour] = (acc[hour] || 0) + 1;
-      return acc;
-    }, {} as Record<number, number>);
-
-    const hours = Object.keys(checkInsByHour).map(Number).sort((a, b) => a - b);
-    const data = {
-      labels: hours.map(h => `${h}:00`),
-      datasets: [{
-        data: hours.map(h => checkInsByHour[h]),
-      }],
-    };
-
-    return (
-      <View style={styles.chartContainer}>
-        <Text style={styles.chartTitle}>Check-ins by Hour</Text>
-        <LineChart
-          data={data}
-          width={width - 40}
-          height={220}
-          chartConfig={chartConfig}
-          bezier
-          style={styles.chart}
-        />
-      </View>
-    );
+    // Charts moved to Analytics screen
+    return null;
   };
 
   const renderStatusPieChart = () => {
-    if (!stats) return null;
-
-    const data = [
-      {
-        name: 'Checked In',
-        population: stats.checkedInCount,
-        color: COLORS.success,
-        legendFontColor: COLORS.text,
-        legendFontSize: 12,
-      },
-      {
-        name: 'Pending',
-        population: stats.pendingCheckIn,
-        color: COLORS.warning,
-        legendFontColor: COLORS.text,
-        legendFontSize: 12,
-      },
-    ];
-
-    return (
-      <View style={styles.chartContainer}>
-        <Text style={styles.chartTitle}>Attendance Status</Text>
-        <PieChart
-          data={data}
-          width={width - 40}
-          height={200}
-          chartConfig={chartConfig}
-          accessor="population"
-          backgroundColor="transparent"
-          paddingLeft="15"
-          center={[10, 0]}
-        />
-      </View>
-    );
+    // Charts moved to Analytics screen  
+    return null;
   };
 
   const renderAttendeeItem = ({ item }: { item: EventAttendee }) => (
@@ -311,7 +393,7 @@ export const CheckInDashboard: React.FC = () => {
         </Text>
         {item.checkedIn && item.checkedInAt && (
           <Text style={styles.checkInTime}>
-            {new Date(item.checkedInAt).toLocaleTimeString()}
+            {formatTime(item.checkedInAt)}
           </Text>
         )}
       </View>
@@ -351,8 +433,15 @@ export const CheckInDashboard: React.FC = () => {
         <View style={styles.eventInfo}>
           <Text style={styles.eventTitle}>{event.title}</Text>
           <Text style={styles.eventDate}>
-            {new Date(event.eventDate).toLocaleDateString()} at{' '}
-            {new Date(event.eventDate).toLocaleTimeString()}
+            {(() => {
+              const dateStr = event.eventDateISO || event.eventDate;
+              // If date already contains "at", display as-is
+              if (dateStr && dateStr.includes(' at ')) {
+                return dateStr;
+              }
+              // Otherwise, format date and time separately
+              return `${formatDate(event.eventDate, event.eventDateISO)} at ${formatTime(event.eventDateISO || event.eventDate)}`;
+            })()}
           </Text>
           <Text style={styles.eventLocation}>{event.location.venue}</Text>
         </View>
@@ -360,38 +449,129 @@ export const CheckInDashboard: React.FC = () => {
         {/* Action Buttons */}
         <View style={styles.actionButtons}>
           <TouchableOpacity style={styles.primaryButton} onPress={openQRScanner}>
-            <MaterialIcons name="qr-code-scanner" size={20} color="white" />
-            <Text style={styles.buttonText}>Scan QR Code</Text>
+            <MaterialIcons name="qr-code-scanner" size={18} color="white" />
+            <Text style={styles.buttonText}>Scan QR</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => navigation.navigate('EventAnalytics', { event })}
+          >
+            <MaterialIcons name="analytics" size={18} color="white" />
+            <Text style={styles.buttonText}>Analytics</Text>
           </TouchableOpacity>
           
           <TouchableOpacity 
-            style={[styles.secondaryButton, exporting && styles.disabledButton]} 
+            style={[styles.secondaryButton, exporting && styles.disabledButton]}
             onPress={exportAttendees}
             disabled={exporting}
           >
-            <MaterialIcons name="download" size={20} color={COLORS.primary} />
-            <Text style={styles.secondaryButtonText}>
-              {exporting ? 'Exporting...' : 'Export CSV'}
+            {exporting ? (
+              <ActivityIndicator size="small" color="white" />
+            ) : (
+              <MaterialIcons name="download" size={18} color="white" />
+            )}
+            <Text style={styles.buttonText}>
+              {exporting ? 'Exporting...' : 'Export'}
             </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Stats Cards */}
-        {renderStatsCards()}
-
-        {/* Charts */}
-        {renderCheckInChart()}
-        {renderStatusPieChart()}
-
         {/* Attendees List */}
         <View style={styles.attendeesSection}>
           <Text style={styles.sectionTitle}>Attendees ({attendees.length})</Text>
+          
+          {/* Search Bar */}
+          <View style={styles.searchContainer}>
+            <View style={styles.searchBar}>
+              <MaterialIcons name="search" size={20} color={COLORS.gray} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search attendees..."
+                placeholderTextColor={COLORS.gray}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery('')}>
+                  <MaterialIcons name="close" size={20} color={COLORS.gray} />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          {/* Filter Buttons */}
+          <View style={styles.filterContainer}>
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                filterStatus === 'all' && styles.filterButtonActive
+              ]}
+              onPress={() => setFilterStatus('all')}
+            >
+              <Text style={[
+                styles.filterButtonText,
+                filterStatus === 'all' && styles.filterButtonTextActive
+              ]}>
+                All ({attendees.length})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                filterStatus === 'checked-in' && styles.filterButtonActive
+              ]}
+              onPress={() => setFilterStatus('checked-in')}
+            >
+              <Text style={[
+                styles.filterButtonText,
+                filterStatus === 'checked-in' && styles.filterButtonTextActive
+              ]}>
+                Checked In ({attendees.filter(a => a.checkedIn).length})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                filterStatus === 'pending' && styles.filterButtonActive
+              ]}
+              onPress={() => setFilterStatus('pending')}
+            >
+              <Text style={[
+                styles.filterButtonText,
+                filterStatus === 'pending' && styles.filterButtonTextActive
+              ]}>
+                Pending ({attendees.filter(a => !a.checkedIn).length})
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Results Count */}
+          {filteredAttendees.length !== attendees.length && (
+            <Text style={styles.resultsText}>
+              Showing {filteredAttendees.length} of {attendees.length} attendees
+            </Text>
+          )}
+
           <FlatList
-            data={attendees}
+            data={filteredAttendees}
             renderItem={renderAttendeeItem}
             keyExtractor={(item) => item.ticketId}
             scrollEnabled={false}
             showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <MaterialIcons name="people" size={48} color={COLORS.gray} />
+                <Text style={styles.emptyStateText}>
+                  {searchQuery || filterStatus !== 'all' 
+                    ? 'No attendees match your filters'
+                    : 'No attendees registered yet'
+                  }
+                </Text>
+              </View>
+            }
           />
         </View>
       </ScrollView>
@@ -445,7 +625,7 @@ export const CheckInDashboard: React.FC = () => {
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Registered:</Text>
                   <Text style={styles.detailValue}>
-                    {new Date(selectedAttendee.registeredAt).toLocaleString()}
+                    {formatDateTime(selectedAttendee.registeredAt)}
                   </Text>
                 </View>
 
@@ -470,7 +650,7 @@ export const CheckInDashboard: React.FC = () => {
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Checked In:</Text>
                     <Text style={styles.detailValue}>
-                      {new Date(selectedAttendee.checkedInAt).toLocaleString()}
+                      {formatDateTime(selectedAttendee.checkedInAt)}
                     </Text>
                   </View>
                 )}
@@ -525,89 +705,55 @@ const styles = StyleSheet.create({
   actionButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    marginBottom: 15,
+    marginBottom: 24,
+    paddingHorizontal: 4,
   },
   primaryButton: {
-    flex: 1,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 25,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.primary,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginRight: 10,
+    flex: 1,
+    marginHorizontal: 6,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   secondaryButton: {
-    flex: 1,
+    backgroundColor: COLORS.secondary,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 25,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'white',
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-    marginLeft: 10,
+    flex: 1,
+    marginHorizontal: 6,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   disabledButton: {
     opacity: 0.5,
   },
   buttonText: {
-    color: 'white',
+    color: COLORS.white,
     fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: '600',
     marginLeft: 8,
-  },
-  secondaryButtonText: {
-    color: COLORS.primary,
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 10,
-    marginBottom: 15,
-  },
-  statCard: {
-    width: '48%',
-    backgroundColor: 'white',
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-    margin: '1%',
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginTop: 8,
-  },
-  statTitle: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    marginTop: 4,
-  },
-  chartContainer: {
-    backgroundColor: 'white',
-    margin: 20,
-    marginVertical: 10,
-    borderRadius: 8,
-    padding: 15,
-  },
-  chartTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  chart: {
-    marginVertical: 8,
-    borderRadius: 8,
   },
   attendeesSection: {
     backgroundColor: 'white',
@@ -737,6 +883,75 @@ const styles = StyleSheet.create({
   },
   headerRight: {
     width: 40,
+  },
+  searchContainer: {
+    marginBottom: 10,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderRadius: 25,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 12,
+    fontSize: 16,
+    color: COLORS.black,
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    marginBottom: 20,
+    paddingHorizontal: 4,
+  },
+  filterButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: COLORS.background,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  filterButtonActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  filterButtonText: {
+    fontSize: 14,
+    color: COLORS.black,
+    fontWeight: '500',
+  },
+  filterButtonTextActive: {
+    color: COLORS.white,
+    fontWeight: '600',
+  },
+  resultsText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
   },
 });
 
