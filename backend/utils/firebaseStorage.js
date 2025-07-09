@@ -42,8 +42,11 @@ const uploadFile = async (fileBuffer, originalName, userId, fileType) => {
       if (fileType === 'apk') {
         // Store APK files in a dedicated apk-files folder
         filePath = `apk-files/${filename}`;
+      } else if (fileType === 'bannerImage' || fileType === 'eventImages') {
+        // Store event-related images in events folder
+        filePath = `events/${userId}/${filename}`;
       } else {
-        // Store other files in user-specific profile folders
+        // Default to user-specific profile folders
         filePath = `profiles/${userId}/${filename}`;
       }
       console.log('Creating file reference at path:', filePath);
@@ -83,6 +86,8 @@ const uploadFile = async (fileBuffer, originalName, userId, fileType) => {
       let uploadsDir;
       if (fileType === 'apk') {
         uploadsDir = path.join(__dirname, '..', 'public', 'downloads');
+      } else if (fileType === 'bannerImage' || fileType === 'eventImages') {
+        uploadsDir = path.join(__dirname, '..', 'public', 'events');
       } else {
         uploadsDir = path.join(__dirname, '..', 'public', 'profiles');
       }
@@ -96,7 +101,7 @@ const uploadFile = async (fileBuffer, originalName, userId, fileType) => {
         // APK files don't need user-specific directories in local storage
         userDir = uploadsDir;
       } else {
-        // Create user directory for profile images
+        // Create user directory for other images
         userDir = path.join(uploadsDir, userId);
         if (!fs.existsSync(userDir)) {
           fs.mkdirSync(userDir, { recursive: true });
@@ -116,6 +121,8 @@ const uploadFile = async (fileBuffer, originalName, userId, fileType) => {
       let relativePath;
       if (fileType === 'apk') {
         relativePath = `/downloads/${filename}`;
+      } else if (fileType === 'bannerImage' || fileType === 'eventImages') {
+        relativePath = `/events/${userId}/${filename}`;
       } else {
         relativePath = `/profiles/${userId}/${filename}`;
       }
@@ -135,6 +142,8 @@ const uploadFile = async (fileBuffer, originalName, userId, fileType) => {
         let uploadsDir;
         if (fileType === 'apk') {
           uploadsDir = path.join(__dirname, '..', 'public', 'downloads');
+        } else if (fileType === 'bannerImage' || fileType === 'eventImages') {
+          uploadsDir = path.join(__dirname, '..', 'public', 'events');
         } else {
           uploadsDir = path.join(__dirname, '..', 'public', 'profiles');
         }
@@ -148,7 +157,7 @@ const uploadFile = async (fileBuffer, originalName, userId, fileType) => {
           // APK files don't need user-specific directories in local storage
           userDir = uploadsDir;
         } else {
-          // Create user directory for profile images
+          // Create user directory for other images
           userDir = path.join(uploadsDir, userId);
           if (!fs.existsSync(userDir)) {
             fs.mkdirSync(userDir, { recursive: true });
@@ -168,6 +177,8 @@ const uploadFile = async (fileBuffer, originalName, userId, fileType) => {
         let relativePath;
         if (fileType === 'apk') {
           relativePath = `/downloads/${filename}`;
+        } else if (fileType === 'bannerImage' || fileType === 'eventImages') {
+          relativePath = `/events/${userId}/${filename}`;
         } else {
           relativePath = `/profiles/${userId}/${filename}`;
         }

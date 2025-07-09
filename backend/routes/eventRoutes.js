@@ -1,16 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const eventController = require('../controllers/eventController');
-const { authenticateUser } = require('../middleware/auth');
+const { authenticateUser, optionalAuthentication } = require('../middleware/auth');
 const { handleMultipleUploads } = require('../middleware/fileUpload');
 const EventBroadcastMiddleware = require('../middleware/eventBroadcastMiddleware');
 
 // Initialize database endpoint (can be called once to set up collections)
 router.post('/events/initialize-db', eventController.initializeDatabase);
 
-// Public routes (no authentication required)
-router.get('/events/public', eventController.getAllEvents);
-router.get('/events/search', eventController.searchEvents);
+// Public routes (with optional authentication for private event visibility)
+router.get('/events/public', optionalAuthentication, eventController.getAllEvents);
+router.get('/events/search', optionalAuthentication, eventController.searchEvents);
 
 // WebSocket status endpoint for monitoring (optional)
 router.get('/events/websocket/status', (req, res) => {

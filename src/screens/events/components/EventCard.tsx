@@ -308,6 +308,7 @@ const styles = StyleSheet.create({
   imageContainer: {
     position: 'relative',
     height: 160,
+    backgroundColor: COLORS.background, // subtle grey backdrop
   },
   eventImage: {
     width: '100%',
@@ -318,6 +319,7 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: COLORS.background,
   },
   content: {
     padding: 16,

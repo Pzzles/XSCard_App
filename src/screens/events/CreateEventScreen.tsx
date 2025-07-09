@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Switch,
   Image,
+  Platform,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -76,11 +77,10 @@ export default function CreateEventScreen() {
     tags: [],
   });
 
-  // UI state
+  // UI state - Updated for Android compatibility
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
-  const [datePickerMode, setDatePickerMode] = useState<'date' | 'time'>('date');
-  const [hasEndTime, setHasEndTime] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [tempDate, setTempDate] = useState<Date>(new Date());
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [uploadingImages, setUploadingImages] = useState(false);
   const [tagInput, setTagInput] = useState('');
@@ -150,18 +150,44 @@ export default function CreateEventScreen() {
     }));
   };
 
-  // Date handlers
+  // Date handlers - Updated for Android compatibility
+  const showDatePickerHandler = () => {
+    setTempDate(new Date(formData.eventDate));
+    setShowDatePicker(true);
+  };
+
   const handleDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(false);
-    if (selectedDate) {
-      updateFormData({ eventDate: selectedDate.toISOString() });
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
+      
+      if (event.type === 'set' && selectedDate) {
+        setTempDate(selectedDate);
+        // On Android, show time picker after date selection
+        setTimeout(() => {
+          setShowTimePicker(true);
+        }, 100);
+      }
+    } else {
+      // iOS - datetime mode works fine, close picker after selection
+      setShowDatePicker(false);
+      if (selectedDate) {
+        updateFormData({ eventDate: selectedDate.toISOString() });
+      }
     }
   };
 
-  const handleEndDateChange = (event: any, selectedDate?: Date) => {
-    setShowEndDatePicker(false);
-    if (selectedDate) {
-      updateFormData({ endDate: selectedDate.toISOString() });
+  const handleTimeChange = (event: any, selectedTime?: Date) => {
+    setShowTimePicker(false);
+    
+    if (event.type === 'set' && selectedTime) {
+      // Combine the date from tempDate with time from selectedTime
+      const combinedDateTime = new Date(tempDate);
+      combinedDateTime.setHours(selectedTime.getHours());
+      combinedDateTime.setMinutes(selectedTime.getMinutes());
+      combinedDateTime.setSeconds(0);
+      combinedDateTime.setMilliseconds(0);
+      
+      updateFormData({ eventDate: combinedDateTime.toISOString() });
     }
   };
 
@@ -223,21 +249,52 @@ export default function CreateEventScreen() {
         return;
       }
 
-      // Prepare event data
-      const eventData = {
-        ...formData,
-        images: selectedImages, // Will be uploaded to server
-        bannerImage: selectedImages[0] || null,
-      };
+      // --------------------------
+      // Prepare payload (FormData for images + fields)
+      // --------------------------
 
-      console.log('Creating event with data:', eventData);
+      const payload = new FormData();
+
+      // Append basic string / numeric fields (all must be strings in FormData)
+      payload.append('title', formData.title);
+      payload.append('description', formData.description);
+      payload.append('eventDate', formData.eventDate);
+      if (formData.endDate) payload.append('endDate', formData.endDate);
+      payload.append('category', formData.category);
+      payload.append('eventType', formData.eventType);
+      payload.append('ticketPrice', formData.ticketPrice.toString());
+      payload.append('maxAttendees', formData.maxAttendees.toString());
+      payload.append('visibility', formData.visibility);
+
+      // Location & tags as JSON strings for backend parsing
+      payload.append('location', JSON.stringify(formData.location));
+      payload.append('tags', JSON.stringify(formData.tags || []));
+
+      // Images   – first image ➜ bannerImage, rest ➜ eventImages[]
+      if (selectedImages.length > 0) {
+        const bannerUri = selectedImages[0];
+        const bannerName = bannerUri.split('/').pop() || `banner_${Date.now()}.jpg`;
+        payload.append('bannerImage', {
+          uri: bannerUri,
+          name: bannerName,
+          type: 'image/jpeg',
+        } as any);
+
+        selectedImages.slice(1).forEach((uri, idx) => {
+          const name = uri.split('/').pop() || `image_${idx}_${Date.now()}.jpg`;
+          payload.append('eventImages', {
+            uri,
+            name,
+            type: 'image/jpeg',
+          } as any);
+        });
+      }
+
+      console.log('[CreateEvent] Submitting FormData with fields:', Array.from(payload.keys()));
 
       const response = await authenticatedFetchWithRefresh(ENDPOINTS.CREATE_EVENT, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(eventData),
+        body: payload,
       });
 
       if (!response.ok) {
@@ -371,7 +428,7 @@ export default function CreateEventScreen() {
         <Text style={styles.label}>Event Date & Time *</Text>
         <TouchableOpacity
           style={[styles.input, styles.dateInput, errors.eventDate && styles.inputError]}
-          onPress={() => setShowDatePicker(true)}
+          onPress={showDatePickerHandler}
         >
           <Text style={styles.dateText}>
             {new Date(formData.eventDate).toLocaleString()}
@@ -381,53 +438,25 @@ export default function CreateEventScreen() {
         {errors.eventDate && <Text style={styles.errorText}>{errors.eventDate}</Text>}
       </View>
 
-      <View style={styles.switchRow}>
-        <Text style={styles.label}>Has end time?</Text>
-        <Switch
-          value={hasEndTime}
-          onValueChange={(value) => {
-            setHasEndTime(value);
-            if (!value) {
-              updateFormData({ endDate: '' });
-            }
-          }}
-          trackColor={{ false: COLORS.gray, true: COLORS.primary }}
-          thumbColor={COLORS.white}
-        />
-      </View>
-
-      {hasEndTime && (
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>End Date & Time</Text>
-          <TouchableOpacity
-            style={[styles.input, styles.dateInput]}
-            onPress={() => setShowEndDatePicker(true)}
-          >
-            <Text style={styles.dateText}>
-              {formData.endDate ? new Date(formData.endDate).toLocaleString() : 'Select end time'}
-            </Text>
-            <MaterialIcons name="schedule" size={20} color={COLORS.gray} />
-          </TouchableOpacity>
-        </View>
-      )}
-
+      {/* Date Picker - Cross Platform */}
       {showDatePicker && (
         <DateTimePicker
-          value={new Date(formData.eventDate)}
-          mode="datetime"
+          value={tempDate}
+          mode={Platform.OS === 'ios' ? 'datetime' : 'date'}
           display="default"
           onChange={handleDateChange}
           minimumDate={new Date()}
         />
       )}
 
-      {showEndDatePicker && (
+      {/* Time Picker - Android Only */}
+      {showTimePicker && Platform.OS === 'android' && (
         <DateTimePicker
-          value={formData.endDate ? new Date(formData.endDate) : new Date(formData.eventDate)}
-          mode="datetime"
+          value={tempDate}
+          mode="time"
           display="default"
-          onChange={handleEndDateChange}
-          minimumDate={new Date(formData.eventDate)}
+          onChange={handleTimeChange}
+          is24Hour={true}
         />
       )}
     </View>
@@ -511,9 +540,15 @@ export default function CreateEventScreen() {
               key={visibility}
               style={[
                 styles.visibilityOption,
-                formData.visibility === visibility && { backgroundColor: COLORS.primary }
+                formData.visibility === visibility && { backgroundColor: COLORS.primary },
+                visibility === 'invite-only' && styles.disabledVisibilityOption
               ]}
-              onPress={() => updateFormData({ visibility })}
+              onPress={() => {
+                if (visibility !== 'invite-only') {
+                  updateFormData({ visibility });
+                }
+              }}
+              disabled={visibility === 'invite-only'}
             >
               <MaterialIcons 
                 name={
@@ -521,15 +556,26 @@ export default function CreateEventScreen() {
                   visibility === 'private' ? 'lock' : 'mail'
                 } 
                 size={20} 
-                color={formData.visibility === visibility ? COLORS.white : COLORS.gray} 
+                color={
+                  visibility === 'invite-only' 
+                    ? COLORS.gray + '60'
+                    : formData.visibility === visibility 
+                      ? COLORS.white 
+                      : COLORS.gray
+                } 
               />
               <Text
                 style={[
                   styles.visibilityText,
-                  formData.visibility === visibility && { color: COLORS.white }
+                  formData.visibility === visibility && { color: COLORS.white },
+                  visibility === 'invite-only' && { 
+                    color: COLORS.gray + '60',
+                    fontStyle: 'italic'
+                  }
                 ]}
               >
                 {visibility.charAt(0).toUpperCase() + visibility.slice(1).replace('-', ' ')}
+                {visibility === 'invite-only' && ' (Coming Soon)'}
               </Text>
             </TouchableOpacity>
           ))}
@@ -572,6 +618,7 @@ export default function CreateEventScreen() {
   const renderLocationStep = () => (
     <View style={styles.stepContent}>
       <Text style={styles.stepTitle}>Where will it happen?</Text>
+      <Text style={styles.stepSubtitle}>Please provide the venue and city for your event</Text>
 
       <View style={styles.inputGroup}>
         <Text style={styles.label}>Venue Name *</Text>
@@ -579,7 +626,7 @@ export default function CreateEventScreen() {
           style={[styles.input, errors.venue && styles.inputError]}
           value={formData.location.venue}
           onChangeText={(text) => updateLocation({ venue: text })}
-          placeholder="Enter venue name"
+          placeholder="Enter venue name (required)"
           placeholderTextColor={COLORS.gray}
         />
         {errors.venue && <Text style={styles.errorText}>{errors.venue}</Text>}
@@ -591,7 +638,7 @@ export default function CreateEventScreen() {
           style={styles.input}
           value={formData.location.address}
           onChangeText={(text) => updateLocation({ address: text })}
-          placeholder="Street address"
+          placeholder="Street address (optional)"
           placeholderTextColor={COLORS.gray}
         />
       </View>
@@ -602,7 +649,7 @@ export default function CreateEventScreen() {
           style={[styles.input, errors.city && styles.inputError]}
           value={formData.location.city}
           onChangeText={(text) => updateLocation({ city: text })}
-          placeholder="City"
+          placeholder="Enter city name (required)"
           placeholderTextColor={COLORS.gray}
         />
         {errors.city && <Text style={styles.errorText}>{errors.city}</Text>}
@@ -614,7 +661,7 @@ export default function CreateEventScreen() {
           style={styles.input}
           value={formData.location.country}
           onChangeText={(text) => updateLocation({ country: text })}
-          placeholder="Country"
+          placeholder="Country (optional)"
           placeholderTextColor={COLORS.gray}
         />
       </View>
@@ -680,14 +727,6 @@ export default function CreateEventScreen() {
             {new Date(formData.eventDate).toLocaleString()}
           </Text>
         </View>
-        {formData.endDate && (
-          <View style={styles.reviewItem}>
-            <Text style={styles.reviewLabel}>End Date:</Text>
-            <Text style={styles.reviewValue}>
-              {new Date(formData.endDate).toLocaleString()}
-            </Text>
-          </View>
-        )}
       </View>
 
       <View style={styles.reviewSection}>
@@ -960,6 +999,10 @@ const styles = StyleSheet.create({
   visibilityText: {
     fontSize: 16,
     color: COLORS.black,
+  },
+  disabledVisibilityOption: {
+    opacity: 0.6,
+    backgroundColor: COLORS.background,
   },
   tagInputContainer: {
     flexDirection: 'row',

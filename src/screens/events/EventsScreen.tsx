@@ -156,12 +156,27 @@ export default function EventsScreen() {
         ? `${ENDPOINTS.SEARCH_EVENTS}?${queryParams.toString()}`
         : `${ENDPOINTS.GET_PUBLIC_EVENTS}?${queryParams.toString()}`;
 
-      // Use regular fetch for public events (no authentication required)
+      // Prepare headers - include auth if available, but don't require it
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      try {
+        // Try to add authentication headers if user is logged in
+        const token = await AsyncStorage.getItem('userToken');
+        if (token) {
+          headers['Authorization'] = token;
+          console.log('[EventsScreen] Using authenticated request for private event visibility');
+        } else {
+          console.log('[EventsScreen] Using anonymous request - only public events will be visible');
+        }
+      } catch (authError) {
+        console.log('[EventsScreen] Could not get auth token, proceeding anonymously:', authError);
+      }
+
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
       });
 
       if (!response.ok) {
@@ -336,7 +351,25 @@ export default function EventsScreen() {
         ...(filters.eventType && { eventType: filters.eventType }),
       });
 
-      const response = await fetch(`${API_BASE_URL}${EVENTS_ENDPOINT}?${queryParams}`);
+      // Prepare headers - include auth if available, but don't require it
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      try {
+        // Try to add authentication headers if user is logged in
+        const token = await AsyncStorage.getItem('userToken');
+        if (token) {
+          headers['Authorization'] = token;
+        }
+      } catch (authError) {
+        console.log('[EventsScreen] Could not get auth token for load more, proceeding anonymously:', authError);
+      }
+
+      const response = await fetch(`${API_BASE_URL}${EVENTS_ENDPOINT}?${queryParams}`, {
+        method: 'GET',
+        headers,
+      });
       
       if (!response.ok) {
         throw new Error(`Failed to load more events: ${response.status}`);
@@ -734,19 +767,24 @@ const styles = StyleSheet.create({
   },
   quickActions: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
     marginTop: 12,
     paddingHorizontal: 8,
+    gap: 8,
   },
   quickActionButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
     backgroundColor: COLORS.background,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: COLORS.primary,
+    flexGrow: 1,
+    flexBasis: '30%',
     gap: 4,
   },
   quickActionText: {

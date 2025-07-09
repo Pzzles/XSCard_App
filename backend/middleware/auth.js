@@ -74,3 +74,71 @@ exports.authenticateUser = async (req, res, next) => {
         });
     }
 };
+
+// Optional authentication middleware - doesn't fail if no token provided
+exports.optionalAuthentication = async (req, res, next) => {
+    try {
+        const authHeader = req.headers.authorization;
+        
+        // If no auth header, just continue without setting req.user
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            console.log('[Optional Auth] No auth header provided, continuing as anonymous');
+            return next();
+        }
+
+        const token = authHeader.split('Bearer ')[1];
+        
+        // If empty token, continue as anonymous
+        if (!token || token.trim() === '') {
+            console.log('[Optional Auth] Empty token provided, continuing as anonymous');
+            return next();
+        }
+        
+        // Check if token is blacklisted
+        const blacklistDoc = await db.collection('tokenBlacklist').doc(token).get();
+        if (blacklistDoc.exists) {
+            console.log('[Optional Auth] Token is blacklisted, continuing as anonymous');
+            return next();
+        }
+        
+        let decodedToken;
+        
+        try {
+            // Try to verify as ID token first
+            decodedToken = await admin.auth().verifyIdToken(token);
+            console.log('[Optional Auth] ID token verified successfully for uid:', decodedToken.uid);
+        } catch (idTokenError) {
+            // If ID token verification fails, check if it's a custom token
+            try {
+                const jwt = require('jsonwebtoken');
+                const decoded = jwt.decode(token);
+                
+                if (decoded && decoded.uid) {
+                    decodedToken = {
+                        uid: decoded.uid,
+                        email: decoded.claims?.email || decoded.email,
+                    };
+                    console.log('[Optional Auth] Custom token decoded successfully for uid:', decoded.uid);
+                } else {
+                    throw new Error('Invalid custom token format');
+                }
+            } catch (customTokenError) {
+                console.log('[Optional Auth] Token verification failed, continuing as anonymous:', {
+                    idTokenError: idTokenError.message,
+                    customTokenError: customTokenError.message
+                });
+                return next();
+            }
+        }
+        
+        // Attach user info to request if token was valid
+        req.user = decodedToken;
+        req.token = token;
+        console.log('[Optional Auth] User authenticated successfully - uid:', decodedToken.uid, 'email:', decodedToken.email);
+        next();
+    } catch (error) {
+        console.error('[Optional Auth] Unexpected error, continuing as anonymous:', error);
+        // Don't fail - just continue without authentication
+        next();
+    }
+};

@@ -377,7 +377,7 @@ class EventBroadcastService {
     static async filterUsersByPreferences(userIds, userPreferences, eventData) {
         const eligibleUsers = [];
 
-        console.log(`[EventBroadcast] 🔍 Filtering for "${eventData.title}" (${eventData.category})`);
+        console.log(`[EventBroadcast] 🔍 Filtering for "${eventData.title}" (${eventData.category}, visibility: ${eventData.visibility})`);
 
         for (const userId of userIds) {
             const userPref = userPreferences.get(userId);
@@ -390,6 +390,36 @@ class EventBroadcastService {
             
             console.log(`[EventBroadcast] 🧪 User ${userId}: ${subscription} plan`);
 
+            // ✅ FIRST: Check event visibility permissions
+            if (eventData.visibility === 'private') {
+                // For private events, only broadcast to:
+                // 1. The organizer
+                // 2. Users who explicitly opted in to receive private event broadcasts
+                if (eventData.organizerId === userId) {
+                    console.log(`[EventBroadcast] ✅ Private event - user is the organizer`);
+                } else if (eventPreferences.receivePrivateEventBroadcasts) {
+                    console.log(`[EventBroadcast] ✅ Private event - user opted in to receive private broadcasts`);
+                } else {
+                    console.log(`[EventBroadcast] ❌ Private event - user has not opted in to receive private broadcasts`);
+                    continue;
+                }
+            }
+
+            if (eventData.visibility === 'invite-only') {
+                // For invite-only events, only broadcast to:
+                // 1. The organizer  
+                // 2. Users in the attendeesList
+                if (eventData.organizerId === userId) {
+                    console.log(`[EventBroadcast] ✅ Invite-only event - user is the organizer`);
+                } else if (eventData.attendeesList?.includes(userId)) {
+                    console.log(`[EventBroadcast] ✅ Invite-only event - user is invited`);
+                } else {
+                    console.log(`[EventBroadcast] ❌ Invite-only event - user is not invited`);
+                    continue;
+                }
+            }
+
+            // ✅ SECOND: Apply standard notification preferences
             // Apply different filtering rules based on subscription level
             if (subscription === 'premium' || subscription === 'enterprise') {
                 console.log(`[EventBroadcast] 🎯 PREMIUM user - applying smart filtering`);
@@ -512,6 +542,7 @@ class EventBroadcastService {
             receiveNewEventBroadcasts: true,
             receiveEventUpdates: true,
             receiveEventReminders: true,
+            receivePrivateEventBroadcasts: false, // Disabled by default - users must opt in
             preferredCategories: [],
             locationRadius: 50,
             preferredLocation: null,

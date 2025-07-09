@@ -80,20 +80,38 @@ exports.createEvent = async (req, res) => {
       }
     }
     
-    // Parse JSON fields that were stringified in FormData
+    // Parse JSON fields that were stringified in FormData (or use plain objects if provided)
     let location = {};
     let tags = [];
-    
-    try {
-      if (req.body.location) {
-        location = JSON.parse(req.body.location);
+
+    // Handle location field
+    if (req.body.location) {
+      if (typeof req.body.location === 'string') {
+        try {
+          location = JSON.parse(req.body.location);
+        } catch (locationErr) {
+          console.warn('Error parsing location JSON string:', locationErr);
+        }
+      } else if (typeof req.body.location === 'object') {
+        location = req.body.location;
       }
-      if (req.body.tags) {
-        tags = JSON.parse(req.body.tags);
+    }
+
+    // Handle tags field
+    if (req.body.tags) {
+      if (typeof req.body.tags === 'string') {
+        try {
+          tags = JSON.parse(req.body.tags);
+        } catch (tagsErr) {
+          console.warn('Error parsing tags JSON string:', tagsErr);
+        }
+      } else if (Array.isArray(req.body.tags)) {
+        tags = req.body.tags;
       }
-    } catch (parseError) {
-      console.warn('Error parsing JSON fields:', parseError);
-      // Use defaults if parsing fails
+    }
+
+    // Fallback defaults if location is still empty
+    if (!location || Object.keys(location).length === 0) {
       location = {
         venue: req.body.venue || '',
         address: req.body.address || '',
@@ -139,6 +157,11 @@ exports.createEvent = async (req, res) => {
     // Validate required fields
     if (!eventData.title || !eventData.description || !eventData.eventDate) {
       return sendError(res, 400, 'Missing required fields: title, description, eventDate');
+    }
+
+    // Validate required location fields
+    if (!eventData.location.venue || !eventData.location.city) {
+      return sendError(res, 400, 'Missing required location fields: venue, city');
     }
 
     // Convert date strings to Firestore Timestamps with validation
@@ -263,6 +286,35 @@ exports.getAllEvents = async (req, res) => {
       organizerId 
     } = req.query;
 
+    const userId = req.user?.uid; // Optional - user might not be authenticated
+    console.log('[getAllEvents] Request from user:', userId || 'anonymous');
+
+    // Get user preferences if authenticated
+    let userPreferences = null;
+    if (userId) {
+      try {
+        console.log('[getAllEvents] Looking up user preferences for userId:', userId);
+        const userDoc = await db.collection('users').doc(userId).get();
+        if (userDoc.exists) {
+          const userData = userDoc.data();
+          userPreferences = userData.eventPreferences || {};
+          console.log('[getAllEvents] User preferences loaded:', {
+            receivePrivateEventBroadcasts: userPreferences.receivePrivateEventBroadcasts || false,
+            userEmail: userData.email || 'unknown',
+            userId: userId
+          });
+        } else {
+          console.log('[getAllEvents] User document not found for userId:', userId);
+        }
+      } catch (prefError) {
+        console.warn('[getAllEvents] Failed to load user preferences:', prefError.message);
+        // Continue without preferences
+      }
+    } else {
+      console.log('[getAllEvents] No userId provided, continuing as anonymous');
+    }
+
+    // IMPORTANT: No visibility filtering in the Firestore query to avoid index requirement
     let query = db.collection('events')
       .where('status', '==', 'published')
       .orderBy('eventDate', 'asc');
@@ -289,47 +341,101 @@ exports.getAllEvents = async (req, res) => {
       query = query.where('eventDate', '<=', admin.firestore.Timestamp.fromDate(new Date(endDate)));
     }
 
-    // Apply pagination
-    const pageSize = Math.min(parseInt(limit), 50); // Max 50 events per page
-    const offset = (parseInt(page) - 1) * pageSize;
+    // Get more results to account for client-side visibility filtering
+    const pageSize = Math.min(parseInt(limit), 50);
+    const adjustedLimit = pageSize * 3; // Get extra to account for visibility filtering
     
-    if (offset > 0) {
-      const offsetSnapshot = await query.limit(offset).get();
-      if (!offsetSnapshot.empty) {
-        const lastDoc = offsetSnapshot.docs[offsetSnapshot.docs.length - 1];
-        query = query.startAfter(lastDoc);
-      }
-    }
-
-    const snapshot = await query.limit(pageSize).get();
+    const snapshot = await query.limit(adjustedLimit).get();
     
-    const events = [];
+    console.log('[getAllEvents] Raw query returned', snapshot.size, 'events');
+    
+    // Filter by visibility client-side with enhanced logic
+    const allEvents = [];
     snapshot.forEach(doc => {
       const eventData = doc.data();
-      events.push({
-        ...eventData,
-        // Send both formatted (for display) and ISO (for parsing) dates
-        eventDate: formatDate(eventData.eventDate),
-        eventDateISO: convertToISOString(eventData.eventDate),
-        endDate: eventData.endDate ? formatDate(eventData.endDate) : null,
-        endDateISO: eventData.endDate ? convertToISOString(eventData.endDate) : null,
-        createdAt: formatDate(eventData.createdAt)
-      });
+      let shouldInclude = false;
+      
+      // Check visibility rules
+      if (eventData.visibility === 'public') {
+        // Public events: visible to everyone
+        shouldInclude = true;
+        console.log('[getAllEvents] Including public event:', eventData.title);
+      } else if (eventData.visibility === 'private') {
+        // Private events: visible to organizer or users who opted in
+        if (userId && eventData.organizerId === userId) {
+          shouldInclude = true;
+          console.log('[getAllEvents] Including private event for organizer:', eventData.title, 'organizerId:', eventData.organizerId, 'userId:', userId);
+        } else if (userId && userPreferences?.receivePrivateEventBroadcasts) {
+          shouldInclude = true;
+          console.log('[getAllEvents] Including private event for opted-in user:', eventData.title, 'userId:', userId);
+        } else {
+          console.log('[getAllEvents] Filtering out private event:', eventData.title, 'User not authorized. userId:', userId, 'organizerId:', eventData.organizerId, 'optedIn:', userPreferences?.receivePrivateEventBroadcasts);
+        }
+      } else if (eventData.visibility === 'invite-only') {
+        // Invite-only events: visible to organizer or invited users
+        if (userId && eventData.organizerId === userId) {
+          shouldInclude = true;
+          console.log('[getAllEvents] Including invite-only event for organizer:', eventData.title);
+        } else if (userId && eventData.attendeesList?.includes(userId)) {
+          shouldInclude = true;
+          console.log('[getAllEvents] Including invite-only event for invited user:', eventData.title);
+        } else {
+          console.log('[getAllEvents] Filtering out invite-only event:', eventData.title, 'User not invited');
+        }
+      }
+      
+      if (shouldInclude) {
+        allEvents.push({
+          ...eventData,
+          // Send both formatted (for display) and ISO (for parsing) dates
+          eventDate: formatDate(eventData.eventDate),
+          eventDateISO: convertToISOString(eventData.eventDate),
+          endDate: eventData.endDate ? formatDate(eventData.endDate) : null,
+          endDateISO: eventData.endDate ? convertToISOString(eventData.endDate) : null,
+          createdAt: formatDate(eventData.createdAt)
+        });
+      }
     });
 
-    // Get total count for pagination
+    console.log('[getAllEvents] After visibility filtering:', allEvents.length, 'events visible to user');
+
+    // Apply pagination after filtering
+    const offset = (parseInt(page) - 1) * pageSize;
+    const paginatedEvents = allEvents.slice(offset, offset + pageSize);
+
+    // Get total count for pagination - NO visibility filtering in the query
     const totalSnapshot = await db.collection('events')
       .where('status', '==', 'published')
       .get();
+    
+    let totalVisibleEvents = 0;
+    totalSnapshot.forEach(doc => {
+      const eventData = doc.data();
+      
+      // Apply same visibility logic for counting
+      if (eventData.visibility === 'public') {
+        totalVisibleEvents++;
+      } else if (eventData.visibility === 'private') {
+        if (userId && (eventData.organizerId === userId || userPreferences?.receivePrivateEventBroadcasts)) {
+          totalVisibleEvents++;
+        }
+      } else if (eventData.visibility === 'invite-only') {
+        if (userId && (eventData.organizerId === userId || eventData.attendeesList?.includes(userId))) {
+          totalVisibleEvents++;
+        }
+      }
+    });
+
+    console.log('[getAllEvents] Total visible events for user:', totalVisibleEvents);
 
     res.status(200).json({
       success: true,
       data: {
-        events,
+        events: paginatedEvents,
         pagination: {
           currentPage: parseInt(page),
-          totalPages: Math.ceil(totalSnapshot.size / pageSize),
-          totalEvents: totalSnapshot.size,
+          totalPages: Math.ceil(totalVisibleEvents / pageSize),
+          totalEvents: totalVisibleEvents,
           eventsPerPage: pageSize
         }
       }
@@ -633,44 +739,108 @@ exports.searchEvents = async (req, res) => {
       return sendError(res, 400, 'Search query must be at least 2 characters');
     }
 
-    // Basic text search (Firestore limitation - would be better with Algolia)
+    const userId = req.user?.uid; // Optional - user might not be authenticated
+    console.log('[searchEvents] Request from user:', userId || 'anonymous');
+
+    // Get user preferences if authenticated
+    let userPreferences = null;
+    if (userId) {
+      try {
+        console.log('[searchEvents] Looking up user preferences for userId:', userId);
+        const userDoc = await db.collection('users').doc(userId).get();
+        if (userDoc.exists) {
+          const userData = userDoc.data();
+          userPreferences = userData.eventPreferences || {};
+          console.log('[searchEvents] User preferences loaded:', {
+            receivePrivateEventBroadcasts: userPreferences.receivePrivateEventBroadcasts || false,
+            userEmail: userData.email || 'unknown',
+            userId: userId
+          });
+        } else {
+          console.log('[searchEvents] User document not found for userId:', userId);
+        }
+      } catch (prefError) {
+        console.warn('[searchEvents] Failed to load user preferences:', prefError.message);
+        // Continue without preferences
+      }
+    } else {
+      console.log('[searchEvents] No userId provided, continuing as anonymous');
+    }
+
+    // IMPORTANT: No visibility filtering in the Firestore query to avoid index requirement
     let query = db.collection('events')
       .where('status', '==', 'published')
       .orderBy('eventDate', 'asc')
-      .limit(parseInt(limit));
+      .limit(parseInt(limit) * 3); // Get extra to account for visibility filtering
 
     const snapshot = await query.get();
     
-    // Filter results client-side for text search
+    console.log('[searchEvents] Raw query returned', snapshot.size, 'events');
+    
+    // Filter results client-side for text search and visibility
     const searchTerm = q.toLowerCase();
     const events = [];
     
     snapshot.forEach(doc => {
       const eventData = doc.data();
-      const searchableText = `${eventData.title} ${eventData.description} ${eventData.tags?.join(' ') || ''}`.toLowerCase();
       
-      if (searchableText.includes(searchTerm)) {
-        // Apply additional filters
-        if (category && eventData.category !== category) return;
-        if (location && !eventData.location?.city?.toLowerCase().includes(location.toLowerCase())) return;
+      // Check visibility rules first
+      let shouldInclude = false;
+      if (eventData.visibility === 'public') {
+        // Public events: visible to everyone
+        shouldInclude = true;
+      } else if (eventData.visibility === 'private') {
+        // Private events: visible to organizer or users who opted in
+        if (userId && eventData.organizerId === userId) {
+          shouldInclude = true;
+          console.log('[searchEvents] Including private event for organizer:', eventData.title, 'organizerId:', eventData.organizerId, 'userId:', userId);
+        } else if (userId && userPreferences?.receivePrivateEventBroadcasts) {
+          shouldInclude = true;
+          console.log('[searchEvents] Including private event for opted-in user:', eventData.title, 'userId:', userId);
+        } else {
+          console.log('[searchEvents] Filtering out private event:', eventData.title, 'User not authorized. userId:', userId, 'organizerId:', eventData.organizerId, 'optedIn:', userPreferences?.receivePrivateEventBroadcasts);
+        }
+      } else if (eventData.visibility === 'invite-only') {
+        // Invite-only events: visible to organizer or invited users
+        if (userId && eventData.organizerId === userId) {
+          shouldInclude = true;
+        } else if (userId && eventData.attendeesList?.includes(userId)) {
+          shouldInclude = true;
+        }
+      }
+      
+      // If event is visible, check if it matches search criteria
+      if (shouldInclude) {
+        const searchableText = `${eventData.title} ${eventData.description} ${eventData.tags?.join(' ') || ''}`.toLowerCase();
         
-        events.push({
-          ...eventData,
-          // Send both formatted (for display) and ISO (for parsing) dates
-          eventDate: formatDate(eventData.eventDate),
-          eventDateISO: convertToISOString(eventData.eventDate),
-          endDate: eventData.endDate ? formatDate(eventData.endDate) : null,
-          endDateISO: eventData.endDate ? convertToISOString(eventData.endDate) : null
-        });
+        if (searchableText.includes(searchTerm)) {
+          // Apply additional filters
+          if (category && eventData.category !== category) return;
+          if (location && !eventData.location?.city?.toLowerCase().includes(location.toLowerCase())) return;
+          
+          events.push({
+            ...eventData,
+            // Send both formatted (for display) and ISO (for parsing) dates
+            eventDate: formatDate(eventData.eventDate),
+            eventDateISO: convertToISOString(eventData.eventDate),
+            endDate: eventData.endDate ? formatDate(eventData.endDate) : null,
+            endDateISO: eventData.endDate ? convertToISOString(eventData.endDate) : null
+          });
+        }
       }
     });
+
+    // Limit results to requested amount
+    const limitedEvents = events.slice(0, parseInt(limit));
+
+    console.log('[searchEvents] After filtering, found', limitedEvents.length, 'events matching search for user');
 
     res.status(200).json({
       success: true,
       data: {
-        events,
+        events: limitedEvents,
         searchTerm: q,
-        resultsCount: events.length
+        resultsCount: limitedEvents.length
       }
     });
 

@@ -26,6 +26,7 @@ const DEFAULT_PREFERENCES: EventPreferences = {
   receiveNewEventBroadcasts: true,
   receiveEventUpdates: true,
   receiveEventReminders: true,
+  receivePrivateEventBroadcasts: false,
   preferredCategories: [],
   locationRadius: 50,
   preferredLocation: undefined,
@@ -156,6 +157,48 @@ export default function EventPreferencesScreen() {
     }
   };
 
+  // Handle private event broadcast toggle
+  const handlePrivateEventToggle = async (enabled: boolean) => {
+    if (enabled) {
+      // Show warning when enabling private event broadcasts
+      Alert.alert(
+        'Private Event Notifications',
+        'You will receive notifications about private events that you may not be able to register for. These events are only accessible to invited users or organizers.\n\nContinue?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Enable', 
+            onPress: () => updatePrivateEventPreference(true),
+            style: 'default'
+          }
+        ]
+      );
+    } else {
+      // Disable without warning
+      updatePrivateEventPreference(false);
+    }
+  };
+
+  const updatePrivateEventPreference = async (enabled: boolean) => {
+    const updatedPreferences = { ...localPreferences, receivePrivateEventBroadcasts: enabled };
+    setLocalPreferences(updatedPreferences);
+
+    setLoading(true);
+    const success = await updatePreferences({ receivePrivateEventBroadcasts: enabled });
+    setLoading(false);
+
+    if (!success) {
+      setLocalPreferences(localPreferences); // Revert on failure
+      toast.error('Error', 'Failed to update private event notifications. Please try again.');
+    } else {
+      if (enabled) {
+        toast.info('Enabled', 'You will now receive private event notifications.');
+      } else {
+        toast.success('Disabled', 'Private event notifications disabled.');
+      }
+    }
+  };
+
   // Reset to defaults
   const resetToDefaults = () => {
     Alert.alert(
@@ -172,6 +215,7 @@ export default function EventPreferencesScreen() {
               receiveNewEventBroadcasts: true,
               receiveEventUpdates: true,
               receiveEventReminders: true,
+              receivePrivateEventBroadcasts: false,
               preferredCategories: [],
               locationRadius: 50,
               preferredLocation: undefined,
@@ -343,6 +387,24 @@ export default function EventPreferencesScreen() {
               thumbColor={COLORS.white}
             />
           </View>
+
+          <View style={styles.preferenceItem}>
+            <View style={styles.preferenceHeader}>
+              <MaterialIcons name="lock" size={24} color="#FF6B6B" />
+              <View style={styles.preferenceText}>
+                <Text style={styles.preferenceName}>Private Event Notifications</Text>
+                <Text style={styles.preferenceDescription}>
+                  Receive notifications about private events (you may not be able to register)
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={localPreferences.receivePrivateEventBroadcasts || false}
+              onValueChange={(value) => handlePrivateEventToggle(value)}
+              trackColor={{ false: COLORS.background, true: '#FF6B6B' }}
+              thumbColor={COLORS.white}
+            />
+          </View>
         </View>
 
         {/* Preferred Categories */}
@@ -398,7 +460,7 @@ export default function EventPreferencesScreen() {
                   !localPreferences.eventTypePreference && { color: COLORS.white }
                 ]}
               >
-                Both Free & Paid
+                All
               </Text>
             </TouchableOpacity>
             
@@ -415,7 +477,7 @@ export default function EventPreferencesScreen() {
                   localPreferences.eventTypePreference === 'free' && { color: COLORS.white }
                 ]}
               >
-                Free Events Only
+                Free
               </Text>
             </TouchableOpacity>
             
@@ -432,7 +494,7 @@ export default function EventPreferencesScreen() {
                   localPreferences.eventTypePreference === 'paid' && { color: COLORS.white }
                 ]}
               >
-                Paid Events Only
+                Paid
               </Text>
             </TouchableOpacity>
           </View>
@@ -450,7 +512,7 @@ export default function EventPreferencesScreen() {
             ) : (
               <>
                 <MaterialIcons name="save" size={20} color={COLORS.white} />
-                <Text style={styles.saveButtonText}>Save Preferences</Text>
+                <Text style={styles.saveButtonText}>Save</Text>
               </>
             )}
           </TouchableOpacity>
@@ -563,9 +625,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   categoryChip: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 16,
+    borderRadius: 30, // slimmer pill
     borderWidth: 1,
     borderColor: COLORS.gray,
     marginBottom: 8,
@@ -669,9 +731,9 @@ const styles = StyleSheet.create({
   },
   eventTypeOption: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 30, // slimmer pill
     borderWidth: 1,
     borderColor: COLORS.gray,
     alignItems: 'center',
@@ -683,17 +745,18 @@ const styles = StyleSheet.create({
   },
   saveContainer: {
     alignItems: 'center',
-    marginTop: 40, // More space before save button
-    paddingTop: 24, // Add some padding at the top
+    marginTop: 24,
+    marginBottom: 40, // lift from screen bottom
+    paddingTop: 24,
     borderTopWidth: 1,
-    borderTopColor: COLORS.background, // Add a subtle separator
+    borderTopColor: COLORS.background,
   },
   saveButton: {
-    paddingHorizontal: 32, // Increased back for better proportions
-    paddingVertical: 16, // Taller button
-    borderRadius: 12, // More rounded corners
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 40, // pill shape
     backgroundColor: COLORS.primary,
-    minWidth: 200, // Increased minimum width
+    minWidth: 180,
     alignItems: 'center',
   },
   saveButtonText: {

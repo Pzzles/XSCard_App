@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,10 @@ import {
   Share,
   Dimensions,
   ActivityIndicator,
+  Platform,
+  StatusBar,
+  Image,
+  Modal,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
@@ -16,6 +20,9 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { getMyTicketForEvent, generateQRCodeForTicket } from '../../services/eventService';
 import { Event, EventTicket, QRCodeData } from '../../types/events';
+import { COLORS } from '../../constants/colors';
+import * as ScreenCapture from 'expo-screen-capture';
+import { BlurView } from 'expo-blur';
 
 interface EventTicketScreenProps {
   route: {
@@ -40,10 +47,41 @@ export const EventTicketScreen: React.FC = () => {
   const [qrVerificationToken, setQrVerificationToken] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [generatingQR, setGeneratingQR] = useState(false);
+  const [valueModalVisible, setValueModalVisible] = useState(false);
   const [brightness, setBrightness] = useState(1.0);
+  // QR reveal control (iOS only). On Android it is shown by default.
+  const [showQR, setShowQR] = useState(Platform.OS !== 'ios');
+  const revealTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [isCaptured, setIsCaptured] = useState(false);
 
   useEffect(() => {
     loadTicketData();
+    // Prevent system screenshots on Android; iOS will still allow but we’ll detect
+    ScreenCapture.preventScreenCaptureAsync().catch(err => console.warn('ScreenCapture prevent failed', err));
+
+    // Listener for screenshots (fires after a snapshot is taken)
+    const subScreenshot = ScreenCapture.addScreenshotListener(() => {
+      setIsCaptured(true);
+      setShowQR(false); // immediately hide QR
+      // Hide overlay after a short delay
+      setTimeout(() => setIsCaptured(false), 3000);
+    });
+
+    // Listener for active screen recording – iOS doesn’t expose blocking; we detect via polling API if available
+    // @ts-ignore - addScreenCaptureListener exists at runtime on Android; ignore TS if typings missing
+    const subRecording = (ScreenCapture as any).addScreenCaptureListener
+      ? (ScreenCapture as any).addScreenCaptureListener(({ isCaptured }: { isCaptured: boolean }) => {
+          setIsCaptured(isCaptured);
+          if (isCaptured) setShowQR(false);
+        })
+      : { remove: () => {} };
+
+    return () => {
+      ScreenCapture.allowScreenCaptureAsync().catch(() => {});
+      subScreenshot.remove();
+      subRecording && subRecording.remove && subRecording.remove();
+      if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+    };
   }, []);
 
   const loadTicketData = async () => {
@@ -222,10 +260,20 @@ export const EventTicketScreen: React.FC = () => {
     }
   };
 
+  const revealQR = () => {
+    setShowQR(true);
+    // clear any existing timer
+    if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+    // auto hide after 5 seconds for iOS only
+    if (Platform.OS === 'ios') {
+      revealTimerRef.current = setTimeout(() => setShowQR(false), 5000);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color={COLORS.primary} />
         <Text style={styles.loadingText}>Loading ticket...</Text>
       </View>
     );
@@ -250,156 +298,197 @@ export const EventTicketScreen: React.FC = () => {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <MaterialIcons name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Event Ticket</Text>
-        <TouchableOpacity onPress={shareTicket}>
-          <MaterialIcons name="share" size={24} color="#007AFF" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Ticket Card */}
-      <View style={styles.ticketCard}>
-        {/* Event Info */}
-        <View style={styles.eventInfo}>
-          <Text style={styles.eventTitle}>{event.title}</Text>
-          <View style={styles.eventDetails}>
-            <View style={styles.detailRow}>
-              <MaterialIcons name="event" size={20} color="#666" />
-              <Text style={styles.detailText}>{formatDate(event.eventDate, event.eventDateISO)}</Text>
-            </View>
-            <View style={styles.detailRow}>
-              <MaterialIcons name="access-time" size={20} color="#666" />
-              <Text style={styles.detailText}>{formatTime(event.eventDate, event.eventDateISO)}</Text>
-            </View>
-            <View style={styles.detailRow}>
-              <MaterialIcons name="location-on" size={20} color="#666" />
-              <Text style={styles.detailText}>
-                {event.location.venue}, {event.location.city}
-              </Text>
-            </View>
-          </View>
+    <View style={styles.container}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <MaterialIcons name="arrow-back" size={24} color="#333" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Event Ticket</Text>
+          <TouchableOpacity onPress={() => setValueModalVisible(true)}>
+            <MaterialIcons name="download" size={24} color={COLORS.primary} />
+          </TouchableOpacity>
         </View>
 
-        {/* QR Code Section */}
-        <View style={styles.qrSection}>
-          {qrData ? (
-            <>
-              <Text style={styles.qrTitle}>Your Entry QR Code</Text>
-              <View style={styles.qrContainer}>
-                <QRCode
-                  value={qrData}
-                  size={QR_SIZE}
-                  backgroundColor="white"
-                  color="black"
-                />
+        {/* Ticket Card */}
+        <View style={styles.ticketCard}>
+          {/* Event Info */}
+          <View style={styles.eventInfo}>
+            <View style={styles.eventHeaderRow}>
+              <Text style={styles.eventTitle}>{event.title}</Text>
+              <Image source={require('../../../assets/images/xslogo.png')} style={styles.brandLogo} />
+            </View>
+            <View style={styles.eventDetails}>
+              <View style={styles.detailRow}>
+                <MaterialIcons name="event" size={20} color="#666" />
+                <Text style={styles.detailText}>{formatDate(event.eventDate, event.eventDateISO)}</Text>
               </View>
-              <Text style={styles.qrInstructions}>
-                Show this QR code to the event organizer for check-in
-              </Text>
-              
-              {/* QR Actions */}
-              <View style={styles.qrActions}>
-                <TouchableOpacity 
-                  style={styles.actionButton}
-                  onPress={increaseBrightness}
-                >
-                  <MaterialIcons name="brightness-high" size={20} color="#007AFF" />
-                  <Text style={styles.actionButtonText}>Brighten</Text>
-                </TouchableOpacity>
+              <View style={styles.detailRow}>
+                <MaterialIcons name="access-time" size={20} color="#666" />
+                <Text style={styles.detailText}>{formatTime(event.eventDate, event.eventDateISO)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <MaterialIcons name="location-on" size={20} color="#666" />
+                <Text style={styles.detailText}>
+                  {event.location.venue}, {event.location.city}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* QR Code Section */}
+          <View style={styles.qrSection}>
+            {qrData ? (
+              <>
+                <Text style={styles.qrTitle}>Your Entry QR Code</Text>
+                <View style={styles.qrContainer}>
+                  <QRCode
+                    value={qrData}
+                    size={QR_SIZE}
+                    backgroundColor="white"
+                    color="black"
+                  />
+                  {Platform.OS === 'ios' && !showQR && (
+                    <BlurView intensity={60} tint="dark" style={styles.qrBlurOverlay}>
+                      <TouchableOpacity style={styles.revealButton} onPress={revealQR}>
+                        <MaterialIcons name="visibility" size={28} color={COLORS.white} />
+                        <Text style={styles.revealText}>Show QR</Text>
+                      </TouchableOpacity>
+                    </BlurView>
+                  )}
+                </View>
+                <Text style={styles.qrInstructions}>
+                  Show this QR code to the event organizer for check-in
+                </Text>
                 
+                {/* QR Actions */}
+                <View style={styles.qrActions}>
+                  <TouchableOpacity 
+                    style={styles.actionButton}
+                    onPress={increaseBrightness}
+                  >
+                    <MaterialIcons name="brightness-high" size={20} color={COLORS.primary} />
+                    <Text style={styles.actionButtonText}>Brighten</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={styles.actionButton}
+                    onPress={generateQRCode}
+                    disabled={generatingQR}
+                  >
+                    <MaterialIcons name="refresh" size={20} color={COLORS.primary} />
+                    <Text style={styles.actionButtonText}>Refresh</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <View style={styles.generateQRSection}>
+                <MaterialIcons name="qr-code" size={64} color="#DDD" />
+                <Text style={styles.generateQRTitle}>Generate QR Code</Text>
+                <Text style={styles.generateQRText}>
+                  Create your QR code to enable quick check-in at the event
+                </Text>
                 <TouchableOpacity 
-                  style={styles.actionButton}
+                  style={[styles.generateButton, generatingQR && styles.generateButtonDisabled]}
                   onPress={generateQRCode}
                   disabled={generatingQR}
                 >
-                  <MaterialIcons name="refresh" size={20} color="#007AFF" />
-                  <Text style={styles.actionButtonText}>Refresh</Text>
+                  {generatingQR ? (
+                    <ActivityIndicator size="small" color={COLORS.white} />
+                  ) : (
+                    <MaterialIcons name="qr-code-scanner" size={20} color={COLORS.white} />
+                  )}
+                  <Text style={styles.generateButtonText}>
+                    {generatingQR ? 'Generating...' : 'Generate QR Code'}
+                  </Text>
                 </TouchableOpacity>
               </View>
-            </>
-          ) : (
-            <View style={styles.generateQRSection}>
-              <MaterialIcons name="qr-code" size={64} color="#DDD" />
-              <Text style={styles.generateQRTitle}>Generate QR Code</Text>
-              <Text style={styles.generateQRText}>
-                Create your QR code to enable quick check-in at the event
+            )}
+          </View>
+
+          {/* Ticket Details */}
+          <View style={styles.ticketDetails}>
+            <Text style={styles.sectionTitle}>Ticket Information</Text>
+            
+            <View style={styles.ticketInfoRow}>
+              <Text style={styles.ticketLabel}>Ticket ID:</Text>
+              <Text style={styles.ticketValue}>{ticket.id}</Text>
+            </View>
+            
+            <View style={styles.ticketInfoRow}>
+              <Text style={styles.ticketLabel}>Registration Date:</Text>
+              <Text style={styles.ticketValue}>
+                {new Date(ticket.createdAt).toLocaleDateString()}
               </Text>
-              <TouchableOpacity 
-                style={[styles.generateButton, generatingQR && styles.generateButtonDisabled]}
-                onPress={generateQRCode}
-                disabled={generatingQR}
-              >
-                {generatingQR ? (
-                  <ActivityIndicator size="small" color="white" />
-                ) : (
-                  <MaterialIcons name="qr-code-scanner" size={20} color="white" />
-                )}
-                <Text style={styles.generateButtonText}>
-                  {generatingQR ? 'Generating...' : 'Generate QR Code'}
+            </View>
+            
+            <View style={styles.ticketInfoRow}>
+              <Text style={styles.ticketLabel}>Status:</Text>
+              <View style={[styles.statusBadge, getStatusBadgeStyle(ticket.status)]}>
+                <Text style={[styles.statusText, getStatusTextStyle(ticket.status)]}>
+                  {ticket.status.toUpperCase()}
                 </Text>
-              </TouchableOpacity>
+              </View>
             </View>
-          )}
+
+            {ticket.checkedIn && (
+              <View style={styles.checkedInInfo}>
+                <MaterialIcons name="check-circle" size={20} color="#4CAF50" />
+                <Text style={styles.checkedInText}>
+                  Checked in at {new Date(ticket.checkedInAt!).toLocaleString()}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* XSCard Branding removed; logo now in header row */}
         </View>
 
-        {/* Ticket Details */}
-        <View style={styles.ticketDetails}>
-          <Text style={styles.sectionTitle}>Ticket Information</Text>
-          
-          <View style={styles.ticketInfoRow}>
-            <Text style={styles.ticketLabel}>Ticket ID:</Text>
-            <Text style={styles.ticketValue}>{ticket.id}</Text>
-          </View>
-          
-          <View style={styles.ticketInfoRow}>
-            <Text style={styles.ticketLabel}>Registration Date:</Text>
-            <Text style={styles.ticketValue}>
-              {new Date(ticket.createdAt).toLocaleDateString()}
-            </Text>
-          </View>
-          
-          <View style={styles.ticketInfoRow}>
-            <Text style={styles.ticketLabel}>Status:</Text>
-            <View style={[styles.statusBadge, getStatusBadgeStyle(ticket.status)]}>
-              <Text style={[styles.statusText, getStatusTextStyle(ticket.status)]}>
-                {ticket.status.toUpperCase()}
-              </Text>
-            </View>
-          </View>
-
-          {ticket.checkedIn && (
-            <View style={styles.checkedInInfo}>
-              <MaterialIcons name="check-circle" size={20} color="#4CAF50" />
-              <Text style={styles.checkedInText}>
-                Checked in at {new Date(ticket.checkedInAt!).toLocaleString()}
-              </Text>
-            </View>
-          )}
+        {/* Important Notes */}
+        <View style={styles.notesSection}>
+          <Text style={styles.notesTitle}>Important Notes</Text>
+          <Text style={styles.notesText}>
+            • Keep this QR code safe and don't share it with others
+          </Text>
+          <Text style={styles.notesText}>
+            • You can regenerate the QR code if needed
+          </Text>
+          <Text style={styles.notesText}>
+            • Arrive at the venue 15 minutes before the event starts
+          </Text>
+          <Text style={styles.notesText}>
+            • Contact the organizer if you have any issues
+          </Text>
         </View>
-      </View>
+      </ScrollView>
 
-      {/* Important Notes */}
-      <View style={styles.notesSection}>
-        <Text style={styles.notesTitle}>Important Notes</Text>
-        <Text style={styles.notesText}>
-          • Keep this QR code safe and don't share it with others
-        </Text>
-        <Text style={styles.notesText}>
-          • You can regenerate the QR code if needed
-        </Text>
-        <Text style={styles.notesText}>
-          • Arrive at the venue 15 minutes before the event starts
-        </Text>
-        <Text style={styles.notesText}>
-          • Contact the organizer if you have any issues
-        </Text>
-      </View>
-    </ScrollView>
+      {isCaptured && (
+        <BlurView intensity={70} tint="dark" style={styles.captureOverlay}>
+          <MaterialIcons name="visibility-off" size={48} color={COLORS.white} />
+          <Text style={styles.captureText}>Screen capture detected</Text>
+        </BlurView>
+      )}
+
+      {/* Ticket Value Modal */}
+      <Modal
+        visible={valueModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setValueModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <MaterialIcons name="download" size={36} color={COLORS.primary} />
+            <Text style={styles.modalTitle}>Ticket Value</Text>
+            <Text style={styles.modalText}>This ticket is valued at R3.</Text>
+            <TouchableOpacity style={styles.modalButton} onPress={() => setValueModalVisible(false)}>
+              <Text style={styles.modalButtonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 };
 
@@ -470,7 +559,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   backButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -486,6 +575,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
+    // Add safe-area aware top padding similar to other screens
+    paddingTop: Platform.OS === 'ios' ? 50 : StatusBar.currentHeight ? StatusBar.currentHeight + 16 : 40,
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E5E5',
@@ -511,11 +602,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
+  eventHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
   eventTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 16,
   },
   eventDetails: {
     gap: 12,
@@ -572,10 +668,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#007AFF',
+    borderColor: COLORS.primary,
   },
   actionButtonText: {
-    color: '#007AFF',
+    color: COLORS.primary,
     fontSize: 14,
     fontWeight: '500',
   },
@@ -602,10 +698,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 40, // pill shape
   },
   generateButtonDisabled: {
     backgroundColor: '#B0B0B0',
@@ -709,6 +805,84 @@ const styles = StyleSheet.create({
     color: '#666',
     lineHeight: 20,
     marginBottom: 4,
+  },
+  brandLogo: {
+    width: 64,
+    height: 64,
+    resizeMode: 'contain',
+    marginLeft: 8,
+  },
+  /* Modal styles */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '80%',
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.black,
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  modalText: {
+    fontSize: 16,
+    color: COLORS.gray,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  modalButton: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 40,
+    alignItems: 'center',
+    alignSelf: 'stretch',
+  },
+  modalButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  qrBlurOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  revealButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  revealText: {
+    marginTop: 8,
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  captureOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 200,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  captureText: {
+    marginTop: 12,
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });
 

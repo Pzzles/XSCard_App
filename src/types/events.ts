@@ -67,6 +67,7 @@ export interface EventPreferences {
   receiveNewEventBroadcasts: boolean;
   receiveEventUpdates: boolean;
   receiveEventReminders: boolean;
+  receivePrivateEventBroadcasts?: boolean; // Optional, defaults to false
   preferredCategories: string[];
   locationRadius: number;
   preferredLocation?: {
