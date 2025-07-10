@@ -44,6 +44,11 @@ export interface Event {
   updatedAt: string;
   publishedAt?: string;
   cancelledAt?: string;
+  paymentReference?: string;
+  /** Listing fee actually charged (currency minor-unit e.g. cents) */
+  listingFee?: number;
+  /** Detailed publishing cost returned from backend */
+  publishingCost?: PublishingCost;
 }
 
 export interface EventRegistration {
@@ -173,6 +178,7 @@ export type EventCategory = typeof EVENT_CATEGORIES[number];
 export const EVENT_STATUS = [
   'draft',
   'published',
+  'pending_payment',
   'cancelled'
 ] as const;
 
@@ -419,3 +425,13 @@ export type QRErrorType =
   | 'TICKET_MISMATCH'
   | 'ALREADY_CHECKED_IN'
   | 'VALIDATION_ERROR';
+
+export interface PublishingCost {
+  price: number;
+  /**
+   * null       – normal cash payment
+   * "welcome" – free one-time credit on signup
+   * "monthly" – monthly credit from Premium / Enterprise plans
+   */
+  creditType: 'welcome' | 'monthly' | null;
+}

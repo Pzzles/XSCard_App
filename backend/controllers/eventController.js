@@ -2,6 +2,8 @@ const { db, admin } = require('../firebase.js');
 const { formatDate, convertToISOString } = require('../utils/dateFormatter');
 const { getUserInfo } = require('../utils/userUtils');
 const QRService = require('../services/qrService');
+const CreditService = require('../services/creditService');
+const https = require('https');
 
 // Helper function for error responses (following userController pattern)
 const sendError = (res, status, message, error = null) => {
@@ -83,12 +85,12 @@ exports.createEvent = async (req, res) => {
     // Parse JSON fields that were stringified in FormData (or use plain objects if provided)
     let location = {};
     let tags = [];
-
+    
     // Handle location field
-    if (req.body.location) {
+      if (req.body.location) {
       if (typeof req.body.location === 'string') {
         try {
-          location = JSON.parse(req.body.location);
+        location = JSON.parse(req.body.location);
         } catch (locationErr) {
           console.warn('Error parsing location JSON string:', locationErr);
         }
@@ -98,10 +100,10 @@ exports.createEvent = async (req, res) => {
     }
 
     // Handle tags field
-    if (req.body.tags) {
+      if (req.body.tags) {
       if (typeof req.body.tags === 'string') {
         try {
-          tags = JSON.parse(req.body.tags);
+        tags = JSON.parse(req.body.tags);
         } catch (tagsErr) {
           console.warn('Error parsing tags JSON string:', tagsErr);
         }
@@ -150,6 +152,10 @@ exports.createEvent = async (req, res) => {
         profileImage: organizerInfo.profileImage,
         company: organizerInfo.company
       },
+      // Credit system fields
+      listingFee: null,
+      creditApplied: null,
+      paymentReference: null,
       createdAt: admin.firestore.Timestamp.now(),
       updatedAt: admin.firestore.Timestamp.now()
     };
@@ -195,6 +201,18 @@ exports.createEvent = async (req, res) => {
       }
     }
 
+    // For paid events, calculate publishing cost
+    let costInfo = null;
+    if (eventData.eventType === 'paid') {
+      try {
+        costInfo = await CreditService.calculateListingCost(userId);
+        console.log('Event publishing cost calculated:', costInfo);
+      } catch (error) {
+        console.error('Error calculating listing cost:', error);
+        return sendError(res, 500, 'Error calculating event publishing cost');
+      }
+    }
+
     // Save to database
     await db.collection('events').doc(eventData.id).set(eventData);
 
@@ -205,12 +223,16 @@ exports.createEvent = async (req, res) => {
       endDate: eventData.endDate ? formatDate(eventData.endDate) : null,
       createdAt: formatDate(eventData.createdAt),
       // Include image URLs in response
-      imageCount: eventImagesUrls.length + (bannerImageUrl ? 1 : 0)
+      imageCount: eventImagesUrls.length + (bannerImageUrl ? 1 : 0),
+      // Include cost information for paid events
+      publishingCost: costInfo
     };
 
     console.log('Event created successfully with images:', {
       bannerImage: !!bannerImageUrl,
-      eventImages: eventImagesUrls.length
+      eventImages: eventImagesUrls.length,
+      eventType: eventData.eventType,
+      publishingCost: costInfo
     });
 
     res.status(201).json({
@@ -244,11 +266,139 @@ exports.publishEvent = async (req, res) => {
       return sendError(res, 403, 'Not authorized to publish this event');
     }
 
-    // Update event status
+    // Check if event is already published
+    if (eventData.status === 'published') {
+      return sendError(res, 400, 'Event is already published');
+    }
+
+    // Check if event is pending payment
+    if (eventData.status === 'pending_payment') {
+      return sendError(res, 400, 'Event is pending payment. Please complete payment first.');
+    }
+
+    // Handle paid events
+    if (eventData.eventType === 'paid') {
+      try {
+        const costInfo = await CreditService.calculateListingCost(userId);
+        console.log('Publishing cost calculated:', costInfo);
+
+        if (costInfo.price === 0) {
+          // Free publishing with credit
+          await CreditService.applyCreditToEvent(userId, costInfo.creditType, eventId);
+          
+          // Update event status to published
     await eventRef.update({
       status: 'published',
       publishedAt: admin.firestore.Timestamp.now(),
+            updatedAt: admin.firestore.Timestamp.now(),
+            listingFee: 0,
+            creditApplied: costInfo.creditType
+          });
+
+          // Get updated event data
+          const updatedDoc = await eventRef.get();
+          const updatedEvent = updatedDoc.data();
+
+          return res.status(200).json({
+            success: true,
+            message: `Event published successfully using ${costInfo.creditType} credit`,
+            event: {
+              ...updatedEvent,
+              eventDate: formatDate(updatedEvent.eventDate),
+              publishedAt: formatDate(updatedEvent.publishedAt)
+            },
+            creditInfo: {
+              creditUsed: costInfo.creditType,
+              remainingCredits: costInfo.remainingCredits
+            }
+          });
+        } else {
+          // Requires payment - initialize Paystack transaction
+          const baseUrl = process.env.APP_URL || 'http://localhost:3000';
+          const userEmail = req.user.email;
+
+          const params = JSON.stringify({
+            email: userEmail,
+            amount: costInfo.price, // Amount in cents
+            callback_url: `${baseUrl}/events/payment/callback`,
+            metadata: {
+              eventId: eventId,
+              userId: userId,
+              eventTitle: eventData.title,
+              publishingFee: true
+            }
+          });
+
+          const options = {
+            hostname: 'api.paystack.co',
+            port: 443,
+            path: '/transaction/initialize',
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+              'Content-Type': 'application/json'
+            }
+          };
+
+          const paymentReq = https.request(options, paymentRes => {
+            let data = '';
+
+            paymentRes.on('data', (chunk) => {
+              data += chunk;
+            });
+
+            paymentRes.on('end', async () => {
+              try {
+                const response = JSON.parse(data);
+                
+                if (response.status) {
+                  // Update event status to pending payment
+                  await eventRef.update({
+                    status: 'pending_payment',
+                    paymentReference: response.data.reference,
+                    listingFee: costInfo.price,
       updatedAt: admin.firestore.Timestamp.now()
+                  });
+
+                  res.status(200).json({
+                    success: true,
+                    message: 'Payment required to publish event',
+                    paymentRequired: true,
+                    paymentUrl: response.data.authorization_url,
+                    amount: costInfo.price,
+                    reference: response.data.reference
+                  });
+                } else {
+                  throw new Error(response.message || 'Payment initialization failed');
+                }
+              } catch (error) {
+                console.error('Error processing payment response:', error);
+                sendError(res, 500, 'Error initializing payment');
+              }
+            });
+          });
+
+          paymentReq.on('error', (error) => {
+            console.error('Payment request error:', error);
+            sendError(res, 500, 'Error connecting to payment provider');
+          });
+
+          paymentReq.write(params);
+          paymentReq.end();
+          return;
+        }
+      } catch (error) {
+        console.error('Error handling paid event publishing:', error);
+        return sendError(res, 500, 'Error processing event publishing');
+      }
+    }
+
+    // Free events - publish directly
+    await eventRef.update({
+      status: 'published',
+      publishedAt: admin.firestore.Timestamp.now(),
+      updatedAt: admin.firestore.Timestamp.now(),
+      listingFee: 0
     });
 
     // Get updated event data
@@ -386,14 +536,14 @@ exports.getAllEvents = async (req, res) => {
       
       if (shouldInclude) {
         allEvents.push({
-          ...eventData,
-          // Send both formatted (for display) and ISO (for parsing) dates
-          eventDate: formatDate(eventData.eventDate),
-          eventDateISO: convertToISOString(eventData.eventDate),
-          endDate: eventData.endDate ? formatDate(eventData.endDate) : null,
-          endDateISO: eventData.endDate ? convertToISOString(eventData.endDate) : null,
-          createdAt: formatDate(eventData.createdAt)
-        });
+        ...eventData,
+        // Send both formatted (for display) and ISO (for parsing) dates
+        eventDate: formatDate(eventData.eventDate),
+        eventDateISO: convertToISOString(eventData.eventDate),
+        endDate: eventData.endDate ? formatDate(eventData.endDate) : null,
+        endDateISO: eventData.endDate ? convertToISOString(eventData.endDate) : null,
+        createdAt: formatDate(eventData.createdAt)
+      });
       }
     });
 
@@ -811,21 +961,21 @@ exports.searchEvents = async (req, res) => {
       
       // If event is visible, check if it matches search criteria
       if (shouldInclude) {
-        const searchableText = `${eventData.title} ${eventData.description} ${eventData.tags?.join(' ') || ''}`.toLowerCase();
+      const searchableText = `${eventData.title} ${eventData.description} ${eventData.tags?.join(' ') || ''}`.toLowerCase();
+      
+      if (searchableText.includes(searchTerm)) {
+        // Apply additional filters
+        if (category && eventData.category !== category) return;
+        if (location && !eventData.location?.city?.toLowerCase().includes(location.toLowerCase())) return;
         
-        if (searchableText.includes(searchTerm)) {
-          // Apply additional filters
-          if (category && eventData.category !== category) return;
-          if (location && !eventData.location?.city?.toLowerCase().includes(location.toLowerCase())) return;
-          
-          events.push({
-            ...eventData,
-            // Send both formatted (for display) and ISO (for parsing) dates
-            eventDate: formatDate(eventData.eventDate),
-            eventDateISO: convertToISOString(eventData.eventDate),
-            endDate: eventData.endDate ? formatDate(eventData.endDate) : null,
-            endDateISO: eventData.endDate ? convertToISOString(eventData.endDate) : null
-          });
+        events.push({
+          ...eventData,
+          // Send both formatted (for display) and ISO (for parsing) dates
+          eventDate: formatDate(eventData.eventDate),
+          eventDateISO: convertToISOString(eventData.eventDate),
+          endDate: eventData.endDate ? formatDate(eventData.endDate) : null,
+          endDateISO: eventData.endDate ? convertToISOString(eventData.endDate) : null
+        });
         }
       }
     });
@@ -1506,6 +1656,207 @@ exports.getMyTicketForEvent = async (req, res) => {
   } catch (error) {
     sendError(res, 500, 'Error getting user ticket', error);
   }
+};
+
+// Get user's credit status
+exports.getUserCredits = async (req, res) => {
+  try {
+    const userId = req.user.uid;
+    
+    const creditStatus = await CreditService.getUserCreditStatus(userId);
+    
+    res.status(200).json({
+      success: true,
+      credits: creditStatus
+    });
+    
+  } catch (error) {
+    console.error('Error getting user credits:', error);
+    sendError(res, 500, 'Error retrieving credit information', error);
+  }
+};
+
+// Handle payment callback for event publishing
+exports.handlePaymentCallback = async (req, res) => {
+  try {
+    const { reference, trxref } = req.query;
+    const paymentReference = reference || trxref;
+    
+    if (!paymentReference) {
+      return res.redirect(`${process.env.APP_URL}/events?payment=failed&reason=missing_reference`);
+    }
+    
+    // Verify payment with Paystack
+    const verified = await verifyPaystackTransaction(paymentReference);
+    
+    if (verified.success) {
+      const metadata = verified.data.metadata;
+      
+      if (metadata.publishingFee && metadata.eventId) {
+        // Find and update the event
+        const eventRef = db.collection('events').doc(metadata.eventId);
+        const eventDoc = await eventRef.get();
+        
+        if (eventDoc.exists) {
+          const eventData = eventDoc.data();
+          
+          // Update event to published status
+          await eventRef.update({
+            status: 'published',
+            publishedAt: admin.firestore.Timestamp.now(),
+            updatedAt: admin.firestore.Timestamp.now(),
+            listingFee: verified.data.amount,
+            creditApplied: null,
+            paymentReference: paymentReference
+          });
+          
+          // Record payment
+          await CreditService.recordEventPayment(
+            metadata.eventId,
+            verified.data.amount,
+            paymentReference
+          );
+          
+          console.log(`Event ${metadata.eventId} published after payment verification`);
+          
+          return res.redirect(`${process.env.APP_URL}/events?payment=success&event=${metadata.eventId}`);
+        }
+      }
+    }
+    
+    return res.redirect(`${process.env.APP_URL}/events?payment=failed&reason=verification_failed`);
+    
+  } catch (error) {
+    console.error('Error handling payment callback:', error);
+    return res.redirect(`${process.env.APP_URL}/events?payment=failed&reason=system_error`);
+  }
+};
+
+// Handle payment webhook for event publishing
+exports.handlePaymentWebhook = async (req, res) => {
+  try {
+    const payload = req.body;
+    const signature = req.headers['x-paystack-signature'];
+    
+    // Verify webhook signature
+    const crypto = require('crypto');
+    const hash = crypto.createHmac('sha512', process.env.PAYSTACK_SECRET_KEY)
+      .update(JSON.stringify(payload))
+      .digest('hex');
+    
+    if (hash !== signature) {
+      return res.status(400).json({ error: 'Invalid signature' });
+    }
+    
+    // Handle charge.success event
+    if (payload.event === 'charge.success') {
+      const transaction = payload.data;
+      const metadata = transaction.metadata;
+      
+      if (metadata.publishingFee && metadata.eventId) {
+        const eventRef = db.collection('events').doc(metadata.eventId);
+        const eventDoc = await eventRef.get();
+        
+        if (eventDoc.exists && eventDoc.data().status === 'pending_payment') {
+          // Update event to published status
+          await eventRef.update({
+            status: 'published',
+            publishedAt: admin.firestore.Timestamp.now(),
+            updatedAt: admin.firestore.Timestamp.now(),
+            listingFee: transaction.amount,
+            creditApplied: null,
+            paymentReference: transaction.reference
+          });
+          
+          // Record payment
+          await CreditService.recordEventPayment(
+            metadata.eventId,
+            transaction.amount,
+            transaction.reference
+          );
+          
+          console.log(`Event ${metadata.eventId} published via webhook after payment`);
+        }
+      }
+    }
+    
+    res.status(200).json({ received: true });
+    
+  } catch (error) {
+    console.error('Error handling payment webhook:', error);
+    res.status(500).json({ error: 'Webhook processing failed' });
+  }
+};
+
+// Admin function to reset monthly credits
+exports.resetMonthlyCredits = async (req, res) => {
+  try {
+    const { month } = req.query; // Format: "2024-05"
+    
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+      return sendError(res, 400, 'Invalid month format. Use YYYY-MM format.');
+    }
+    
+    const result = await CreditService.resetMonthlyCredits(month);
+    
+    res.status(200).json({
+      success: true,
+      message: `Monthly credits reset for ${month}`,
+      result
+    });
+    
+  } catch (error) {
+    console.error('Error resetting monthly credits:', error);
+    sendError(res, 500, 'Error resetting monthly credits', error);
+  }
+};
+
+// Helper function to verify Paystack transaction
+const verifyPaystackTransaction = async (reference) => {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: 'api.paystack.co',
+      port: 443,
+      path: `/transaction/verify/${reference}`,
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`
+      }
+    };
+
+    const req = https.request(options, res => {
+      let data = '';
+
+      res.on('data', chunk => {
+        data += chunk;
+      });
+
+      res.on('end', () => {
+        try {
+          const response = JSON.parse(data);
+          if (response.status && response.data.status === 'success') {
+            resolve({
+              success: true,
+              data: response.data
+            });
+          } else {
+            resolve({
+              success: false,
+              message: response.message || 'Transaction verification failed'
+            });
+          }
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+
+    req.on('error', error => {
+      reject(error);
+    });
+
+    req.end();
+  });
 };
 
 module.exports = exports;

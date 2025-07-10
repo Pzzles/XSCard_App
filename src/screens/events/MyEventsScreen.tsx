@@ -255,6 +255,13 @@ export default function MyEventsScreen() {
           setSelectedEvent(null);
           return;
 
+        case 'complete_payment':
+          // Navigate to the payment pending flow so user can finish checkout
+          navigation.navigate('PaymentPending', { eventId });
+          setActionModalVisible(false);
+          setSelectedEvent(null);
+          return;
+
         case 'delete':
           response = await authenticatedFetchWithRefresh(
             ENDPOINTS.DELETE_EVENT.replace(':eventId', eventId),
@@ -511,6 +518,7 @@ const getStatusColor = (status: string) => {
   switch (status) {
     case 'published': return '#4CAF50';
     case 'draft': return '#FF9800';
+    case 'pending_payment': return '#FF9800';
     case 'cancelled': return '#F44336';
     default: return COLORS.gray;
   }
@@ -548,6 +556,13 @@ function EventActionModal({ visible, event, onClose, onAction }: EventActionModa
       icon: 'content-copy', 
       color: '#2196F3',
       available: true // Always available
+    },
+    { 
+      key: 'complete_payment', 
+      label: 'Complete Payment', 
+      icon: 'payment', 
+      color: '#FF9800',
+      available: event.status === 'pending_payment'
     },
     { 
       key: 'delete', 

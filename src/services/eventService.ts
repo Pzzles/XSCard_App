@@ -526,3 +526,58 @@ export const enhanceEventsWithOrganizerInfo = async (events: Event[]): Promise<E
     return events;
   }
 };
+
+// ===================== Publishing & Payment Helpers =====================
+
+/**
+ * Attempt to publish an event.
+ * If a payment is required the backend returns: { paymentRequired: true, paymentUrl, reference, amount }
+ * If no payment is needed it returns success:true and the event object.
+ */
+export const publishEvent = async (eventId: string) => {
+  try {
+    const response = await fetch(`${BASE_URL}/${eventId}/publish`, {
+      method: 'POST',
+      headers: await getAuthHeaders(),
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('[EventService] Error publishing event:', error);
+    throw error;
+  }
+};
+
+/**
+ * Verify a Paystack payment using the reference returned from publishEvent.
+ * Your backend should expose GET /events/payment/verify?reference=<ref> that maps to Paystack verify endpoint.
+ */
+export const verifyPayment = async (reference: string) => {
+  try {
+    const url = `${BASE_URL}/payment/verify?reference=${encodeURIComponent(reference)}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: await getAuthHeaders(),
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('[EventService] Error verifying payment:', error);
+    throw error;
+  }
+};
+
+/**
+ * Convenience wrapper around getEventDetails to poll an event's latest status.
+ */
+export const getEventStatus = async (eventId: string) => {
+  try {
+    const details = await getEventDetails(eventId);
+    return details?.data?.event || null;
+  } catch (error) {
+    console.error('[EventService] Error getting event status:', error);
+    throw error;
+  }
+};

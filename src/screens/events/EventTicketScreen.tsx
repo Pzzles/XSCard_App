@@ -299,56 +299,56 @@ export const EventTicketScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <MaterialIcons name="arrow-back" size={24} color="#333" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Event Ticket</Text>
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <MaterialIcons name="arrow-back" size={24} color="#333" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Event Ticket</Text>
           <TouchableOpacity onPress={() => setValueModalVisible(true)}>
             <MaterialIcons name="download" size={24} color={COLORS.primary} />
-          </TouchableOpacity>
-        </View>
+        </TouchableOpacity>
+      </View>
 
-        {/* Ticket Card */}
-        <View style={styles.ticketCard}>
-          {/* Event Info */}
-          <View style={styles.eventInfo}>
+      {/* Ticket Card */}
+      <View style={styles.ticketCard}>
+        {/* Event Info */}
+        <View style={styles.eventInfo}>
             <View style={styles.eventHeaderRow}>
-              <Text style={styles.eventTitle}>{event.title}</Text>
+          <Text style={styles.eventTitle}>{event.title}</Text>
               <Image source={require('../../../assets/images/xslogo.png')} style={styles.brandLogo} />
             </View>
-            <View style={styles.eventDetails}>
-              <View style={styles.detailRow}>
-                <MaterialIcons name="event" size={20} color="#666" />
-                <Text style={styles.detailText}>{formatDate(event.eventDate, event.eventDateISO)}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <MaterialIcons name="access-time" size={20} color="#666" />
-                <Text style={styles.detailText}>{formatTime(event.eventDate, event.eventDateISO)}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <MaterialIcons name="location-on" size={20} color="#666" />
-                <Text style={styles.detailText}>
-                  {event.location.venue}, {event.location.city}
-                </Text>
-              </View>
+          <View style={styles.eventDetails}>
+            <View style={styles.detailRow}>
+              <MaterialIcons name="event" size={20} color="#666" />
+              <Text style={styles.detailText}>{formatDate(event.eventDate, event.eventDateISO)}</Text>
+            </View>
+            <View style={styles.detailRow}>
+              <MaterialIcons name="access-time" size={20} color="#666" />
+              <Text style={styles.detailText}>{formatTime(event.eventDate, event.eventDateISO)}</Text>
+            </View>
+            <View style={styles.detailRow}>
+              <MaterialIcons name="location-on" size={20} color="#666" />
+              <Text style={styles.detailText}>
+                {event.location.venue}, {event.location.city}
+              </Text>
             </View>
           </View>
+        </View>
 
-          {/* QR Code Section */}
-          <View style={styles.qrSection}>
-            {qrData ? (
-              <>
-                <Text style={styles.qrTitle}>Your Entry QR Code</Text>
-                <View style={styles.qrContainer}>
-                  <QRCode
-                    value={qrData}
-                    size={QR_SIZE}
-                    backgroundColor="white"
-                    color="black"
-                  />
+        {/* QR Code Section */}
+        <View style={styles.qrSection}>
+          {qrData ? (
+            <>
+              <Text style={styles.qrTitle}>Your Entry QR Code</Text>
+              <View style={styles.qrContainer}>
+                <QRCode
+                  value={qrData}
+                  size={QR_SIZE}
+                  backgroundColor="white"
+                  color="black"
+                />
                   {Platform.OS === 'ios' && !showQR && (
                     <BlurView intensity={60} tint="dark" style={styles.qrBlurOverlay}>
                       <TouchableOpacity style={styles.revealButton} onPress={revealQR}>
@@ -357,111 +357,111 @@ export const EventTicketScreen: React.FC = () => {
                       </TouchableOpacity>
                     </BlurView>
                   )}
-                </View>
-                <Text style={styles.qrInstructions}>
-                  Show this QR code to the event organizer for check-in
-                </Text>
-                
-                {/* QR Actions */}
-                <View style={styles.qrActions}>
-                  <TouchableOpacity 
-                    style={styles.actionButton}
-                    onPress={increaseBrightness}
-                  >
-                    <MaterialIcons name="brightness-high" size={20} color={COLORS.primary} />
-                    <Text style={styles.actionButtonText}>Brighten</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity 
-                    style={styles.actionButton}
-                    onPress={generateQRCode}
-                    disabled={generatingQR}
-                  >
-                    <MaterialIcons name="refresh" size={20} color={COLORS.primary} />
-                    <Text style={styles.actionButtonText}>Refresh</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            ) : (
-              <View style={styles.generateQRSection}>
-                <MaterialIcons name="qr-code" size={64} color="#DDD" />
-                <Text style={styles.generateQRTitle}>Generate QR Code</Text>
-                <Text style={styles.generateQRText}>
-                  Create your QR code to enable quick check-in at the event
-                </Text>
+              </View>
+              <Text style={styles.qrInstructions}>
+                Show this QR code to the event organizer for check-in
+              </Text>
+              
+              {/* QR Actions */}
+              <View style={styles.qrActions}>
                 <TouchableOpacity 
-                  style={[styles.generateButton, generatingQR && styles.generateButtonDisabled]}
+                  style={styles.actionButton}
+                  onPress={increaseBrightness}
+                >
+                    <MaterialIcons name="brightness-high" size={20} color={COLORS.primary} />
+                  <Text style={styles.actionButtonText}>Brighten</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={styles.actionButton}
                   onPress={generateQRCode}
                   disabled={generatingQR}
                 >
-                  {generatingQR ? (
-                    <ActivityIndicator size="small" color={COLORS.white} />
-                  ) : (
-                    <MaterialIcons name="qr-code-scanner" size={20} color={COLORS.white} />
-                  )}
-                  <Text style={styles.generateButtonText}>
-                    {generatingQR ? 'Generating...' : 'Generate QR Code'}
-                  </Text>
+                    <MaterialIcons name="refresh" size={20} color={COLORS.primary} />
+                  <Text style={styles.actionButtonText}>Refresh</Text>
                 </TouchableOpacity>
               </View>
-            )}
-          </View>
-
-          {/* Ticket Details */}
-          <View style={styles.ticketDetails}>
-            <Text style={styles.sectionTitle}>Ticket Information</Text>
-            
-            <View style={styles.ticketInfoRow}>
-              <Text style={styles.ticketLabel}>Ticket ID:</Text>
-              <Text style={styles.ticketValue}>{ticket.id}</Text>
+            </>
+          ) : (
+            <View style={styles.generateQRSection}>
+              <MaterialIcons name="qr-code" size={64} color="#DDD" />
+              <Text style={styles.generateQRTitle}>Generate QR Code</Text>
+              <Text style={styles.generateQRText}>
+                Create your QR code to enable quick check-in at the event
+              </Text>
+              <TouchableOpacity 
+                style={[styles.generateButton, generatingQR && styles.generateButtonDisabled]}
+                onPress={generateQRCode}
+                disabled={generatingQR}
+              >
+                {generatingQR ? (
+                    <ActivityIndicator size="small" color={COLORS.white} />
+                ) : (
+                    <MaterialIcons name="qr-code-scanner" size={20} color={COLORS.white} />
+                )}
+                <Text style={styles.generateButtonText}>
+                  {generatingQR ? 'Generating...' : 'Generate QR Code'}
+                </Text>
+              </TouchableOpacity>
             </View>
-            
-            <View style={styles.ticketInfoRow}>
-              <Text style={styles.ticketLabel}>Registration Date:</Text>
-              <Text style={styles.ticketValue}>
-                {new Date(ticket.createdAt).toLocaleDateString()}
+          )}
+        </View>
+
+        {/* Ticket Details */}
+        <View style={styles.ticketDetails}>
+          <Text style={styles.sectionTitle}>Ticket Information</Text>
+          
+          <View style={styles.ticketInfoRow}>
+            <Text style={styles.ticketLabel}>Ticket ID:</Text>
+            <Text style={styles.ticketValue}>{ticket.id}</Text>
+          </View>
+          
+          <View style={styles.ticketInfoRow}>
+            <Text style={styles.ticketLabel}>Registration Date:</Text>
+            <Text style={styles.ticketValue}>
+              {new Date(ticket.createdAt).toLocaleDateString()}
+            </Text>
+          </View>
+          
+          <View style={styles.ticketInfoRow}>
+            <Text style={styles.ticketLabel}>Status:</Text>
+            <View style={[styles.statusBadge, getStatusBadgeStyle(ticket.status)]}>
+              <Text style={[styles.statusText, getStatusTextStyle(ticket.status)]}>
+                {ticket.status.toUpperCase()}
               </Text>
             </View>
-            
-            <View style={styles.ticketInfoRow}>
-              <Text style={styles.ticketLabel}>Status:</Text>
-              <View style={[styles.statusBadge, getStatusBadgeStyle(ticket.status)]}>
-                <Text style={[styles.statusText, getStatusTextStyle(ticket.status)]}>
-                  {ticket.status.toUpperCase()}
-                </Text>
-              </View>
-            </View>
-
-            {ticket.checkedIn && (
-              <View style={styles.checkedInInfo}>
-                <MaterialIcons name="check-circle" size={20} color="#4CAF50" />
-                <Text style={styles.checkedInText}>
-                  Checked in at {new Date(ticket.checkedInAt!).toLocaleString()}
-                </Text>
-              </View>
-            )}
           </View>
 
-          {/* XSCard Branding removed; logo now in header row */}
+          {ticket.checkedIn && (
+            <View style={styles.checkedInInfo}>
+              <MaterialIcons name="check-circle" size={20} color="#4CAF50" />
+              <Text style={styles.checkedInText}>
+                Checked in at {new Date(ticket.checkedInAt!).toLocaleString()}
+              </Text>
+            </View>
+          )}
         </View>
 
-        {/* Important Notes */}
-        <View style={styles.notesSection}>
-          <Text style={styles.notesTitle}>Important Notes</Text>
-          <Text style={styles.notesText}>
-            • Keep this QR code safe and don't share it with others
-          </Text>
-          <Text style={styles.notesText}>
-            • You can regenerate the QR code if needed
-          </Text>
-          <Text style={styles.notesText}>
-            • Arrive at the venue 15 minutes before the event starts
-          </Text>
-          <Text style={styles.notesText}>
-            • Contact the organizer if you have any issues
-          </Text>
-        </View>
-      </ScrollView>
+          {/* XSCard Branding removed; logo now in header row */}
+      </View>
+
+      {/* Important Notes */}
+      <View style={styles.notesSection}>
+        <Text style={styles.notesTitle}>Important Notes</Text>
+        <Text style={styles.notesText}>
+          • Keep this QR code safe and don't share it with others
+        </Text>
+        <Text style={styles.notesText}>
+          • You can regenerate the QR code if needed
+        </Text>
+        <Text style={styles.notesText}>
+          • Arrive at the venue 15 minutes before the event starts
+        </Text>
+        <Text style={styles.notesText}>
+          • Contact the organizer if you have any issues
+        </Text>
+      </View>
+    </ScrollView>
 
       {isCaptured && (
         <BlurView intensity={70} tint="dark" style={styles.captureOverlay}>

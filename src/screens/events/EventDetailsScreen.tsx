@@ -27,7 +27,7 @@ import {
   EventRegistration,
   EventRegistrationResponse,
 } from '../../types/events';
-import { enhanceEventsWithOrganizerInfo } from '../../services/eventService';
+import { enhanceEventsWithOrganizerInfo, publishEvent } from '../../services/eventService';
 
 // Navigation types
 type RootStackParamList = {
@@ -38,6 +38,7 @@ type RootStackParamList = {
   CheckInDashboard: { event: Event };
   CreateEvent: { editEvent?: Event };
   EventAnalytics: { event: Event };
+  PaymentPending: { eventId: string };
 };
 
 type EventDetailsRouteProp = RouteProp<RootStackParamList, 'EventDetails'>;
@@ -58,6 +59,7 @@ export default function EventDetailsScreen() {
   const [isOrganizer, setIsOrganizer] = useState(false);
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [publishing, setPublishing] = useState(false);
 
   // Load event details
   useEffect(() => {
@@ -215,6 +217,52 @@ export default function EventDetailsScreen() {
         },
       ]
     );
+  };
+
+  const handlePublishOrPay = async () => {
+    if (!event) return;
+
+    try {
+      if (event.status === 'pending_payment') {
+        navigation.navigate('PaymentPending', { eventId: event.id });
+        return;
+      }
+
+      setPublishing(true);
+      const result = await publishEvent(event.id);
+
+      if (result.paymentRequired) {
+        // Open external browser for payment similar to UnlockPremium flow
+        Alert.alert(
+          'Payment Required',
+          'You will be redirected to complete payment. After paying come back to this app.',
+          [
+            {
+              text: 'Continue',
+              onPress: async () => {
+                try {
+                  await Linking.openURL(result.paymentUrl);
+                } catch (err) {
+                  console.warn('Could not open payment URL', err);
+                }
+                navigation.navigate('PaymentPending', { eventId: event.id });
+              },
+            },
+          ],
+        );
+      } else if (result.success) {
+        toast.success('Event Published', 'Your event is now live.');
+        // Refresh details
+        loadEventDetails();
+      } else {
+        toast.error('Publish Failed', result.message || 'Unknown error');
+      }
+    } catch (error: any) {
+      console.error('Error publishing event:', error);
+      toast.error('Error', error?.message || 'Failed to publish event');
+    } finally {
+      setPublishing(false);
+    }
   };
 
   // Format date and time with better error handling
@@ -554,6 +602,27 @@ export default function EventDetailsScreen() {
       <View style={styles.actionContainer}>
         {isOrganizer ? (
           <View style={styles.buttonRow}>
+            {/* Publish button if draft or pending payment */}
+            {(event.status === 'draft' || event.status === 'pending_payment') && (
+              <TouchableOpacity
+                style={[styles.actionButton, styles.primaryButton, { flex: 1, marginRight: 8 }]}
+                onPress={handlePublishOrPay}
+                disabled={publishing}
+              >
+                {publishing ? (
+                  <ActivityIndicator size="small" color={COLORS.white} />
+                ) : (
+                  <>
+                    <MaterialIcons name="publish" size={20} color={COLORS.white} />
+                    <Text style={styles.actionButtonText}>
+                      {event.status === 'pending_payment' ? 'Complete Payment' : 'Publish Event'}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {/* Existing organizer buttons */}
             <TouchableOpacity
               style={[styles.actionButton, styles.primaryButton, { flex: 1, marginRight: 8 }]}
               onPress={() => navigation.navigate('QRScanner', { event })}

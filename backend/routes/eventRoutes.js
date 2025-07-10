@@ -29,6 +29,16 @@ router.get('/events/websocket/status', (req, res) => {
   }
 });
 
+// Credit system routes (PROTECTED ROUTES)
+router.get('/user/credits', authenticateUser, eventController.getUserCredits);
+
+// Payment handling routes for event publishing
+router.get('/events/payment/callback', eventController.handlePaymentCallback);
+router.post('/events/payment/webhook', eventController.handlePaymentWebhook);
+
+// Admin routes for credit management
+router.post('/admin/credits/reset', eventController.resetMonthlyCredits);
+
 // Event CRUD operations with WebSocket broadcasting (PROTECTED ROUTES)
 router.post('/events', 
   authenticateUser,

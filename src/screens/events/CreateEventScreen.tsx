@@ -169,10 +169,10 @@ export default function CreateEventScreen() {
       }
     } else {
       // iOS - datetime mode works fine, close picker after selection
-      setShowDatePicker(false);
-      if (selectedDate) {
-        updateFormData({ eventDate: selectedDate.toISOString() });
-      }
+    setShowDatePicker(false);
+    if (selectedDate) {
+      updateFormData({ eventDate: selectedDate.toISOString() });
+    }
     }
   };
 
