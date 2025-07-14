@@ -18,6 +18,14 @@ export type Contact = {
   dateAdded: string;
   image: any; // Consider using a more specific type for images
 };
+
+export interface PaymentPendingParams {
+  eventId: string;
+  paymentUrl?: string;
+  paymentReference?: string;
+  eventTitle?: string;
+}
+
 export type AdminTabParamList = {
   Analytics: undefined;
   Calendar: undefined;
@@ -44,6 +52,8 @@ export type RootStackParamList = {
   CreateEvent: undefined;
   EditEvent: { eventId: string; event?: any };
   MyEvents: undefined;
+  MyEventsScreen: undefined; // Alternative name used in navigation
+  PaymentPending: PaymentPendingParams;
   EventTicket: { event: any; ticket?: any };
   CheckInDashboard: { event: any };
   EventAnalytics: { event: any };

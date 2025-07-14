@@ -41,7 +41,7 @@ export const setGlobalNavigationRef = (navigationRef: any) => {
 const getBaseUrl = () => {
 
   // return 'https://xscard-app.onrender.com';
-     return 'http://192.168.8.8:8383';
+     return 'http://192.168.2.237:8383';
  //return 'http://192.168.68.101:8383';
 
 };
@@ -94,6 +94,7 @@ export const ENDPOINTS = {
     UPDATE_EVENT: '/events/:eventId',
     PUBLISH_EVENT: '/events/:eventId/publish',
     DELETE_EVENT: '/events/:eventId',
+    CHECK_EVENT_PAYMENT_STATUS: '/events/:eventId/payment/status',
     
     // Event Registration
     REGISTER_EVENT: '/events/:eventId/register',

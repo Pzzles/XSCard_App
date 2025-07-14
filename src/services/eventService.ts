@@ -581,3 +581,29 @@ export const getEventStatus = async (eventId: string) => {
     throw error;
   }
 };
+
+// Payment Status Checking (Phase 2)
+export const checkEventPaymentStatus = async (eventId: string) => {
+  try {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${BASE_URL}/${eventId}/payment/status`, {
+      method: 'GET',
+      headers,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to check payment status');
+    }
+
+    return data;
+  } catch (error) {
+    console.error('[EventService] Error checking payment status:', error);
+    throw error;
+  }
+};

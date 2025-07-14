@@ -98,6 +98,7 @@ export default function AppNavigator() {
       <Stack.Screen name="CreateEvent" component={CreateEventScreen} />
       <Stack.Screen name="EditEvent" component={EditEventScreen} />
       <Stack.Screen name="MyEvents" component={MyEventsScreen} />
+      <Stack.Screen name="PaymentPending" component={require('../screens/events/PaymentPendingScreen').default} />
       <Stack.Screen name="EventTicket" component={EventTicketScreen} />
       <Stack.Screen name="QRScanner" component={QRScannerScreen} />
       <Stack.Screen name="CheckInDashboard" component={CheckInDashboard} />

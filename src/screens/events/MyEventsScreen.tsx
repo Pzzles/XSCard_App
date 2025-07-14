@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Switch,
   Modal,
+  Linking,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -20,6 +21,7 @@ import { useEventNotifications } from '../../context/EventNotificationContext';
 import { authenticatedFetchWithRefresh, ENDPOINTS } from '../../utils/api';
 import { useToast } from '../../hooks/useToast';
 import { Event, UserEventsResponse } from '../../types/events';
+import { checkEventPaymentStatus } from '../../services/eventService';
 
 // Helper function to safely parse dates
 const parseEventDate = (dateString: string, isoDateString?: string): Date => {
@@ -245,7 +247,58 @@ export default function MyEventsScreen() {
             ENDPOINTS.PUBLISH_EVENT.replace(':eventId', eventId),
             { method: 'POST' }
           );
-          successMessage = 'Event published successfully';
+          
+          if (response.ok) {
+            const publishData = await response.json();
+            
+            // Check if payment is required
+            if (publishData.requiresPayment && publishData.paymentUrl && publishData.paymentReference) {
+              try {
+                // Open payment URL in browser
+                const supported = await Linking.canOpenURL(publishData.paymentUrl);
+                if (supported) {
+                  await Linking.openURL(publishData.paymentUrl);
+                } else {
+                  console.warn('Cannot open payment URL - unsupported');
+                }
+                
+                // Navigate to payment pending screen with payment info
+                navigation.navigate('PaymentPending', { 
+                  eventId,
+                  paymentUrl: publishData.paymentUrl,
+                  paymentReference: publishData.paymentReference,
+                  amount: publishData.amount,
+                  currency: publishData.currency || 'ZAR',
+                  eventTitle: selectedEvent?.title
+                });
+                setActionModalVisible(false);
+                setSelectedEvent(null);
+                return;
+              } catch (error) {
+                console.error('Error opening payment URL:', error);
+                // Still navigate to payment pending screen even if URL opening fails
+                navigation.navigate('PaymentPending', { 
+                  eventId,
+                  paymentUrl: publishData.paymentUrl,
+                  paymentReference: publishData.paymentReference,
+                  amount: publishData.amount,
+                  currency: publishData.currency || 'ZAR',
+                  eventTitle: selectedEvent?.title
+                });
+                setActionModalVisible(false);
+                setSelectedEvent(null);
+                toast.info('Payment Required', 'Please complete payment in the next screen.');
+                return;
+              }
+            } else {
+              // Event published successfully without payment
+              successMessage = 'Event published successfully';
+            }
+          } else {
+            // Handle server error response
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || `Failed to publish event: ${response.status}`);
+          }
           break;
 
         case 'duplicate':
@@ -256,8 +309,43 @@ export default function MyEventsScreen() {
           return;
 
         case 'complete_payment':
-          // Navigate to the payment pending flow so user can finish checkout
-          navigation.navigate('PaymentPending', { eventId });
+          // Retry publishing the event to create a fresh payment session
+          if (!selectedEvent) {
+            toast.error('Error', 'Event not found. Please try again.');
+            setActionModalVisible(false);
+            return;
+          }
+          
+          try {
+            // Call the publish endpoint to create a new payment session
+            const response = await authenticatedFetchWithRefresh(
+              ENDPOINTS.PUBLISH_EVENT.replace(':eventId', eventId),
+              { method: 'POST' }
+            );
+
+            const data = await response.json();
+
+            if (data.success && data.paymentRequired && data.paymentUrl) {
+              // Fresh payment session created - open payment URL directly!
+              toast.success('Payment Ready', 'Payment page is opening. Complete payment and your event will be published automatically.');
+              
+              // Open payment URL immediately
+              await Linking.openURL(data.paymentUrl);
+              
+              // Refresh events list to show updated status
+              loadMyEvents();
+              
+            } else if (data.success && !data.paymentRequired) {
+              // Event was published without payment (credit used)
+              toast.success('🎉 Event Published!', data.message || 'Event published successfully!');
+              loadMyEvents(); // Refresh the events list
+            } else {
+              toast.error('Error', data.message || 'Unable to create payment session.');
+            }
+          } catch (error) {
+            console.error('Error retrying event publish:', error);
+            toast.error('Error', 'Unable to retry payment. Please try again.');
+          }
           setActionModalVisible(false);
           setSelectedEvent(null);
           return;

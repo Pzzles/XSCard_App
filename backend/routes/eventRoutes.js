@@ -35,6 +35,7 @@ router.get('/user/credits', authenticateUser, eventController.getUserCredits);
 // Payment handling routes for event publishing
 router.get('/events/payment/callback', eventController.handlePaymentCallback);
 router.post('/events/payment/webhook', eventController.handlePaymentWebhook);
+router.get('/events/:eventId/payment/status', authenticateUser, eventController.checkEventPaymentStatus);
 
 // Admin routes for credit management
 router.post('/admin/credits/reset', eventController.resetMonthlyCredits);

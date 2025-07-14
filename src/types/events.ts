@@ -35,7 +35,7 @@ export interface Event {
   attendeesList?: string[];
   organizerId: string;
   organizerInfo: OrganizerInfo;
-  status: 'draft' | 'published' | 'cancelled';
+  status: 'draft' | 'published' | 'cancelled' | 'pending_payment';
   visibility: 'public' | 'private' | 'invite-only';
   images?: string[];
   bannerImage?: string;
