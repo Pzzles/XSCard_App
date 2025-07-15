@@ -141,6 +141,37 @@ export const registerForEvent = async (eventId: string, registrationData: any) =
   }
 };
 
+/**
+ * Check the payment status for an event registration
+ * @param eventId The event ID
+ * @param registrationId The registration ID
+ * @returns Payment status response
+ */
+export const checkRegistrationPaymentStatus = async (eventId: string, registrationId: string) => {
+  try {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${BASE_URL}/${eventId}/registration/${registrationId}/payment/status`, {
+      method: 'GET',
+      headers,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to check registration payment status');
+    }
+
+    return data;
+  } catch (error) {
+    console.error('[EventService] Error checking registration payment status:', error);
+    throw error;
+  }
+};
+
 export const unregisterFromEvent = async (eventId: string) => {
   try {
     const response = await fetch(`${BASE_URL}/${eventId}/unregister`, {
@@ -570,6 +601,31 @@ export const verifyPayment = async (reference: string) => {
 };
 
 /**
+ * Force verify a payment with Paystack, bypassing any cached status.
+ * This is useful for troubleshooting payment issues.
+ */
+export const forceVerifyPayment = async (reference: string) => {
+  try {
+    const headers = await getAuthHeaders();
+    const url = `${BASE_URL}/payment/force-verify?reference=${encodeURIComponent(reference)}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('[EventService] Error force verifying payment:', error);
+    throw error;
+  }
+};
+
+/**
  * Convenience wrapper around getEventDetails to poll an event's latest status.
  */
 export const getEventStatus = async (eventId: string) => {
@@ -599,6 +655,38 @@ export const checkEventPaymentStatus = async (eventId: string) => {
     
     if (!data.success) {
       throw new Error(data.message || 'Failed to check payment status');
+    }
+
+    // Check for specific payment status
+    if (data.event) {
+      // If event is published, payment was successful
+      if (data.event.status === 'published') {
+        return {
+          ...data,
+          paymentStatus: 'completed'
+        };
+      }
+      
+      // If event has paymentStatus field, use it
+      if (data.event.paymentStatus) {
+        return {
+          ...data,
+          paymentStatus: data.event.paymentStatus
+        };
+      }
+      
+      // Check for abandoned payment (more than 1 hour old)
+      if (data.event.paymentInitiatedAt) {
+        const paymentInitiatedAt = new Date(data.event.paymentInitiatedAt);
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+        
+        if (paymentInitiatedAt < oneHourAgo) {
+          return {
+            ...data,
+            paymentStatus: 'abandoned'
+          };
+        }
+      }
     }
 
     return data;

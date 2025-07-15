@@ -3,416 +3,209 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Event Payment Failed - XSCard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <title>Payment Failed - XSCard</title>
     <style>
-        :root {
-            --primary-color: #FF4B6E;
-            --secondary-color: #1B2B5B;
-            --error-color: #dc3545;
-            --dark-text: #333;
-            --light-text: #666;
-            --lighter-text: #888;
-            --border-color: #e9e9e9;
-            --background-light: var(--white);
-            --white: #FFFFFF;
-        }
-        
-        * {
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Poppins', sans-serif;
-            background: linear-gradient(135deg, #FF4B6E, #1B2B5B, #FF4B6E);
-            background-size: 400% 400%;
-            animation: dramaticGradient 8s ease infinite;
-            color: var(--dark-text);
-            line-height: 1.6;
-            min-height: 100vh;
             display: flex;
             flex-direction: column;
-            position: relative;
-            overflow-x: hidden;
-        }
-
-        @keyframes dramaticGradient {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-        }
-
-        body::before {
-            content: '';
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: 
-                radial-gradient(circle at 40% 80%, rgba(255, 193, 7, 0.2) 0%, transparent 60%);
-            animation: dramaticFloat 12s ease-in-out infinite;
-            pointer-events: none;
-            z-index: 1;
-        }
-
-        @keyframes dramaticFloat {
-            0%, 100% {
-                transform: translate(0px, 0px) rotate(0deg);
+            min-height: 100vh;
+            background-color: #f9f9f9;
             }
-            33% {
-                transform: translate(30px, -30px) rotate(1deg);
-            }
-            66% {
-                transform: translate(-20px, 20px) rotate(-1deg);
-            }
-        }
-
         .container {
-            position: relative;
-            z-index: 2;
-            width: 90%;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 40px 20px;
             flex: 1;
             display: flex;
             flex-direction: column;
-            justify-content: center;
-        }
-        
-        .card {
-            background: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.85));
-            border-radius: 25px;
-            box-shadow: 
-                0 20px 60px rgba(0, 0, 0, 0.1),
-                0 8px 30px rgba(0, 0, 0, 0.05),
-                inset 0 1px 0 rgba(255, 255, 255, 0.3);
-            padding: 40px;
-            text-align: center;
-            backdrop-filter: blur(20px);
-            border: 2px solid rgba(220, 53, 69, 0.3);
-            transform: perspective(1000px) rotateX(5deg);
-            transition: all 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            animation: cardEntrance 1.5s ease-out;
-            position: relative;
-            overflow: hidden;
-        }
-
-        @keyframes cardEntrance {
-            0% {
-                opacity: 0;
-                transform: perspective(1000px) rotateX(45deg) translateY(100px);
-            }
-            100% {
-                opacity: 1;
-                transform: perspective(1000px) rotateX(5deg) translateY(0px);
-            }
-        }
-
-        .card::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: linear-gradient(45deg, transparent, rgba(220, 53, 69, 0.1), transparent);
-            transform: rotate(45deg);
-            animation: cardShimmer 3s ease-in-out infinite;
-        }
-
-        @keyframes cardShimmer {
-            0% { transform: translateX(-100%) rotate(45deg); }
-            50% { transform: translateX(100%) rotate(45deg); }
-            100% { transform: translateX(-100%) rotate(45deg); }
-        }
-
-        .card:hover {
-            transform: perspective(1000px) rotateX(0deg) translateY(-10px) scale(1.05);
-            box-shadow: 
-                0 30px 80px rgba(0, 0, 0, 0.15),
-                0 12px 40px rgba(0, 0, 0, 0.08),
-                inset 0 1px 0 rgba(255, 255, 255, 0.5);
-            border-color: #dc3545;
-        }
-        
-        .icon-container {
-            width: 120px;
-            height: 120px;
-            margin: 0 auto 30px;
-            display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, rgba(220, 53, 69, 0.2), rgba(220, 53, 69, 0.1));
-            border-radius: 50%;
-            position: relative;
-            animation: dramaticPulse 2s ease-in-out infinite;
-            box-shadow: 
-                0 10px 30px rgba(220, 53, 69, 0.3),
-                inset 0 2px 10px rgba(255, 255, 255, 0.3);
-        }
-
-        @keyframes dramaticPulse {
-            0% { 
-                transform: scale(1);
-                box-shadow: 0 10px 30px rgba(220, 53, 69, 0.3);
-            }
-            50% { 
-                transform: scale(1.1);
-                box-shadow: 0 15px 40px rgba(220, 53, 69, 0.5);
-            }
-            100% { 
-                transform: scale(1);
-                box-shadow: 0 10px 30px rgba(220, 53, 69, 0.3);
-            }
-        }
-
-        .icon-container::before {
-            content: '';
-            position: absolute;
-            top: -20px;
-            left: -20px;
-            right: -20px;
-            bottom: -20px;
-            border: 2px solid transparent;
-            border-radius: 50%;
-            background: linear-gradient(45deg, #dc3545, transparent, #dc3545) border-box;
-            mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
-            mask-composite: subtract;
-            animation: rotateBorder 4s linear infinite;
-        }
-
-        @keyframes rotateBorder {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .error-icon {
-            color: #dc3545;
-            font-size: 60px;
-            transition: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-            animation: iconBounce 3s ease-in-out infinite;
-            text-shadow: 0 0 20px rgba(220, 53, 69, 0.5);
-        }
-
-        @keyframes iconBounce {
-            0%, 100% { transform: scale(1) rotate(0deg); }
-            25% { transform: scale(1.2) rotate(-10deg); }
-            75% { transform: scale(1.1) rotate(10deg); }
-        }
-
-        .icon-container:hover .error-icon {
-            transform: scale(1.3) rotate(180deg);
-            color: #c82333;
-            text-shadow: 0 0 30px rgba(200, 35, 51, 0.8);
-        }
-        
-        h1 {
-            font-size: 32px;
-            font-weight: 700;
-            margin-bottom: 15px;
-            color: #dc3545;
-            animation: fadeInUp 0.8s ease-out;
-        }
-
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
-        p {
-            margin-bottom: 20px;
-            color: var(--light-text);
-            font-size: 16px;
-            animation: fadeInUp 0.8s ease-out 0.2s both;
-        }
-        
-        .error-details {
-            background-color: rgba(220, 53, 69, 0.05);
-            border: 1px solid rgba(220, 53, 69, 0.2);
-            border-radius: 15px;
             padding: 20px;
-            margin: 20px 0;
-            animation: fadeInUp 0.8s ease-out 0.4s both;
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: center;
+            }
+        .header {
+            background-color: #1a1a2e;
+            color: white;
+            width: 100%;
+            padding: 20px 0;
+            text-align: center;
+            margin-bottom: 40px;
         }
-        
-        .error-details h3 {
-            color: #dc3545;
+        .logo {
+            max-width: 150px;
             margin-bottom: 10px;
+        }
+        .error-icon {
+            font-size: 80px;
+            color: #e74c3c;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #e74c3c;
+            margin-bottom: 20px;
+        }
+        p {
+            color: #333;
+            line-height: 1.6;
+            margin-bottom: 20px;
             font-size: 18px;
         }
-        
-        .error-details p {
-            margin-bottom: 10px;
-            font-size: 15px;
-        }
-        
-        .button-container {
-            animation: fadeInUp 0.8s ease-out 0.6s both;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            align-items: center;
-        }
-        
         .button {
-            display: inline-block;
-            padding: 18px 32px;
-            border-radius: 50px;
-            font-weight: 600;
-            text-decoration: none;
-            font-size: 16px;
-            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            cursor: pointer;
-            text-align: center;
-            min-width: 220px;
-            position: relative;
-            overflow: hidden;
+            background-color: #1a1a2e;
+            color: white;
             border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            margin: 10px;
+            display: inline-block;
         }
-
-        .primary-button {
-            background: linear-gradient(135deg, var(--primary-color), #e91e63);
-            color: var(--white);
-            box-shadow: 0 6px 20px rgba(255, 75, 110, 0.3);
+        .button:hover {
+            background-color: #16213e;
         }
-        
-        .primary-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(255, 75, 110, 0.4);
+        .retry-button {
+            background-color: #e74c3c;
         }
-
-        .secondary-button {
-            background: transparent;
-            color: var(--secondary-color);
-            border: 2px solid var(--secondary-color);
+        .retry-button:hover {
+            background-color: #c0392b;
         }
-        
-        .secondary-button:hover {
-            background: var(--secondary-color);
-            color: var(--white);
-        }
-        
-        footer {
+        .footer {
+            background-color: #1a1a2e;
+            color: white;
             text-align: center;
             padding: 20px;
-            font-size: 14px;
-            color: var(--lighter-text);
+            width: 100%;
+            margin-top: 40px;
         }
-        
-        @media (max-width: 768px) {
-            .container {
-                padding: 20px 15px;
-            }
-            
-            .card {
-                padding: 30px 20px;
-            }
-            
-            h1 {
-                font-size: 24px;
-            }
-            
-            .button {
+        .details {
+            background-color: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin: 20px 0;
                 width: 100%;
+            max-width: 500px;
             }
+        .error-reason {
+            font-weight: bold;
+            color: #e74c3c;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="card">
-            <div class="icon-container">
-                <div class="error-icon">❌</div>
-            </div>
-            
-            <h1>Payment Failed</h1>
-            
-            <p>We're sorry, but we couldn't process your event publishing payment at this time.</p>
-            
-            <div class="error-details">
-                <h3>💡 What you can do:</h3>
-                <p>• Check that your payment method has sufficient funds</p>
-                <p>• Verify your card details are correct</p>
-                <p>• Try a different payment method</p>
-                <p>• Contact your bank if the issue persists</p>
-                <p>• Return to the XSCard app and try publishing again</p>
-            </div>
-            
-            <div class="button-container">
-                <button onclick="tryAgain()" class="button primary-button">
-                    🔄 Try Publishing Again
-                </button>
-                <button onclick="openApp()" class="button secondary-button">
-                    📱 Return to XSCard App
-                </button>
-            </div>
-            
-            <p style="margin-top: 20px; font-size: 14px; color: var(--lighter-text);">
-                Your event has been saved as a draft. You can retry publishing from the XSCard app.
-            </p>
-        </div>
+    <div class="header">
+        <h2>XSCard</h2>
     </div>
     
-    <footer>
-        <p>&copy; <span id="currentYear"></span> XSCard. All Rights Reserved.</p>
-    </footer>
+    <div class="container">
+        <div class="error-icon">✗</div>
+            <h1>Payment Failed</h1>
+            
+        <div id="registrationContent" style="display: none">
+            <p>We were unable to process your payment for the event registration.</p>
+            </div>
+            
+        <div id="publishingContent" style="display: none">
+            <p>We were unable to process your payment for publishing the event.</p>
+            </div>
+            
+        <div class="details">
+            <p>Error reason: <span class="error-reason" id="errorReason">Unknown error</span></p>
+            <p id="errorMessage">There was a problem processing your payment. Please try again or contact support if the issue persists.</p>
+        </div>
+        
+        <a href="#" class="button retry-button" id="retryPayment">Try Again</a>
+        <a href="#" class="button" id="openApp">Return to App</a>
+    </div>
+    
+    <div class="footer">
+        <p>&copy; 2024 XSCard. All rights reserved.</p>
+    </div>
     
     <script>
-        // Set current year in footer
-        document.getElementById('currentYear').textContent = new Date().getFullYear();
-        
-        // Parse URL parameters for error details
+        document.addEventListener('DOMContentLoaded', function() {
+            // Parse URL parameters
         const urlParams = new URLSearchParams(window.location.search);
-        const reason = urlParams.get('reason');
-        const eventId = urlParams.get('event');
+            const reason = urlParams.get('reason') || 'unknown_error';
+            const type = urlParams.get('type') || 'event';
+            const eventId = urlParams.get('eventId') || urlParams.get('event');
         
-        // Show specific error message based on reason
-        if (reason) {
+            // Show appropriate content based on payment type
+            if (type === 'registration') {
+                document.getElementById('registrationContent').style.display = 'block';
+            } else {
+                document.getElementById('publishingContent').style.display = 'block';
+            }
+            
+            // Set error reason based on URL parameter
+            const errorReasonElement = document.getElementById('errorReason');
+            const errorMessageElement = document.getElementById('errorMessage');
+            
+            // Map error codes to user-friendly messages
             const errorMessages = {
-                'missing_reference': 'Payment reference was missing from the transaction.',
-                'verification_failed': 'Payment could not be verified with the payment provider.',
-                'event_not_found': 'The event associated with this payment could not be found.',
-                'invalid_metadata': 'Payment information was incomplete or corrupted.',
-                'reference_mismatch': 'Payment reference did not match the expected transaction.',
-                'invalid_event_status': 'Event is not in the correct state for payment processing.',
-                'system_error': 'A system error occurred while processing your payment.'
+                'missing_reference': 'Payment reference not found.',
+                'verification_failed': 'Payment verification failed.',
+                'invalid_metadata': 'Invalid payment data received.',
+                'incomplete_metadata': 'Incomplete payment information.',
+                'registration_not_found': 'Registration record not found.',
+                'event_not_found': 'Event record not found.',
+                'server_error': 'Server error occurred during payment processing.',
+                'unknown_error': 'Unknown error occurred.'
             };
             
-            const errorMsg = errorMessages[reason] || 'An unexpected error occurred.';
-            const existingText = document.querySelector('.error-details p:last-child');
-            if (existingText) {
-                existingText.innerHTML = `• <strong>Error:</strong> ${errorMsg}`;
+            // Set error message
+            if (errorReasonElement) {
+                errorReasonElement.textContent = errorMessages[reason] || 'Unknown error';
+            }
+            
+            // Set detailed message based on error type
+            if (errorMessageElement) {
+                if (reason === 'verification_failed') {
+                    errorMessageElement.textContent = 'Your payment could not be verified. This could be due to a network issue or a problem with the payment provider.';
+                } else if (reason === 'missing_reference') {
+                    errorMessageElement.textContent = 'The payment reference was not found. Please try again with a new payment session.';
             }
         }
         
-        // Function to try again (return to app)
-        function tryAgain() {
-            alert('Please return to the XSCard app and try publishing your event again from the "My Events" section.');
-            window.close();
+            // Set up retry button
+            const retryButton = document.getElementById('retryPayment');
+            if (retryButton && eventId) {
+                // Create deep link to retry payment
+                let deepLink = '';
+                
+                if (type === 'registration') {
+                    deepLink = `xscard://events/${eventId}/retry-payment?type=registration`;
+                } else {
+                    deepLink = `xscard://events/${eventId}/retry-payment?type=publishing`;
+                }
+                
+                retryButton.href = deepLink;
         }
         
-        // Function to open app
-        function openApp() {
-            alert('Please return to the XSCard app. Your event is saved as a draft in "My Events".');
-            window.close();
-        }
-        
-        // Auto-close after 15 seconds (optional)
-        setTimeout(() => {
-            if (confirm('Would you like to close this tab and return to the XSCard app?')) {
-                window.close();
+            // Set up return to app button
+            const openAppButton = document.getElementById('openApp');
+            if (openAppButton && eventId) {
+                // Create deep link to return to event
+                let deepLink = `xscard://events/${eventId}`;
+                openAppButton.href = deepLink;
+                
+                // Fallback for web - if app doesn't open after 1 second
+                openAppButton.addEventListener('click', function(e) {
+                    const start = Date.now();
+                    
+                    setTimeout(function() {
+                        if (Date.now() - start < 1500) {
+                            // App didn't open, redirect to website
+                            window.location.href = 'https://xscard.co.za';
             }
-        }, 15000);
+                    }, 1000);
+                });
+            }
+        });
     </script>
 </body>
 </html>

@@ -36,6 +36,15 @@ router.get('/user/credits', authenticateUser, eventController.getUserCredits);
 router.get('/events/payment/callback', eventController.handlePaymentCallback);
 router.post('/events/payment/webhook', eventController.handlePaymentWebhook);
 router.get('/events/:eventId/payment/status', authenticateUser, eventController.checkEventPaymentStatus);
+router.get('/events/payment/force-verify', authenticateUser, eventController.forceVerifyPayment);
+router.get('/events/payment/test-verify', authenticateUser, eventController.testPaymentVerification);
+router.post('/events/:eventId/payment/reset', authenticateUser, eventController.resetEventPaymentStatus);
+
+// Payment handling routes for event registration
+router.get('/events/registration/payment/callback', eventController.handleRegistrationPaymentCallback);
+router.post('/events/registration/payment/webhook', eventController.handleRegistrationPaymentWebhook);
+router.get('/events/:eventId/registration/:registrationId/payment/status', authenticateUser, eventController.checkRegistrationPaymentStatus);
+router.post('/events/:eventId/registration/:registrationId/payment/reset', authenticateUser, eventController.resetRegistrationPaymentStatus);
 
 // Admin routes for credit management
 router.post('/admin/credits/reset', eventController.resetMonthlyCredits);
@@ -78,7 +87,7 @@ router.post('/events/:eventId/register',
   eventController.registerForEvent
 );
 
-router.delete('/events/:eventId/unregister', 
+router.post('/events/:eventId/unregister', 
   authenticateUser,
   EventBroadcastMiddleware.conditionally(EventBroadcastMiddleware.broadcastAfterUnregistration),
   eventController.unregisterFromEvent

@@ -127,7 +127,33 @@ export interface EventDetailsResponse {
 export interface EventRegistrationResponse {
   success: boolean;
   message: string;
-  registration: EventRegistration;
+  registration: {
+    id: string;
+    eventId: string;
+    userId: string;
+    status: string;
+    registeredAt: string;
+    specialRequests?: string;
+    ticketId: string;
+    paymentReference?: string;
+    paymentStatus?: 'pending' | 'completed' | 'failed' | 'abandoned';
+    paymentInitiatedAt?: string;
+    paymentCompletedAt?: string;
+    paymentUrl?: string;
+  };
+  ticket: {
+    id: string;
+    eventId: string;
+    userId: string;
+    status: string;
+    createdAt: string;
+    ticketType: string;
+    ticketPrice: number;
+  };
+  paymentRequired?: boolean;
+  paymentUrl?: string;
+  paymentReference?: string;
+  amount?: number;
 }
 
 export interface UserEventsResponse {

@@ -273,32 +273,87 @@ exports.publishEvent = async (req, res) => {
 
     // Check if event is pending payment
     if (eventData.status === 'pending_payment') {
-      // If event has a payment reference, check if it was abandoned/failed
+      // Check payment status if there's a reference
       if (eventData.paymentReference) {
-        console.log(`Checking payment status for retry attempt on event ${eventId}`);
         const verified = await verifyPaystackTransaction(eventData.paymentReference);
         
-        if (verified.abandoned || verified.failed) {
-          // Payment was abandoned/failed, allow retry by reverting to draft
+        if (verified.success) {
+          // Payment was successful but webhook didn't update status
+          // Update event to published status
+          await eventRef.update({
+            status: 'published',
+            publishedAt: admin.firestore.Timestamp.now(),
+            updatedAt: admin.firestore.Timestamp.now(),
+            paymentCompletedAt: admin.firestore.Timestamp.now(),
+            paymentStatus: 'completed'
+          });
+          
+          // Get updated event data
+          const updatedDoc = await eventRef.get();
+          const updatedEvent = updatedDoc.data();
+          
+          return res.status(200).json({
+            success: true,
+            message: 'Payment verified and event published successfully',
+            event: {
+              ...updatedEvent,
+              eventDate: formatDate(updatedEvent.eventDate),
+              publishedAt: formatDate(updatedEvent.publishedAt)
+            }
+          });
+        } else if (verified.abandoned || verified.failed) {
+          // Payment was abandoned or failed - revert to draft and allow new payment
+          console.log(`Payment ${verified.abandoned ? 'abandoned' : 'failed'} - reverting event to draft and allowing new payment`);
+          
           await eventRef.update({
             status: 'draft',
             updatedAt: admin.firestore.Timestamp.now(),
             paymentAbandonedAt: admin.firestore.Timestamp.now(),
             paymentUrl: null
           });
-          console.log(`Event ${eventId} reverted to draft for retry after ${verified.abandoned ? 'abandoned' : 'failed'} payment`);
-          // Continue with normal publish flow below
+          
+          // Continue with normal flow to create new payment (don't return here)
+          console.log('Event reverted to draft, proceeding with new payment creation');
         } else {
-          // Payment is still genuinely pending
-          return sendError(res, 400, 'Event is pending payment. Please complete payment first.');
+          // Check if payment is abandoned (more than 1 hour old)
+          const paymentInitiatedAt = eventData.paymentInitiatedAt?.toDate() || null;
+          const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+          
+          if (paymentInitiatedAt && paymentInitiatedAt < oneHourAgo) {
+            // Mark payment as abandoned and allow new payment
+            await eventRef.update({
+              status: 'draft',
+              paymentStatus: 'abandoned',
+              updatedAt: admin.firestore.Timestamp.now(),
+              paymentUrl: null
+            });
+            
+            console.log('Payment timeout - reverting to draft and allowing new payment');
+            // Continue with normal flow to create new payment (don't return here)
+          } else {
+            // Payment is still genuinely pending, return current status
+            return res.status(200).json({
+              success: false,
+              paymentRequired: true,
+              paymentStatus: 'pending',
+              paymentUrl: eventData.paymentUrl,
+              paymentReference: eventData.paymentReference,
+              message: 'You have a pending payment for this event. Please complete the payment to publish your event.',
+              event: {
+                ...eventData,
+                eventDate: formatDate(eventData.eventDate)
+              }
+            });
+          }
         }
       } else {
-        // No payment reference, something went wrong - allow retry
+        // No payment reference, reset status to draft
         await eventRef.update({
           status: 'draft',
           updatedAt: admin.firestore.Timestamp.now()
         });
-        console.log(`Event ${eventId} reverted to draft (no payment reference found)`);
+        
+        console.log('No payment reference found - reset to draft');
       }
     }
 
@@ -318,7 +373,8 @@ exports.publishEvent = async (req, res) => {
       publishedAt: admin.firestore.Timestamp.now(),
             updatedAt: admin.firestore.Timestamp.now(),
             listingFee: 0,
-            creditApplied: costInfo.creditType
+            creditApplied: costInfo.creditType,
+            paymentStatus: 'completed'
           });
 
           // Get updated event data
@@ -338,7 +394,7 @@ exports.publishEvent = async (req, res) => {
               remainingCredits: costInfo.remainingCredits
             }
           });
-        } else {
+        }
           // Requires payment - initialize Paystack transaction
           const baseUrl = process.env.APP_URL || 'http://localhost:3000';
           const userEmail = req.user.email;
@@ -399,7 +455,8 @@ exports.publishEvent = async (req, res) => {
                     paymentUrl: response.data.authorization_url, // Store the payment URL
                     listingFee: amountInCents,
                     paymentInitiatedAt: admin.firestore.Timestamp.now(),
-                    updatedAt: admin.firestore.Timestamp.now()
+                  updatedAt: admin.firestore.Timestamp.now(),
+                  paymentStatus: 'pending'
                   });
 
                   // Log payment initiation for audit trail
@@ -421,7 +478,8 @@ exports.publishEvent = async (req, res) => {
                     event: {
                       id: eventId,
                       title: eventData.title,
-                      status: 'pending_payment'
+                    status: 'pending_payment',
+                    paymentStatus: 'pending'
                     }
                   });
                 } else {
@@ -442,7 +500,6 @@ exports.publishEvent = async (req, res) => {
           paymentReq.write(params);
           paymentReq.end();
           return;
-        }
       } catch (error) {
         console.error('Error handling paid event publishing:', error);
         return sendError(res, 500, 'Error processing event publishing');
@@ -454,7 +511,8 @@ exports.publishEvent = async (req, res) => {
       status: 'published',
       publishedAt: admin.firestore.Timestamp.now(),
       updatedAt: admin.firestore.Timestamp.now(),
-      listingFee: 0
+      listingFee: 0,
+      paymentStatus: 'completed'
     });
 
     // Get updated event data
@@ -659,39 +717,95 @@ exports.registerForEvent = async (req, res) => {
     const userId = req.user.uid;
     const { specialRequests = '' } = req.body;
 
+    console.log('================ REGISTER FOR EVENT DEBUG ================');
+    console.log('Event ID:', eventId);
+    console.log('User ID:', userId);
+    console.log('Request body:', req.body);
+
     // Get event details
     const eventDoc = await db.collection('events').doc(eventId).get();
     if (!eventDoc.exists) {
+      console.log('Event not found');
       return sendError(res, 404, 'Event not found');
     }
 
     const eventData = eventDoc.data();
+    console.log('Event type:', eventData.eventType);
+    console.log('Event ticket price:', eventData.ticketPrice);
+    console.log('Is paid event?', eventData.eventType === 'paid' && eventData.ticketPrice > 0);
 
     // Check if event is published
     if (eventData.status !== 'published') {
+      console.log('Event not published');
       return sendError(res, 400, 'Event is not available for registration');
     }
 
-    // Check if user already registered
+    // Check if user is already registered or has a pending registration
     const existingRegistration = await db.collection('event_registrations')
       .where('eventId', '==', eventId)
       .where('userId', '==', userId)
+      .limit(1)
       .get();
 
     if (!existingRegistration.empty) {
-      return sendError(res, 400, 'Already registered for this event');
+      const regData = existingRegistration.docs[0].data();
+      
+      // If registration is completed, user is already registered
+      if (regData.status === 'registered') {
+        return sendError(res, 400, 'You are already registered for this event');
+      }
+      
+      // If registration is pending payment, check if payment is abandoned or failed
+      if (regData.status === 'pending_payment') {
+        // Check if payment was abandoned or failed
+        if (regData.paymentStatus === 'abandoned' || regData.paymentStatus === 'failed') {
+          console.log(`Previous registration payment was ${regData.paymentStatus}, allowing new registration`);
+          
+          // Delete the old abandoned/failed registration
+          await existingRegistration.docs[0].ref.delete();
+          console.log('Deleted abandoned/failed registration, proceeding with new registration');
+        } else if (regData.paymentReference) {
+          // Verify the payment status with Paystack
+          const verified = await verifyPaystackTransaction(regData.paymentReference);
+          
+          if (verified.abandoned || verified.failed) {
+            console.log(`Payment verification shows ${verified.abandoned ? 'abandoned' : 'failed'} status, allowing new registration`);
+            
+            // Delete the old registration
+            await existingRegistration.docs[0].ref.delete();
+            console.log('Deleted abandoned/failed registration, proceeding with new registration');
+          } else {
+            // Payment is still genuinely pending
+            return sendError(res, 400, 'You have a pending registration for this event. Please complete your payment or cancel the registration first.');
+          }
+        } else {
+          // No payment reference, delete the invalid registration
+          await existingRegistration.docs[0].ref.delete();
+          console.log('Deleted invalid registration (no payment reference), proceeding with new registration');
+        }
+      }
     }
 
     // Check capacity
     if (eventData.maxAttendees > 0 && eventData.currentAttendees >= eventData.maxAttendees) {
+      console.log('Event at full capacity');
       return sendError(res, 400, 'Event is at full capacity');
     }
 
     // Get user info
     const userInfo = await getUserInfo(userId);
 
-    // Create ticket first
+    // Check if payment is required (paid event with ticket price)
+    const isPaidEvent = eventData.eventType === 'paid' && eventData.ticketPrice > 0;
+    console.log('Is paid event (final check):', isPaidEvent);
+
+    // Create registration ID and ticket ID
+    const registrationId = db.collection('event_registrations').doc().id;
     const ticketId = db.collection('tickets').doc().id;
+    console.log('Registration ID:', registrationId);
+    console.log('Ticket ID:', ticketId);
+
+    // Create ticket first
     const ticketData = {
       id: ticketId,
       eventId,
@@ -701,7 +815,7 @@ exports.registerForEvent = async (req, res) => {
         email: userInfo.email,
         phone: userInfo.phone
       },
-      status: eventData.eventType === 'paid' && eventData.ticketPrice > 0 ? 'pending_payment' : 'active',
+      status: isPaidEvent ? 'pending_payment' : 'active',
       createdAt: admin.firestore.Timestamp.now(),
       updatedAt: admin.firestore.Timestamp.now(),
       specialRequests,
@@ -717,7 +831,7 @@ exports.registerForEvent = async (req, res) => {
 
     // Create registration
     const registrationData = {
-      id: db.collection('event_registrations').doc().id,
+      id: registrationId,
       eventId,
       userId,
       userInfo: {
@@ -725,26 +839,151 @@ exports.registerForEvent = async (req, res) => {
         email: userInfo.email,
         phone: userInfo.phone
       },
-      status: eventData.eventType === 'paid' && eventData.ticketPrice > 0 ? 'pending_payment' : 'registered',
+      status: isPaidEvent ? 'pending_payment' : 'registered',
       registeredAt: admin.firestore.Timestamp.now(),
       specialRequests,
       ticketId: ticketId,
       paymentReference: null
     };
 
-    // Save both ticket and registration
-    await db.collection('tickets').doc(ticketId).set(ticketData);
-    await db.collection('event_registrations').doc(registrationData.id).set(registrationData);
+    console.log('Ticket status:', ticketData.status);
+    console.log('Registration status:', registrationData.status);
 
-    // Update event attendee count
+    // For paid events, initialize payment with Paystack
+    if (isPaidEvent) {
+      console.log('Initializing payment for paid event');
+      try {
+        const baseUrl = process.env.APP_URL;
+        const paymentAmount = eventData.ticketPrice * 100; // Convert to cents/kobo
+        console.log('Payment amount:', paymentAmount);
+        console.log('Base URL:', baseUrl);
+
+        // Generate unique payment reference
+        const timestamp = Date.now();
+        const randomSuffix = Math.random().toString(36).substring(2, 8);
+        const paymentReference = `reg_${eventId.substring(0, 8)}_${timestamp}_${randomSuffix}`;
+
+        // Prepare Paystack request parameters
+        const params = JSON.stringify({
+          email: userInfo.email,
+          amount: paymentAmount,
+          reference: paymentReference,
+          callback_url: `${baseUrl}/events/registration/payment/callback?ref=${paymentReference}`,
+          metadata: {
+            eventId,
+            userId,
+            registrationId,
+            ticketId,
+            type: 'event_registration',
+            cancel_action: `${baseUrl}/events/registration/payment/cancelled`
+          }
+        });
+
+        // Configure Paystack API request
+        const options = {
+          hostname: 'api.paystack.co',
+          port: 443,
+          path: '/transaction/initialize',
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+            'Content-Type': 'application/json'
+          }
+        };
+
+        // Make the request to Paystack
+        const paymentResponse = await new Promise((resolve, reject) => {
+          const paymentReq = https.request(options, paymentRes => {
+            let data = '';
+
+            paymentRes.on('data', (chunk) => {
+              data += chunk;
+            });
+
+            paymentRes.on('end', () => {
+              try {
+                const response = JSON.parse(data);
+                resolve(response);
+              } catch (error) {
+                reject(error);
+              }
+            });
+          });
+
+          paymentReq.on('error', (error) => {
+            reject(error);
+          });
+
+          paymentReq.write(params);
+          paymentReq.end();
+        });
+
+        if (!paymentResponse.status) {
+          console.error('Payment initialization failed:', paymentResponse);
+          return sendError(res, 500, 'Failed to initialize payment for event registration');
+        }
+
+        // Add payment details to registration and ticket
+        const paymentUrl = paymentResponse.data.authorization_url;
+        console.log('Payment reference:', paymentReference);
+        console.log('Payment URL:', paymentUrl);
+
+        // Update registration and ticket with payment information
+        registrationData.paymentReference = paymentReference;
+        registrationData.paymentUrl = paymentUrl;
+        registrationData.paymentAmount = paymentAmount;
+        registrationData.paymentInitiatedAt = admin.firestore.Timestamp.now();
+        registrationData.paymentStatus = 'pending';
+
+        ticketData.paymentReference = paymentReference;
+
+        // Save registration and ticket
+        console.log('Saving registration and ticket for paid event');
+    await db.collection('tickets').doc(ticketId).set(ticketData);
+        await db.collection('event_registrations').doc(registrationId).set(registrationData);
+        console.log('Registration and ticket saved successfully');
+
+        // Return payment information to client
+        console.log('Returning payment information to client');
+        return res.status(200).json({
+          success: true,
+          message: 'Payment required for event registration',
+          paymentRequired: true,
+          paymentUrl,
+          paymentReference,
+          amount: paymentAmount / 100, // Convert back to regular currency
+          registration: {
+            ...registrationData,
+            registeredAt: formatDate(registrationData.registeredAt),
+            paymentInitiatedAt: formatDate(registrationData.paymentInitiatedAt)
+          },
+          ticket: {
+            ...ticketData,
+            createdAt: formatDate(ticketData.createdAt)
+          }
+        });
+      } catch (error) {
+        console.error('Error initializing payment:', error);
+        return sendError(res, 500, 'Failed to initialize payment for event registration', error);
+      }
+    } else {
+      // For free events, proceed with registration as before
+      console.log('Processing free event registration');
+      await db.collection('tickets').doc(ticketId).set(ticketData);
+      await db.collection('event_registrations').doc(registrationId).set(registrationData);
+
+      // Only increment attendee count for free events
+      // For paid events, this will happen after payment is confirmed
+      console.log('Incrementing attendee count for free event');
     await db.collection('events').doc(eventId).update({
       currentAttendees: admin.firestore.FieldValue.increment(1),
       attendeesList: admin.firestore.FieldValue.arrayUnion(userId)
     });
+      console.log('Attendee count incremented');
 
     // Send real-time notification to organizer
-    if (global.socketService && eventData.organizerId) {
       try {
+        if (global.socketService) {
         await global.socketService.broadcastNewRegistration(
           eventData.organizerId,
           { 
@@ -754,15 +993,16 @@ exports.registerForEvent = async (req, res) => {
           },
           registrationData
         );
+        }
       } catch (socketError) {
         console.error('Error sending registration notification:', socketError);
         // Don't fail the registration if socket notification fails
-      }
     }
 
-    res.status(201).json({
+      console.log('Free event registration completed successfully');
+      return res.status(200).json({
       success: true,
-      message: 'Successfully registered for event',
+        message: 'Registration successful',
       registration: {
         ...registrationData,
         registeredAt: formatDate(registrationData.registeredAt)
@@ -772,8 +1012,9 @@ exports.registerForEvent = async (req, res) => {
         createdAt: formatDate(ticketData.createdAt)
       }
     });
-
+    }
   } catch (error) {
+    console.error('Error registering for event:', error);
     sendError(res, 500, 'Error registering for event', error);
   }
 };
@@ -1179,7 +1420,22 @@ exports.getEventById = async (req, res) => {
         .get();
 
       if (!registrationSnapshot.empty) {
-        userRegistration = registrationSnapshot.docs[0].data();
+        const registrationData = registrationSnapshot.docs[0].data();
+        
+        console.log('Found registration for user:', userId, 'with status:', registrationData.status, 'and paymentStatus:', registrationData.paymentStatus || 'none');
+        
+        // Only include registration if it's not pending_payment or cancelled
+        if (registrationData.status !== 'pending_payment' && 
+            registrationData.status !== 'cancelled' && 
+            registrationData.paymentStatus !== 'abandoned' &&
+            registrationData.paymentStatus !== 'cancelled') {
+          console.log('Registration is valid, including in response');
+          userRegistration = registrationData;
+        } else {
+          console.log('Filtering out registration with status:', registrationData.status, 'and paymentStatus:', registrationData.paymentStatus || 'none');
+        }
+      } else {
+        console.log('No registration found for user:', userId);
       }
     }
 
@@ -1237,6 +1493,11 @@ exports.unregisterFromEvent = async (req, res) => {
     const { eventId } = req.params;
     const userId = req.user.uid;
 
+    console.log('================ UNREGISTER FROM EVENT DEBUG ================');
+    console.log('Event ID:', eventId);
+    console.log('User ID:', userId);
+    console.log('Request method:', req.method);
+
     // Find existing registration
     const registrationSnapshot = await db.collection('event_registrations')
       .where('eventId', '==', eventId)
@@ -1244,12 +1505,21 @@ exports.unregisterFromEvent = async (req, res) => {
       .get();
 
     if (registrationSnapshot.empty) {
+      console.log('Registration not found');
       return sendError(res, 404, 'Registration not found');
     }
 
     const registrationDoc = registrationSnapshot.docs[0];
     const registrationData = registrationDoc.data();
+    console.log('Registration data:', {
+      id: registrationData.id,
+      status: registrationData.status,
+      paymentStatus: registrationData.paymentStatus,
+      ticketId: registrationData.ticketId
+    });
 
+    // ALWAYS delete the registration regardless of status
+    try {
     // Delete associated ticket if exists
     if (registrationData.ticketId) {
       try {
@@ -1260,34 +1530,52 @@ exports.unregisterFromEvent = async (req, res) => {
         
         const deletePromises = [];
         qrTokensSnapshot.forEach(doc => {
+            console.log(`Deleting QR token: ${doc.id}`);
           deletePromises.push(doc.ref.delete());
         });
         
-        // Delete ticket and QR tokens
+          // Delete ticket
+          console.log(`Deleting ticket: ${registrationData.ticketId}`);
         deletePromises.push(db.collection('tickets').doc(registrationData.ticketId).delete());
         await Promise.all(deletePromises);
+          console.log('Ticket and QR tokens deleted successfully');
       } catch (ticketError) {
         console.error('Error deleting ticket and QR tokens:', ticketError);
         // Continue with unregistration even if ticket deletion fails
       }
     }
+      
+      // Delete registration
+      console.log(`Deleting registration: ${registrationDoc.id}`);
+      await registrationDoc.ref.delete();
+      console.log('Registration deleted successfully');
 
     // Get event details for notification
     const eventDoc = await db.collection('events').doc(eventId).get();
     const eventData = eventDoc.exists ? eventDoc.data() : null;
 
-    // Delete registration
-    await registrationDoc.ref.delete();
-
+      // Only update event attendee count if the registration was completed
+      const wasCompletedRegistration = registrationData.status === 'registered' && 
+                                      (registrationData.paymentStatus !== 'pending' && 
+                                       registrationData.paymentStatus !== 'abandoned' && 
+                                       registrationData.paymentStatus !== 'cancelled');
+      
+      if (wasCompletedRegistration) {
     // Update event attendee count
+        console.log('Updating event attendee count');
     await db.collection('events').doc(eventId).update({
       currentAttendees: admin.firestore.FieldValue.increment(-1),
       attendeesList: admin.firestore.FieldValue.arrayRemove(userId)
     });
+        console.log('Event attendee count updated successfully');
+      } else {
+        console.log('Skipping attendee count update for non-completed registration');
+      }
 
     // Send real-time notification to organizer
     if (global.socketService && eventData && eventData.organizerId) {
       try {
+          console.log('Sending unregistration notification to organizer');
         await global.socketService.broadcastUnregistration(
           eventData.organizerId,
           { 
@@ -1301,18 +1589,27 @@ exports.unregisterFromEvent = async (req, res) => {
             unregisteredAt: new Date().toISOString()
           }
         );
+          console.log('Unregistration notification sent successfully');
       } catch (socketError) {
         console.error('Error sending unregistration notification:', socketError);
         // Don't fail the unregistration if socket notification fails
       }
     }
 
-    res.status(200).json({
+      console.log('Returning success response');
+      return res.status(200).json({
       success: true,
-      message: 'Successfully unregistered from event'
+        message: 'Successfully unregistered from event',
+        wasCompletedRegistration,
+        registrationStatus: registrationData.status,
+        paymentStatus: registrationData.paymentStatus || 'none'
     });
-
+    } catch (updateError) {
+      console.error('Error processing unregistration:', updateError);
+      return sendError(res, 500, 'Error processing unregistration', updateError);
+    }
   } catch (error) {
+    console.error('Error unregistering from event:', error);
     sendError(res, 500, 'Error unregistering from event', error);
   }
 };
@@ -1735,14 +2032,11 @@ exports.getUserCredits = async (req, res) => {
 // Handle payment callback for event publishing
 exports.handlePaymentCallback = async (req, res) => {
   try {
-    const { reference, trxref, ref } = req.query;
-    const paymentReference = reference || trxref || ref;
-    
-    console.log('Payment callback received:', { reference, trxref, ref, paymentReference });
+    const { ref: paymentReference } = req.query;
     
     if (!paymentReference) {
-      console.error('Payment callback missing reference');
-      return res.redirect(`/event-payment-failed.html?reason=missing_reference`);
+      console.log('Payment reference missing in callback - likely abandoned payment');
+      return res.redirect(`/event-payment-failed.html?reason=payment_abandoned&type=publishing`);
     }
     
     // Verify payment with Paystack
@@ -1770,13 +2064,13 @@ exports.handlePaymentCallback = async (req, res) => {
           // Verify this event is actually pending payment
           if (eventData.status !== 'pending_payment') {
             console.warn(`Event ${metadata.eventId} status is ${eventData.status}, not pending_payment`);
-            return res.redirect(`/event-payment-failed.html?reason=invalid_event_status`);
+            return res.redirect(`/event-payment-failed.html?reason=invalid_event_status&type=publishing&event=${metadata.eventId}`);
           }
           
           // Verify payment reference matches
           if (eventData.paymentReference !== paymentReference) {
             console.error(`Payment reference mismatch for event ${metadata.eventId}`);
-            return res.redirect(`/event-payment-failed.html?reason=reference_mismatch`);
+            return res.redirect(`/event-payment-failed.html?reason=reference_mismatch&type=publishing&event=${metadata.eventId}`);
           }
           
           // Update event to published status
@@ -1788,7 +2082,8 @@ exports.handlePaymentCallback = async (req, res) => {
             paymentCompletedAt: admin.firestore.Timestamp.now(),
             creditApplied: null,
             paymentReference: paymentReference,
-            paymentVerified: true
+            paymentVerified: true,
+            paymentStatus: 'completed'
           });
           
           // Record payment for audit trail
@@ -1801,23 +2096,23 @@ exports.handlePaymentCallback = async (req, res) => {
           console.log(`Event ${metadata.eventId} published after payment verification`);
           
           // Redirect to event payment success page (matching subscription flow)
-          return res.redirect(`/event-payment-success.html?event=${metadata.eventId}&title=${encodeURIComponent(eventData.title || 'Event')}`);
+          return res.redirect(`/event-payment-success.html?event=${metadata.eventId}&title=${encodeURIComponent(eventData.title || 'Event')}&type=publishing`);
         } else {
           console.error(`Event ${metadata.eventId} not found`);
-          return res.redirect(`/event-payment-failed.html?reason=event_not_found`);
+          return res.redirect(`/event-payment-failed.html?reason=event_not_found&type=publishing`);
         }
       } else {
         console.error('Invalid metadata in payment callback:', metadata);
-        return res.redirect(`/event-payment-failed.html?reason=invalid_metadata`);
+        return res.redirect(`/event-payment-failed.html?reason=invalid_metadata&type=publishing`);
       }
     } else {
       console.error('Payment verification failed:', verified.message);
-      return res.redirect(`/event-payment-failed.html?reason=verification_failed`);
+      return res.redirect(`/event-payment-failed.html?reason=verification_failed&type=publishing`);
     }
     
   } catch (error) {
     console.error('Error handling payment callback:', error);
-    return res.redirect(`/event-payment-failed.html?reason=system_error`);
+    return res.redirect(`/event-payment-failed.html?reason=server_error&type=publishing`);
   }
 };
 
@@ -1981,46 +2276,82 @@ const verifyPaystackTransaction = async (reference) => {
             status: response.status,
             dataStatus: response.data?.status,
             amount: response.data?.amount,
-            currency: response.data?.currency
+            currency: response.data?.currency,
+            fullResponse: response
           });
           
-          if (response.status && response.data && response.data.status === 'success') {
-            // Additional validation
-            if (!response.data.amount || response.data.amount <= 0) {
-              return resolve({
-                success: false,
-                message: 'Invalid transaction amount'
-              });
-            }
-            
-            if (response.data.currency !== 'ZAR') {
-              console.warn(`Unexpected currency: ${response.data.currency}, expected ZAR`);
-            }
-            
-            resolve({
-              success: true,
-              data: response.data
-            });
-          } else if (response.status && response.data && response.data.status === 'abandoned') {
-            // Payment was abandoned by user
-            resolve({
-              success: false,
-              abandoned: true,
-              message: 'Payment was abandoned by user'
-            });
-          } else if (response.status && response.data && 
-                    (response.data.status === 'failed' || response.data.status === 'reversed')) {
-            // Payment failed or was reversed
-            resolve({
-              success: false,
-              failed: true,
-              message: `Payment ${response.data.status}`
-            });
-          } else {
-            resolve({
+          // Check if the API call itself was successful
+          if (!response.status) {
+            return resolve({
               success: false,
               message: response.message || 'Transaction verification failed'
             });
+          }
+
+          // Check if we have transaction data
+          if (!response.data) {
+            return resolve({
+              success: false,
+              message: 'No transaction data found'
+            });
+          }
+
+          const transactionStatus = response.data.status;
+
+          // Handle different transaction statuses
+          switch (transactionStatus) {
+            case 'success':
+              // Payment completed successfully
+              if (!response.data.amount || response.data.amount <= 0) {
+                return resolve({
+                  success: false,
+                  message: 'Invalid transaction amount'
+                });
+              }
+              
+              if (response.data.currency !== 'ZAR') {
+                console.warn(`Unexpected currency: ${response.data.currency}, expected ZAR`);
+              }
+              
+              return resolve({
+                success: true,
+                data: response.data
+              });
+
+            case 'pending':
+              // Payment is still being processed
+              return resolve({
+                success: false,
+                pending: true,
+                message: 'Payment is still being processed by payment provider'
+              });
+
+            case 'abandoned':
+              // Payment was abandoned by user
+              return resolve({
+                success: false,
+                abandoned: true,
+                message: 'Payment was abandoned by user'
+              });
+
+            case 'failed':
+            case 'reversed':
+            case 'cancelled':
+              // Payment failed, was reversed, or cancelled
+              return resolve({
+                success: false,
+                failed: true,
+                message: `Payment ${transactionStatus}`
+              });
+
+            default:
+              // Unknown status - treat as still pending
+              console.warn(`Unknown transaction status: ${transactionStatus}`);
+              return resolve({
+                success: false,
+                pending: true,
+                message: `Payment status: ${transactionStatus}. Please wait or try again.`
+              });
           }
         } catch (error) {
           console.error('Error parsing Paystack response:', error);
@@ -2106,28 +2437,31 @@ exports.checkEventPaymentStatus = async (req, res) => {
       const verified = await verifyPaystackTransaction(eventData.paymentReference);
       
       if (verified.success) {
-        // Payment was successful, update the event
-        await eventRef.update({
+        console.log('Payment verification successful');
+        
+        // Update event to published status
+        await db.collection('events').doc(eventId).update({
           status: 'published',
           publishedAt: admin.firestore.Timestamp.now(),
           updatedAt: admin.firestore.Timestamp.now(),
           paymentCompletedAt: admin.firestore.Timestamp.now(),
-          paymentVerified: true
+          paymentStatus: 'completed'
         });
 
-        // Record payment
-        await CreditService.recordEventPayment(
-          eventId,
-          verified.data.amount,
-          eventData.paymentReference
-        );
+        // Get updated event data
+        const updatedDoc = await db.collection('events').doc(eventId).get();
+        const updatedEvent = updatedDoc.data();
 
-        console.log(`Event ${eventId} auto-published after payment verification via polling`);
-
-        response.event.status = 'published';
-        response.event.publishedAt = formatDate(admin.firestore.Timestamp.now());
-        response.event.paymentCompletedAt = formatDate(admin.firestore.Timestamp.now());
-        response.message = 'Payment verified and event published successfully';
+        return res.status(200).json({
+          success: true,
+          message: 'Payment was successful',
+          paymentStatus: 'completed',
+          event: {
+            ...updatedEvent,
+            eventDate: formatDate(updatedEvent.eventDate),
+            endDate: updatedEvent.endDate ? formatDate(updatedEvent.endDate) : null
+          }
+        });
       } else if (verified.abandoned) {
         // Payment was abandoned - revert to draft status so user can try again
         await eventRef.update({
@@ -2140,9 +2474,20 @@ exports.checkEventPaymentStatus = async (req, res) => {
 
         console.log(`Event ${eventId} reverted to draft after abandoned payment`);
 
-        response.event.status = 'draft';
-        response.message = 'Payment was abandoned. Event reverted to draft status. You can try publishing again.';
-        response.paymentStatus = 'abandoned';
+        // Get updated event data
+        const updatedDoc = await eventRef.get();
+        const updatedEvent = updatedDoc.data();
+
+        return res.status(200).json({
+          success: true,
+          message: 'Payment was abandoned. Event reverted to draft status. You can try publishing again.',
+          paymentStatus: 'abandoned',
+          event: {
+            ...updatedEvent,
+            eventDate: formatDate(updatedEvent.eventDate),
+            endDate: updatedEvent.endDate ? formatDate(updatedEvent.endDate) : null
+          }
+        });
       } else if (verified.failed) {
         // Payment failed - revert to draft
         await eventRef.update({
@@ -2151,11 +2496,38 @@ exports.checkEventPaymentStatus = async (req, res) => {
           paymentFailedAt: admin.firestore.Timestamp.now()
         });
 
-        response.event.status = 'draft';
-        response.message = 'Payment failed. Event reverted to draft status.';
-        response.paymentStatus = 'failed';
+        console.log(`Event ${eventId} reverted to draft after failed payment`);
+
+        // Get updated event data
+        const updatedDoc = await eventRef.get();
+        const updatedEvent = updatedDoc.data();
+
+        return res.status(200).json({
+          success: true,
+          message: 'Payment failed. Event reverted to draft status.',
+          paymentStatus: 'failed',
+          event: {
+            ...updatedEvent,
+            eventDate: formatDate(updatedEvent.eventDate),
+            endDate: updatedEvent.endDate ? formatDate(updatedEvent.endDate) : null
+          }
+        });
+      } else if (verified.pending) {
+        console.log('Payment is still being processed by payment provider');
+        // Payment is still pending on Paystack's side
+        response.message = 'Your payment is still being processed by the payment provider. Please wait a moment and try again.';
+        response.paymentStatus = 'pending';
+        console.log('Returning pending response with processing message');
+        
+        return res.status(200).json(response);
       } else {
-        response.message = 'Payment still pending verification';
+        console.log('Payment is still pending');
+        // Payment still pending
+        response.message = 'Payment still pending';
+        response.paymentStatus = 'pending';
+        console.log('Returning pending response');
+        
+        return res.status(200).json(response);
       }
     } else if (eventData.status === 'published') {
       response.message = 'Event is already published';
@@ -2168,6 +2540,738 @@ exports.checkEventPaymentStatus = async (req, res) => {
   } catch (error) {
     console.error('Error checking event payment status:', error);
     return sendError(res, 500, 'Error checking payment status');
+  }
+};
+
+// Handle registration payment callback
+exports.handleRegistrationPaymentCallback = async (req, res) => {
+  try {
+    const { ref: paymentReference } = req.query;
+    
+    if (!paymentReference) {
+      console.log('Payment reference missing in registration callback - likely abandoned payment');
+      return res.redirect(`/event-payment-failed.html?reason=payment_abandoned&type=registration`);
+    }
+    
+    // Verify payment with Paystack
+    const verified = await verifyPaystackTransaction(paymentReference);
+    
+    if (verified.success) {
+      const metadata = verified.data.metadata;
+      
+      if (!metadata || !metadata.eventId || !metadata.userId || !metadata.registrationId || !metadata.ticketId) {
+        console.error('Incomplete metadata in registration payment callback:', metadata);
+        return res.redirect(`/event-payment-failed.html?reason=incomplete_metadata&type=registration`);
+      }
+      
+      const { eventId, userId, registrationId, ticketId } = metadata;
+      
+      // Find registration
+      const registrationRef = db.collection('event_registrations').doc(registrationId);
+      const registrationDoc = await registrationRef.get();
+      
+      if (!registrationDoc.exists) {
+        console.error(`Registration ${registrationId} not found for payment ${paymentReference}`);
+        return res.redirect(`/event-payment-failed.html?reason=registration_not_found&type=registration`);
+      }
+      
+      const registrationData = registrationDoc.data();
+      
+      // Verify payment reference matches
+      if (registrationData.paymentReference !== paymentReference) {
+        console.error(`Payment reference mismatch for registration ${registrationId}`);
+        return res.redirect(`/event-payment-failed.html?reason=reference_mismatch&type=registration&eventId=${eventId}`);
+      }
+      
+      // Update registration status
+      await registrationRef.update({
+        status: 'registered',
+        paymentStatus: 'completed',
+        paymentCompletedAt: admin.firestore.Timestamp.now(),
+        updatedAt: admin.firestore.Timestamp.now()
+      });
+      
+      // Update ticket status
+      const ticketRef = db.collection('tickets').doc(ticketId);
+      const ticketDoc = await ticketRef.get();
+      
+      if (!ticketDoc.exists) {
+        console.error(`Ticket ${ticketId} not found for payment ${paymentReference}`);
+        // Continue anyway since registration was updated
+      } else {
+        await ticketRef.update({
+          status: 'active',
+          updatedAt: admin.firestore.Timestamp.now()
+        });
+      }
+      
+      // Update event attendee count
+      const eventRef = db.collection('events').doc(eventId);
+      await eventRef.update({
+        currentAttendees: admin.firestore.FieldValue.increment(1),
+        attendeesList: admin.firestore.FieldValue.arrayUnion(userId)
+      });
+      
+      // Send real-time notification to organizer
+      try {
+        const eventDoc = await eventRef.get();
+        if (eventDoc.exists) {
+          const eventData = eventDoc.data();
+          if (global.socketService && eventData.organizerId) {
+            await global.socketService.broadcastNewRegistration(
+              eventData.organizerId,
+              { 
+                id: eventId, 
+                title: eventData.title,
+                category: eventData.category 
+              },
+              {
+                ...registrationData,
+                status: 'registered'
+              }
+            );
+          }
+        }
+      } catch (socketError) {
+        console.error('Error sending registration notification:', socketError);
+        // Don't fail the process if socket notification fails
+      }
+      
+      // Redirect to success page
+      return res.redirect(`/event-payment-success.html?eventId=${eventId}&registrationId=${registrationId}&type=registration`);
+    } else {
+      // Payment verification failed
+      console.error('Registration payment verification failed:', verified);
+      return res.redirect(`/event-payment-failed.html?reason=verification_failed&type=registration`);
+    }
+    
+  } catch (error) {
+    console.error('Error handling registration payment callback:', error);
+    return res.redirect(`/event-payment-failed.html?reason=server_error&type=registration`);
+  }
+};
+
+// Handle registration payment webhook
+exports.handleRegistrationPaymentWebhook = async (req, res) => {
+  try {
+    // Verify webhook signature if available
+    // This is a security best practice but we'll skip for simplicity
+    
+    const event = req.body;
+    console.log('Registration payment webhook received:', JSON.stringify(event));
+    
+    // Verify this is a charge.success event
+    if (event && event.event === 'charge.success') {
+      const data = event.data;
+      const metadata = data.metadata;
+      
+      // Check if this is a registration payment
+      if (!metadata || metadata.type !== 'event_registration') {
+        console.log('Not a registration payment webhook, ignoring');
+        return res.status(200).send('Webhook received but not for registration payment');
+      }
+      
+      const { eventId, registrationId, userId, ticketId } = metadata;
+      const paymentReference = data.reference;
+      
+      if (!eventId || !registrationId || !userId || !ticketId) {
+        console.error('Missing required metadata for registration payment webhook:', metadata);
+        return res.status(200).send('Webhook received but metadata incomplete');
+      }
+      
+      // Update registration status
+      const registrationRef = db.collection('event_registrations').doc(registrationId);
+      const registrationDoc = await registrationRef.get();
+      
+      if (!registrationDoc.exists) {
+        console.error(`Registration ${registrationId} not found for payment ${paymentReference}`);
+        return res.status(200).send('Webhook received but registration not found');
+      }
+      
+      const registrationData = registrationDoc.data();
+      
+      // Skip if already completed
+      if (registrationData.status === 'registered' && registrationData.paymentStatus === 'completed') {
+        console.log(`Registration ${registrationId} already completed, skipping webhook`);
+        return res.status(200).send('Webhook received but registration already completed');
+      }
+      
+      // Update registration status
+      await registrationRef.update({
+        status: 'registered',
+        paymentStatus: 'completed',
+        paymentCompletedAt: admin.firestore.Timestamp.now(),
+        updatedAt: admin.firestore.Timestamp.now()
+      });
+      
+      // Update ticket status
+      const ticketRef = db.collection('tickets').doc(ticketId);
+      const ticketDoc = await ticketRef.get();
+      
+      if (!ticketDoc.exists) {
+        console.error(`Ticket ${ticketId} not found for payment ${paymentReference}`);
+        // Continue anyway since registration was updated
+      } else {
+        await ticketRef.update({
+          status: 'active',
+          updatedAt: admin.firestore.Timestamp.now()
+        });
+      }
+      
+      // Update event attendee count
+      const eventRef = db.collection('events').doc(eventId);
+      await eventRef.update({
+        currentAttendees: admin.firestore.FieldValue.increment(1),
+        attendeesList: admin.firestore.FieldValue.arrayUnion(userId)
+      });
+      
+      // Send real-time notification to organizer
+      try {
+        const eventDoc = await eventRef.get();
+        if (eventDoc.exists) {
+          const eventData = eventDoc.data();
+          if (global.socketService && eventData.organizerId) {
+            await global.socketService.broadcastNewRegistration(
+              eventData.organizerId,
+              { 
+                id: eventId, 
+                title: eventData.title,
+                category: eventData.category 
+              },
+              {
+                ...registrationData,
+                status: 'registered'
+              }
+            );
+          }
+        }
+      } catch (socketError) {
+        console.error('Error sending registration notification:', socketError);
+        // Don't fail the process if socket notification fails
+      }
+      
+      return res.status(200).send('Webhook processed successfully');
+    } else {
+      // Not a charge.success event, just acknowledge
+      return res.status(200).send('Webhook received but not processed');
+    }
+  } catch (error) {
+    console.error('Error handling registration payment webhook:', error);
+    // Always return 200 to Paystack even on error
+    return res.status(200).send('Webhook received with error');
+  }
+};
+
+// Check registration payment status
+exports.checkRegistrationPaymentStatus = async (req, res) => {
+  try {
+    const { eventId, registrationId } = req.params;
+    const userId = req.user.uid;
+
+    console.log('================ CHECK REGISTRATION PAYMENT STATUS DEBUG ================');
+    console.log(`Checking payment status for registration ${registrationId} of event ${eventId}`);
+    console.log('User ID:', userId);
+
+    // Get registration details
+    const registrationRef = db.collection('event_registrations').doc(registrationId);
+    const registrationDoc = await registrationRef.get();
+
+    if (!registrationDoc.exists) {
+      console.log('Registration not found');
+      return sendError(res, 404, 'Registration not found');
+    }
+
+    const registrationData = registrationDoc.data();
+    console.log('Registration data:', {
+      status: registrationData.status,
+      paymentStatus: registrationData.paymentStatus,
+      paymentReference: registrationData.paymentReference
+    });
+
+    // Verify ownership
+    if (registrationData.userId !== userId) {
+      console.log('User not authorized');
+      return sendError(res, 403, 'Not authorized to check this registration');
+    }
+
+    // Check if event ID matches
+    if (registrationData.eventId !== eventId) {
+      console.log('Event ID mismatch');
+      return sendError(res, 400, 'Registration does not match the specified event');
+    }
+
+    // Prepare response object
+    const response = {
+      success: true,
+      registration: {
+        ...registrationData,
+        registeredAt: formatDate(registrationData.registeredAt),
+        paymentInitiatedAt: registrationData.paymentInitiatedAt ? formatDate(registrationData.paymentInitiatedAt) : null,
+        paymentCompletedAt: registrationData.paymentCompletedAt ? formatDate(registrationData.paymentCompletedAt) : null
+      }
+    };
+
+    // If registration is already completed, return success
+    if (registrationData.status === 'registered' && registrationData.paymentStatus === 'completed') {
+      console.log('Payment already completed');
+      response.message = 'Payment already completed';
+      return res.status(200).json(response);
+    }
+
+    // If registration is pending payment and has a reference, verify with Paystack
+    if (registrationData.status === 'pending_payment' && registrationData.paymentReference) {
+      console.log(`Verifying payment for registration ${registrationId} with reference ${registrationData.paymentReference}`);
+      
+      const verified = await verifyPaystackTransaction(registrationData.paymentReference);
+      console.log('Paystack verification result:', verified);
+      
+      if (verified.success) {
+        console.log('Payment verification successful');
+        // Payment was successful, update the registration
+        await registrationRef.update({
+          status: 'registered',
+          paymentStatus: 'completed',
+          paymentCompletedAt: admin.firestore.Timestamp.now(),
+          updatedAt: admin.firestore.Timestamp.now()
+        });
+        console.log('Registration updated to completed status');
+
+        // Update ticket status
+        if (registrationData.ticketId) {
+          const ticketRef = db.collection('tickets').doc(registrationData.ticketId);
+          const ticketDoc = await ticketRef.get();
+          
+          if (ticketDoc.exists) {
+            await ticketRef.update({
+              status: 'active',
+              updatedAt: admin.firestore.Timestamp.now()
+            });
+            console.log('Ticket updated to active status');
+          }
+        }
+
+        // Update event attendee count
+        const eventRef = db.collection('events').doc(eventId);
+        await eventRef.update({
+          currentAttendees: admin.firestore.FieldValue.increment(1),
+          attendeesList: admin.firestore.FieldValue.arrayUnion(userId)
+        });
+        console.log('Event attendee count incremented');
+
+        // Update response with the new status
+        response.registration.status = 'registered';
+        response.registration.paymentStatus = 'completed';
+        response.registration.paymentCompletedAt = formatDate(admin.firestore.Timestamp.now());
+        response.message = 'Payment verified and registration completed successfully';
+        response.paymentStatus = 'completed'; // Add this for frontend compatibility
+        console.log('Returning success response');
+
+        return res.status(200).json(response);
+      } else if (verified.abandoned) {
+        console.log('Payment was abandoned');
+        // Payment was abandoned, update the registration
+        await registrationRef.update({
+          paymentStatus: 'abandoned',
+          updatedAt: admin.firestore.Timestamp.now()
+        });
+        console.log('Registration updated to abandoned status');
+
+        response.registration.paymentStatus = 'abandoned';
+        response.message = 'Payment was abandoned';
+        response.paymentStatus = 'abandoned';
+        console.log('Returning abandoned response');
+
+        return res.status(200).json(response);
+      } else if (verified.failed) {
+        console.log('Payment failed');
+        // Payment failed, update the registration
+        await registrationRef.update({
+          paymentStatus: 'failed',
+          updatedAt: admin.firestore.Timestamp.now()
+        });
+        console.log('Registration updated to failed status');
+
+        response.registration.paymentStatus = 'failed';
+        response.message = 'Payment failed';
+        response.paymentStatus = 'failed';
+        console.log('Returning failed response');
+
+        return res.status(200).json(response);
+      } else if (verified.pending) {
+        console.log('Payment is still being processed by payment provider');
+        // Payment is still pending on Paystack's side
+        response.message = 'Your payment is still being processed by the payment provider. Please wait a moment and try again.';
+        response.paymentStatus = 'pending';
+        console.log('Returning pending response with processing message');
+        
+        return res.status(200).json(response);
+      } else {
+        console.log('Payment still pending');
+        // Payment still pending
+        response.message = 'Payment still pending';
+        response.paymentStatus = 'pending';
+        console.log('Returning pending response');
+        
+        return res.status(200).json(response);
+      }
+    }
+
+    // Default response for other cases
+    console.log('Returning default response');
+    response.message = 'Registration status retrieved';
+    return res.status(200).json(response);
+    
+  } catch (error) {
+    console.error('Error checking registration payment status:', error);
+    sendError(res, 500, 'Error checking registration payment status', error);
+  }
+};
+
+// Check event payment status
+exports.checkEventPaymentStatus = async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const userId = req.user.uid;
+
+    console.log('================ CHECK EVENT PAYMENT STATUS ================');
+    console.log('Event ID:', eventId);
+    console.log('User ID:', userId);
+
+    // Get event details
+    const eventDoc = await db.collection('events').doc(eventId).get();
+    if (!eventDoc.exists) {
+      console.log('Event not found');
+      return sendError(res, 404, 'Event not found');
+    }
+
+    const eventData = eventDoc.data();
+
+    // Check if user owns this event
+    if (eventData.organizerId !== userId) {
+      return sendError(res, 403, 'Not authorized to check payment status for this event');
+    }
+
+    // If event is published, payment was successful
+    if (eventData.status === 'published') {
+      console.log('Event is published, payment was successful');
+      return res.status(200).json({
+        success: true,
+        message: 'Payment was successful',
+        paymentStatus: 'completed',
+        event: {
+          ...eventData,
+          eventDate: formatDate(eventData.eventDate),
+          endDate: eventData.endDate ? formatDate(eventData.endDate) : null
+        }
+      });
+    }
+
+    // If event is not in pending_payment status, no payment is required
+    if (eventData.status !== 'pending_payment') {
+      console.log('Event is not in pending_payment status');
+      return res.status(200).json({
+        success: true,
+        message: 'No payment required',
+        paymentStatus: 'not_required',
+        event: {
+          ...eventData,
+          eventDate: formatDate(eventData.eventDate),
+          endDate: eventData.endDate ? formatDate(eventData.endDate) : null
+        }
+      });
+    }
+
+    // Check if payment reference exists
+    if (!eventData.paymentReference) {
+      console.log('No payment reference found');
+      return res.status(200).json({
+        success: true,
+        message: 'No payment reference found',
+        paymentStatus: 'unknown',
+        event: {
+          ...eventData,
+          eventDate: formatDate(eventData.eventDate),
+          endDate: eventData.endDate ? formatDate(eventData.endDate) : null
+        }
+      });
+    }
+
+    // Check payment status with Paystack
+    console.log('Checking payment status with Paystack');
+    const verified = await verifyPaystackTransaction(eventData.paymentReference);
+
+    if (verified.success) {
+      console.log('Payment verification successful');
+      
+      // Update event to published status
+      await db.collection('events').doc(eventId).update({
+        status: 'published',
+        publishedAt: admin.firestore.Timestamp.now(),
+        updatedAt: admin.firestore.Timestamp.now(),
+        paymentCompletedAt: admin.firestore.Timestamp.now(),
+        paymentStatus: 'completed'
+      });
+
+      // Get updated event data
+      const updatedDoc = await db.collection('events').doc(eventId).get();
+      const updatedEvent = updatedDoc.data();
+
+      return res.status(200).json({
+        success: true,
+        message: 'Payment was successful',
+        paymentStatus: 'completed',
+        event: {
+          ...updatedEvent,
+          eventDate: formatDate(updatedEvent.eventDate),
+          endDate: updatedEvent.endDate ? formatDate(updatedEvent.endDate) : null
+        }
+      });
+    } else if (verified.pending) {
+      console.log('Payment is still being processed by payment provider');
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Your payment is still being processed by the payment provider. Please wait a moment and try again.',
+        paymentStatus: 'pending',
+        event: {
+          ...eventData,
+          eventDate: formatDate(eventData.eventDate),
+          endDate: eventData.endDate ? formatDate(eventData.endDate) : null
+        }
+      });
+    } else {
+      // Check if payment is abandoned (more than 1 hour old)
+      const paymentInitiatedAt = eventData.paymentInitiatedAt?.toDate() || null;
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      
+      if (paymentInitiatedAt && paymentInitiatedAt < oneHourAgo) {
+        console.log('Payment is abandoned');
+        
+        // Mark payment as abandoned
+        await db.collection('events').doc(eventId).update({
+          paymentStatus: 'abandoned',
+          updatedAt: admin.firestore.Timestamp.now()
+        });
+
+        return res.status(200).json({
+          success: true,
+          message: 'Payment was abandoned',
+          paymentStatus: 'abandoned',
+          event: {
+            ...eventData,
+            eventDate: formatDate(eventData.eventDate),
+            endDate: eventData.endDate ? formatDate(eventData.endDate) : null,
+            paymentStatus: 'abandoned'
+          }
+        });
+      } else {
+        console.log('Payment is still pending');
+        
+        return res.status(200).json({
+          success: true,
+          message: 'Payment is still pending',
+          paymentStatus: 'pending',
+          event: {
+            ...eventData,
+            eventDate: formatDate(eventData.eventDate),
+            endDate: eventData.endDate ? formatDate(eventData.endDate) : null
+          }
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Error checking event payment status:', error);
+    sendError(res, 500, 'Error checking event payment status', error);
+  }
+};
+
+// Force verify payment with Paystack (for troubleshooting)
+exports.forceVerifyPayment = async (req, res) => {
+  try {
+    const { reference } = req.query;
+    const userId = req.user.uid;
+    
+    if (!reference) {
+      return sendError(res, 400, 'Payment reference is required');
+    }
+    
+    console.log(`Force verifying payment with reference ${reference} for user ${userId}`);
+    
+    // First check if this reference belongs to the user
+    const eventQuery = await db.collection('events')
+      .where('paymentReference', '==', reference)
+      .where('organizerId', '==', userId)
+      .limit(1)
+      .get();
+      
+    const registrationQuery = await db.collection('event_registrations')
+      .where('paymentReference', '==', reference)
+      .where('userId', '==', userId)
+      .limit(1)
+      .get();
+      
+    if (eventQuery.empty && registrationQuery.empty) {
+      return sendError(res, 403, 'Not authorized to verify this payment');
+    }
+    
+    // Directly verify with Paystack
+    const verified = await verifyPaystackTransaction(reference);
+    
+    // Return the raw verification result
+    res.status(200).json({
+      success: true,
+      verification: verified,
+      message: 'Force verification completed'
+    });
+    
+  } catch (error) {
+    console.error('Error force verifying payment:', error);
+    return sendError(res, 500, 'Error verifying payment');
+  }
+};
+
+// Test endpoint to manually verify payment (for debugging)
+exports.testPaymentVerification = async (req, res) => {
+  try {
+    const { reference } = req.query;
+    
+    if (!reference) {
+      return sendError(res, 400, 'Payment reference is required');
+    }
+    
+    console.log(`=== TESTING PAYMENT VERIFICATION FOR: ${reference} ===`);
+    
+    // Call our verification function
+    const result = await verifyPaystackTransaction(reference);
+    
+    console.log('Verification result:', result);
+    
+    // Return the raw result for debugging
+    res.status(200).json({
+      success: true,
+      reference: reference,
+      verificationResult: result,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('Error in test payment verification:', error);
+    return sendError(res, 500, 'Error testing payment verification');
+  }
+};
+
+// Debug endpoint to reset event payment status (for troubleshooting)
+exports.resetEventPaymentStatus = async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const userId = req.user.uid;
+    
+    if (!eventId) {
+      return sendError(res, 400, 'Event ID is required');
+    }
+    
+    const eventRef = db.collection('events').doc(eventId);
+    const eventDoc = await eventRef.get();
+    
+    if (!eventDoc.exists) {
+      return sendError(res, 404, 'Event not found');
+    }
+    
+    const eventData = eventDoc.data();
+    
+    // Check if user owns this event
+    if (eventData.organizerId !== userId) {
+      return sendError(res, 403, 'Not authorized to reset this event');
+    }
+    
+    console.log(`=== RESETTING PAYMENT STATUS FOR EVENT: ${eventId} ===`);
+    console.log('Current event status:', eventData.status);
+    console.log('Current payment reference:', eventData.paymentReference);
+    
+    // Reset event to draft status
+    await eventRef.update({
+      status: 'draft',
+      updatedAt: admin.firestore.Timestamp.now(),
+      paymentUrl: null,
+      paymentStatus: null,
+      paymentAbandonedAt: admin.firestore.Timestamp.now()
+      // Keep paymentReference for audit trail
+    });
+    
+    console.log('Event reset to draft status');
+    
+    // Get updated event data
+    const updatedDoc = await eventRef.get();
+    const updatedEvent = updatedDoc.data();
+    
+    res.status(200).json({
+      success: true,
+      message: 'Event payment status reset successfully',
+      event: {
+        ...updatedEvent,
+        eventDate: formatDate(updatedEvent.eventDate),
+        endDate: updatedEvent.endDate ? formatDate(updatedEvent.endDate) : null
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error resetting event payment status:', error);
+    return sendError(res, 500, 'Error resetting event payment status');
+  }
+};
+
+// Debug endpoint to reset registration payment status (for troubleshooting)
+exports.resetRegistrationPaymentStatus = async (req, res) => {
+  try {
+    const { eventId, registrationId } = req.params;
+    const userId = req.user.uid;
+    
+    if (!eventId || !registrationId) {
+      return sendError(res, 400, 'Event ID and Registration ID are required');
+    }
+    
+    const registrationRef = db.collection('event_registrations').doc(registrationId);
+    const registrationDoc = await registrationRef.get();
+    
+    if (!registrationDoc.exists) {
+      return sendError(res, 404, 'Registration not found');
+    }
+    
+    const registrationData = registrationDoc.data();
+    
+    // Check if user owns this registration
+    if (registrationData.userId !== userId) {
+      return sendError(res, 403, 'Not authorized to reset this registration');
+    }
+    
+    console.log(`=== RESETTING REGISTRATION PAYMENT STATUS: ${registrationId} ===`);
+    console.log('Current registration status:', registrationData.status);
+    console.log('Current payment status:', registrationData.paymentStatus);
+    console.log('Current payment reference:', registrationData.paymentReference);
+    
+    // Delete the registration to allow fresh registration
+    await registrationRef.delete();
+    
+    // Also delete associated ticket if exists
+    if (registrationData.ticketId) {
+      try {
+        await db.collection('tickets').doc(registrationData.ticketId).delete();
+        console.log('Associated ticket deleted');
+      } catch (ticketError) {
+        console.error('Error deleting ticket:', ticketError);
+      }
+    }
+    
+    console.log('Registration deleted - user can now register again');
+    
+    res.status(200).json({
+      success: true,
+      message: 'Registration reset successfully - you can now register again'
+    });
+    
+  } catch (error) {
+    console.error('Error resetting registration payment status:', error);
+    return sendError(res, 500, 'Error resetting registration payment status');
   }
 };
 

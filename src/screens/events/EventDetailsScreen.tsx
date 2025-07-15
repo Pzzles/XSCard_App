@@ -13,7 +13,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { COLORS } from '../../constants/colors';
@@ -31,14 +31,14 @@ import { enhanceEventsWithOrganizerInfo, publishEvent } from '../../services/eve
 
 // Navigation types
 type RootStackParamList = {
-  EventDetails: { eventId: string; event?: Event };
+  EventDetails: { eventId: string; event?: Event; paymentCompleted?: boolean; registrationId?: string; published?: boolean };
   Events: undefined;
   EventTicket: { event: Event; ticket?: any };
   QRScanner: { event: Event };
   CheckInDashboard: { event: Event };
   CreateEvent: { editEvent?: Event };
   EventAnalytics: { event: Event };
-  PaymentPending: { eventId: string };
+  PaymentPending: { eventId: string; paymentUrl?: string; paymentReference?: string; paymentType?: string; registrationId?: string };
 };
 
 type EventDetailsRouteProp = RouteProp<RootStackParamList, 'EventDetails'>;
@@ -49,7 +49,7 @@ export default function EventDetailsScreen() {
   const route = useRoute<EventDetailsRouteProp>();
   const toast = useToast();
 
-  const { eventId, event: passedEvent } = route.params;
+  const { eventId, event: passedEvent, paymentCompleted, registrationId } = route.params;
 
   // State management
   const [event, setEvent] = useState<Event | null>(passedEvent || null);
@@ -60,6 +60,7 @@ export default function EventDetailsScreen() {
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [publishing, setPublishing] = useState(false);
+  const [checkingPendingPayment, setCheckingPendingPayment] = useState(false);
 
   // Load event details
   useEffect(() => {
@@ -69,7 +70,153 @@ export default function EventDetailsScreen() {
       // If we have passed event data, still load full details
       loadEventDetails();
     }
-  }, [eventId]);
+    
+    // If payment was just completed, show success message
+    if (paymentCompleted) {
+      if (registrationId) {
+        // Registration payment completed
+        toast.success(
+          'Registration Complete!',
+          'Your payment was successful and you are now registered for this event.'
+        );
+      } else {
+        // Publishing payment completed
+        toast.success(
+          'Event Published!',
+          'Your payment was successful and your event is now published.'
+        );
+      }
+    }
+  }, [eventId, paymentCompleted, registrationId]);
+
+  // Force refresh when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('EventDetailsScreen focused - forcing refresh');
+      // Always reload event details when screen comes into focus
+      loadEventDetails();
+      
+      // Check for pending payment registrations when returning to this screen
+      checkPendingPaymentRegistration();
+      
+      // Force a clean state when returning to this screen
+      return () => {
+        // Clean up any pending operations when leaving the screen
+        console.log('EventDetailsScreen unfocused - cleaning up');
+      };
+    }, [eventId])
+  );
+
+  // Function to check if user has a pending payment registration
+  const checkPendingPaymentRegistration = async () => {
+    if (!eventId) return;
+    
+    try {
+      setCheckingPendingPayment(true);
+      
+      const response = await authenticatedFetchWithRefresh(
+        ENDPOINTS.GET_EVENT_DETAILS.replace(':eventId', eventId),
+        { method: 'GET' }
+      );
+      
+      if (!response.ok) {
+        console.error('Failed to check pending registrations');
+        return;
+      }
+      
+      const data: EventDetailsResponse = await response.json();
+      
+      if (data.success && data.data.userRegistration) {
+        const registration = data.data.userRegistration;
+        
+        // If registration exists but is in pending_payment status, handle it
+        if (registration.status === 'pending_payment') {
+          // Ask user if they want to complete payment or cancel registration
+          Alert.alert(
+            'Payment Required',
+            'You have a pending payment for this event registration. Would you like to complete the payment or cancel the registration?',
+            [
+              {
+                text: 'Complete Payment',
+                onPress: () => {
+                  // Navigate to payment screen
+                  navigation.navigate('PaymentPending', {
+                    eventId,
+                    paymentType: 'event_registration',
+                    registrationId: registration.id,
+                    paymentReference: registration.paymentReference || undefined
+                  });
+                }
+              },
+              {
+                text: 'Cancel Registration',
+                style: 'destructive',
+                onPress: async () => {
+                  // Cancel the registration
+                  try {
+                    setCheckingPendingPayment(true);
+                    const cancelResponse = await authenticatedFetchWithRefresh(
+                      ENDPOINTS.UNREGISTER_EVENT.replace(':eventId', eventId),
+                      { 
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json'
+                        }
+                      }
+                    );
+                    
+                    if (cancelResponse.ok) {
+                      const responseData = await cancelResponse.json();
+                      console.log('Cancellation response:', responseData);
+                      
+                      toast.success(
+                        'Registration Cancelled',
+                        'Your pending registration has been cancelled.'
+                      );
+                      // Reload event details to update UI
+                      loadEventDetails();
+                    } else {
+                      let errorMessage = 'Failed to cancel registration. Please try again.';
+                      try {
+                        const errorData = await cancelResponse.json();
+                        if (errorData && errorData.message) {
+                          errorMessage = errorData.message;
+                        }
+                      } catch (parseError) {
+                        console.error('Error parsing cancellation error response:', parseError);
+                      }
+                      
+                      console.error('Cancellation error:', cancelResponse.status, errorMessage);
+                      toast.error(
+                        'Error',
+                        errorMessage
+                      );
+                    }
+                  } catch (error) {
+                    console.error('Error cancelling registration:', error);
+                    toast.error(
+                      'Error',
+                      'Failed to cancel registration. Please try again.'
+                    );
+                  } finally {
+                    setCheckingPendingPayment(false);
+                  }
+                }
+              },
+              {
+                text: 'Decide Later',
+                style: 'cancel'
+              }
+            ]
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Error checking pending payment registration:', error);
+    } finally {
+      setCheckingPendingPayment(false);
+    }
+  };
 
   const loadEventDetails = async () => {
     try {
@@ -147,9 +294,25 @@ export default function EventDetailsScreen() {
       const data: EventRegistrationResponse = await response.json();
 
       if (data.success) {
+        // Check if payment is required
+        if (data.paymentRequired && data.paymentUrl) {
+          // For paid events, don't update the UI yet
+          // The registration is in pending_payment status
+          // Navigate to payment pending screen
+          navigation.navigate('PaymentPending', {
+            eventId,
+            paymentUrl: data.paymentUrl,
+            paymentReference: data.paymentReference,
+            paymentType: 'event_registration',
+            registrationId: data.registration.id
+          });
+          return;
+        }
+
+        // No payment required (free event), complete registration
         setUserRegistration(data.registration);
         
-        // Update event attendance count
+        // Update event attendance count for free events
         setEvent(prev => prev ? {
           ...prev,
           currentAttendees: prev.currentAttendees + 1
@@ -191,22 +354,27 @@ export default function EventDetailsScreen() {
 
               const response = await authenticatedFetchWithRefresh(
                 ENDPOINTS.UNREGISTER_EVENT.replace(':eventId', eventId),
-                { method: 'DELETE' }
+                { method: 'POST' }
               );
 
               if (!response.ok) {
                 throw new Error(`Unregistration failed: ${response.status}`);
               }
 
+              const responseData = await response.json();
+              console.log('Unregister response:', responseData);
+
               setUserRegistration(null);
               
-              // Update event attendance count
+              // Only update event attendance count if it wasn't a pending payment
+              if (!responseData.wasPendingPayment) {
               setEvent(prev => prev ? {
                 ...prev,
                 currentAttendees: Math.max(0, prev.currentAttendees - 1)
               } : null);
+              }
 
-              toast.success('Unregistered', 'You have been unregistered from this event.');
+              toast.success('Unregistered', responseData.message || 'You have been unregistered from this event.');
             } catch (error) {
               console.error('Error unregistering from event:', error);
               toast.error('Error', 'Failed to unregister from event. Please try again.');
@@ -232,24 +400,34 @@ export default function EventDetailsScreen() {
       const result = await publishEvent(event.id);
 
       if (result.paymentRequired) {
-        // Open external browser for payment similar to UnlockPremium flow
-        Alert.alert(
-          'Payment Required',
-          'You will be redirected to complete payment. After paying come back to this app.',
-          [
-            {
-              text: 'Continue',
-              onPress: async () => {
-                try {
-                  await Linking.openURL(result.paymentUrl);
-                } catch (err) {
-                  console.warn('Could not open payment URL', err);
-                }
-                navigation.navigate('PaymentPending', { eventId: event.id });
+        // Check if this is a new payment or existing pending payment
+        if (result.paymentStatus === 'pending') {
+          // There's already a pending payment - go to payment pending screen
+          navigation.navigate('PaymentPending', { 
+            eventId: event.id,
+            paymentUrl: result.paymentUrl,
+            paymentReference: result.paymentReference
+          });
+        } else {
+          // New payment required - show alert and navigate to payment
+          Alert.alert(
+            'Payment Required',
+            'You will be redirected to complete payment. After paying come back to this app.',
+            [
+              {
+                text: 'Continue',
+                onPress: async () => {
+                  try {
+                    await Linking.openURL(result.paymentUrl);
+                  } catch (err) {
+                    console.warn('Could not open payment URL', err);
+                  }
+                  navigation.navigate('PaymentPending', { eventId: event.id });
+                },
               },
-            },
-          ],
-        );
+            ],
+          );
+        }
       } else if (result.success) {
         toast.success('Event Published', 'Your event is now live.');
         // Refresh details

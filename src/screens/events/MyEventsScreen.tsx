@@ -251,45 +251,34 @@ export default function MyEventsScreen() {
           if (response.ok) {
             const publishData = await response.json();
             
-            // Check if payment is required
-            if (publishData.requiresPayment && publishData.paymentUrl && publishData.paymentReference) {
-              try {
-                // Open payment URL in browser
-                const supported = await Linking.canOpenURL(publishData.paymentUrl);
-                if (supported) {
-                  await Linking.openURL(publishData.paymentUrl);
-                } else {
-                  console.warn('Cannot open payment URL - unsupported');
-                }
+            if (publishData.paymentRequired) {
+              // Check if this is an existing pending payment or new payment
+              if (publishData.paymentStatus === 'pending') {
+                // There's already a pending payment - go to payment pending screen
+                toast.info('Pending Payment', 'You have a pending payment for this event. Please complete it to publish your event.');
                 
-                // Navigate to payment pending screen with payment info
                 navigation.navigate('PaymentPending', { 
                   eventId,
                   paymentUrl: publishData.paymentUrl,
                   paymentReference: publishData.paymentReference,
-                  amount: publishData.amount,
-                  currency: publishData.currency || 'ZAR',
-                  eventTitle: selectedEvent?.title
+                  paymentType: 'event_publishing'
                 });
-                setActionModalVisible(false);
-                setSelectedEvent(null);
-                return;
-              } catch (error) {
-                console.error('Error opening payment URL:', error);
-                // Still navigate to payment pending screen even if URL opening fails
+              } else {
+                // New payment required - navigate to PaymentPendingScreen
+                toast.success('Payment Required', 'You will be redirected to the payment screen.');
+                  
                 navigation.navigate('PaymentPending', { 
                   eventId,
                   paymentUrl: publishData.paymentUrl,
-                  paymentReference: publishData.paymentReference,
-                  amount: publishData.amount,
-                  currency: publishData.currency || 'ZAR',
-                  eventTitle: selectedEvent?.title
+                  paymentReference: publishData.reference,
+                  paymentType: 'event_publishing'
                 });
-                setActionModalVisible(false);
-                setSelectedEvent(null);
-                toast.info('Payment Required', 'Please complete payment in the next screen.');
-                return;
               }
+              
+              // Close the action modal
+              setActionModalVisible(false);
+              setSelectedEvent(null);
+              return;
             } else {
               // Event published successfully without payment
               successMessage = 'Event published successfully';
