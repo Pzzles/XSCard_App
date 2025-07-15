@@ -310,7 +310,15 @@ export default function EventDetailsScreen() {
         }
 
         // No payment required (free event), complete registration
-        setUserRegistration(data.registration);
+        setUserRegistration({
+          ...data.registration,
+          status: data.registration.status as 'registered' | 'pending_payment' | 'cancelled',
+          userInfo: {
+            name: '',
+            email: '',
+            phone: ''
+          }
+        });
         
         // Update event attendance count for free events
         setEvent(prev => prev ? {

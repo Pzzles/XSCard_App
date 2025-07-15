@@ -14,6 +14,11 @@ export const COLORS = {
   info: '#2196F3',
   text: '#333333',
   textSecondary: '#888888',
+  textLight: '#666666',
+  lightGray: '#F5F5F5',
+  successLight: '#E8F5E8',
+  errorLight: '#FFF5F5',
+  warningLight: '#FFF8E1',
 };
 
 export const CARD_COLORS = [

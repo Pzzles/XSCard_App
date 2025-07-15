@@ -11,7 +11,7 @@ export type RootStackParamList = {
   CardsScreen: undefined;
   AddCards: undefined;
   ContactScreen: undefined;
-  EditCard: { cardId: string };
+  EditCard: { cardIndex: number };
   EventsScreen: undefined;
   EventDetailsScreen: { eventId: string };
   CreateEventScreen: undefined;
