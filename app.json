@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icons/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/icons/splash-icon.png",
       "resizeMode": "contain",
@@ -16,7 +16,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.p.zzles.xscard",
       "buildNumber": "1.0.2",
-      "icon": "./assets/icons/icon.png"
+      "icon": "./assets/icons/icon.png",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera to scan QR codes for event check-ins."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -25,7 +28,8 @@
       },
       "package": "com.p.zzles.xscard",
       "permissions": [
-        "INTERNET"
+        "INTERNET",
+        "CAMERA"
       ]
     },
     "web": {
@@ -37,6 +41,9 @@
       }
     },
     "owner": "p.zzles",
-    "id": "a84f7923-57e3-41c8-a3dc-3c07fb9013dc"
+    "id": "a84f7923-57e3-41c8-a3dc-3c07fb9013dc",
+    "plugins": [
+      "expo-barcode-scanner"
+    ]
   }
 }

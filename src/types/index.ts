@@ -18,6 +18,14 @@ export type Contact = {
   dateAdded: string;
   image: any; // Consider using a more specific type for images
 };
+
+export interface PaymentPendingParams {
+  eventId: string;
+  paymentUrl?: string;
+  paymentReference?: string;
+  eventTitle?: string;
+}
+
 export type AdminTabParamList = {
   Analytics: undefined;
   Calendar: undefined;
@@ -28,15 +36,27 @@ export type AdminTabParamList = {
 };
 
 export type RootStackParamList = {
+  Auth: undefined;
+  Main: undefined;
   MainTabs: undefined;
+  CreateCard: undefined;
+  CardPreview: { cardData: any };
+  QRScanner: { event: any };
+  SaveContact: { cardId: string; cardIndex?: number };
   AddCards: undefined;
   EditCard: undefined;
   UnlockPremium: undefined;
-  AdminDashboard: undefined;
-  SignIn: undefined;
-  CardsScreen: undefined;
-  Contacts: undefined;
-  MainApp: undefined;
+  Events: undefined;
+  EventDetails: { eventId: string; event?: any };
+  EventPreferences: undefined;
+  CreateEvent: undefined;
+  EditEvent: { eventId: string; event?: any };
+  MyEvents: undefined;
+  MyEventsScreen: undefined; // Alternative name used in navigation
+  PaymentPending: PaymentPendingParams;
+  EventTicket: { event: any; ticket?: any };
+  CheckInDashboard: { event: any };
+  EventAnalytics: { event: any };
 };
 
 export type RootTabParamList = {

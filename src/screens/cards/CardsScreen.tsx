@@ -737,7 +737,9 @@ export default function CardsScreen() {
                 >
                   <MaterialIcons name="share" size={24} color={COLORS.white} />
                   <Text style={styles.shareButtonText}>Share</Text>
-                </TouchableOpacity>                <TouchableOpacity 
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
                   onPress={handleAddToWallet} 
                   style={[getDynamicStyles(card.colorScheme || colorScheme).walletButton]}
                   disabled={isWalletLoading}

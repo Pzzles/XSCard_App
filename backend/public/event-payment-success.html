@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Successful - XSCard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            background-color: #f9f9f9;
+            }
+        .container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: center;
+            }
+        .header {
+            background-color: #1a1a2e;
+            color: white;
+            width: 100%;
+            padding: 20px 0;
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .logo {
+            max-width: 150px;
+            margin-bottom: 10px;
+        }
+        .success-icon {
+            font-size: 80px;
+            color: #4CAF50;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #1a1a2e;
+            margin-bottom: 20px;
+        }
+        p {
+            color: #333;
+            line-height: 1.6;
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+        .button {
+            background-color: #1a1a2e;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            margin: 10px;
+            display: inline-block;
+            }
+        .button:hover {
+            background-color: #16213e;
+        }
+        .footer {
+            background-color: #1a1a2e;
+            color: white;
+            text-align: center;
+            padding: 20px;
+            width: 100%;
+            margin-top: 40px;
+        }
+        .details {
+            background-color: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin: 20px 0;
+                width: 100%;
+            max-width: 500px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2>XSCard</h2>
+    </div>
+    
+    <div class="container">
+        <div class="success-icon">✓</div>
+        <h1>Payment Successful!</h1>
+        <div id="registrationContent" style="display: none;">
+            <p>Your event registration payment has been processed successfully.</p>
+            <div class="details">
+                <p>You are now registered for the event. Your ticket is ready!</p>
+                <p>You will receive a confirmation email shortly with your ticket details.</p>
+            </div>
+            </div>
+            
+        <div id="publishingContent" style="display: none;">
+            <p>Your event publishing payment has been processed successfully.</p>
+            <div class="details">
+                <p>Your event is now published and visible to users.</p>
+                <p>You can now manage your event and track registrations in the app.</p>
+            </div>
+        </div>
+        
+        <a href="#" class="button" id="openApp">Open App</a>
+    </div>
+    
+    <div class="footer">
+        <p>&copy; 2024 XSCard. All rights reserved.</p>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Parse URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+            const eventId = urlParams.get('eventId') || urlParams.get('event');
+            const registrationId = urlParams.get('registrationId');
+            const title = urlParams.get('title');
+            const type = urlParams.get('type') || (registrationId ? 'registration' : 'publishing');
+            
+            // Show appropriate content based on payment type
+            if (type === 'registration') {
+                document.getElementById('registrationContent').style.display = 'block';
+            } else {
+                document.getElementById('publishingContent').style.display = 'block';
+            }
+            
+            // Set page title if event title is provided
+            if (title) {
+                document.title = `Payment Successful - ${decodeURIComponent(title)} - XSCard`;
+            }
+            
+            // Set up deep link to app
+            const openAppButton = document.getElementById('openApp');
+            if (openAppButton) {
+                let deepLink = '';
+                
+                // Create appropriate deep link based on payment type
+                if (type === 'registration') {
+                    deepLink = `xscard://events/${eventId}/ticket?registration=${registrationId}`;
+                } else {
+                    deepLink = `xscard://events/${eventId}?published=true`;
+            }
+                
+                openAppButton.href = deepLink;
+                
+                // Fallback for web - if app doesn't open after 1 second
+                openAppButton.addEventListener('click', function(e) {
+                    const start = Date.now();
+                    
+                    setTimeout(function() {
+                        if (Date.now() - start < 1500) {
+                            // App didn't open, redirect to website
+                            window.location.href = 'https://xscard.co.za';
+            }
+                    }, 1000);
+                });
+            }
+        });
+    </script>
+</body>
+</html>

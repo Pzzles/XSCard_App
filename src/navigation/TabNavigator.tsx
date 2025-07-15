@@ -13,6 +13,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import UnlockPremium from '../screens/Unlockpremium/UnlockPremium';
 import { useColorScheme } from '../context/ColorSchemeContext';
+import EventsScreen from '../screens/events/EventsScreen';
+import EventDetailsScreen from '../screens/events/EventDetailsScreen';
+import EventPreferencesScreen from '../screens/events/EventPreferencesScreen';
+import CreateEventScreen from '../screens/events/CreateEventScreen';
+import EditEventScreen from '../screens/events/EditEventScreen';
+import MyEventsScreen from '../screens/events/MyEventsScreen';
+import { EventTicketScreen } from '../screens/events/EventTicketScreen';
+import QRScannerScreen from '../screens/events/QRScannerScreen';
+import CheckInDashboard from '../screens/events/CheckInDashboard';
+import EventAnalyticsScreen from '../screens/events/EventAnalyticsScreen';
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
 const Stack = createStackNavigator<RootStackParamList>();
@@ -82,6 +92,17 @@ export default function AppNavigator() {
       <Stack.Screen name="AddCards" component={AddCards} />
       <Stack.Screen name="EditCard" component={EditCard} />
       <Stack.Screen name="UnlockPremium" component={UnlockPremium} />
+      <Stack.Screen name="Events" component={EventsScreen} />
+      <Stack.Screen name="EventDetails" component={EventDetailsScreen} />
+      <Stack.Screen name="EventPreferences" component={EventPreferencesScreen} />
+      <Stack.Screen name="CreateEvent" component={CreateEventScreen} />
+      <Stack.Screen name="EditEvent" component={EditEventScreen} />
+      <Stack.Screen name="MyEvents" component={MyEventsScreen} />
+      <Stack.Screen name="PaymentPending" component={require('../screens/events/PaymentPendingScreen').default} />
+      <Stack.Screen name="EventTicket" component={EventTicketScreen} />
+      <Stack.Screen name="QRScanner" component={QRScannerScreen} />
+      <Stack.Screen name="CheckInDashboard" component={CheckInDashboard} />
+      <Stack.Screen name="EventAnalytics" component={EventAnalyticsScreen} />
     </Stack.Navigator>
   );
 }

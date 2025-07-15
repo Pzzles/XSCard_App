@@ -1073,3 +1073,263 @@ exports.testTokenRefreshSuccess = async (req, res) => {
         });
     }
 };
+
+// EVENT PREFERENCES FUNCTIONALITY
+
+// Update user event preferences
+exports.updateEventPreferences = async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        const { eventPreferences } = req.body;
+
+        console.log(`[UpdatePreferences] 🔍 User ${userId} updating preferences`);
+
+        if (!eventPreferences) {
+            return res.status(400).json({
+                success: false,
+                message: 'Event preferences data is required'
+            });
+        }
+
+        // Initialize default preferences if they don't exist
+        const defaultPreferences = {
+            receiveEventNotifications: true,
+            receiveNewEventBroadcasts: true,
+            receiveEventUpdates: true,
+            receiveEventReminders: true,
+            preferredCategories: [],
+            locationRadius: 50,
+            preferredLocation: null,
+            eventTypePreference: null, // Phase 2B: free/paid preference
+            priceRange: null // Phase 2B: min/max price range
+        };
+
+        // Merge with provided preferences, ensuring all fields have values
+        const updatedPreferences = {
+            receiveEventNotifications: eventPreferences.receiveEventNotifications ?? defaultPreferences.receiveEventNotifications,
+            receiveNewEventBroadcasts: eventPreferences.receiveNewEventBroadcasts ?? defaultPreferences.receiveNewEventBroadcasts,
+            receiveEventUpdates: eventPreferences.receiveEventUpdates ?? defaultPreferences.receiveEventUpdates,
+            receiveEventReminders: eventPreferences.receiveEventReminders ?? defaultPreferences.receiveEventReminders,
+            preferredCategories: eventPreferences.preferredCategories || defaultPreferences.preferredCategories,
+            locationRadius: eventPreferences.locationRadius || defaultPreferences.locationRadius,
+            preferredLocation: eventPreferences.preferredLocation || defaultPreferences.preferredLocation,
+            eventTypePreference: eventPreferences.eventTypePreference || defaultPreferences.eventTypePreference,
+            priceRange: eventPreferences.priceRange || defaultPreferences.priceRange
+        };
+
+        // Check if user exists
+        const userRef = db.collection('users').doc(userId);
+        const userDoc = await userRef.get();
+
+        if (!userDoc.exists) {
+            console.log(`[UpdatePreferences] ❌ User ${userId} not found`);
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        const userData = userDoc.data();
+        console.log(`[UpdatePreferences] 📧 User ${userId} email: ${userData.email}`);
+
+        // Update user document with event preferences
+        await userRef.update({
+            eventPreferences: updatedPreferences,
+            updatedAt: admin.firestore.Timestamp.now()
+        });
+
+        console.log(`[UpdatePreferences] ✅ Event preferences updated for user ${userId} (${userData.email}):`, updatedPreferences);
+
+        res.status(200).json({
+            success: true,
+            message: 'Event preferences updated successfully',
+            preferences: updatedPreferences
+        });
+
+    } catch (error) {
+        console.error('[UpdatePreferences] ❌ Error updating event preferences:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error updating preferences',
+            error: error.message
+        });
+    }
+};
+
+// Get user event preferences
+exports.getEventPreferences = async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        
+        const userDoc = await db.collection('users').doc(userId).get();
+        
+        if (!userDoc.exists) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        const userData = userDoc.data();
+
+        // Default preferences if none exist
+        const defaultPreferences = {
+            receiveEventNotifications: true,
+            receiveNewEventBroadcasts: true,
+            receiveEventUpdates: true,
+            receiveEventReminders: true,
+            preferredCategories: [],
+            locationRadius: 50,
+            preferredLocation: null,
+            eventTypePreference: null, // Phase 2B: free/paid preference
+            priceRange: null // Phase 2B: min/max price range
+        };
+
+        const preferences = userData.eventPreferences || defaultPreferences;
+
+        res.status(200).json({
+            success: true,
+            preferences: preferences
+        });
+
+    } catch (error) {
+        console.error('Error fetching event preferences:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching preferences',
+            error: error.message
+        });
+    }
+};
+
+// Initialize user event preferences if they don't exist
+exports.initializeEventPreferences = async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        
+        const userRef = db.collection('users').doc(userId);
+        const userDoc = await userRef.get();
+
+        if (!userDoc.exists) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        const userData = userDoc.data();
+
+        // Check if preferences already exist
+        if (userData.eventPreferences) {
+            return res.status(200).json({
+                success: true,
+                message: 'Event preferences already exist',
+                preferences: userData.eventPreferences
+            });
+        }
+
+        // Initialize with default preferences
+        const defaultPreferences = {
+            receiveEventNotifications: true,
+            receiveNewEventBroadcasts: true,
+            receiveEventUpdates: true,
+            receiveEventReminders: true,
+            preferredCategories: [],
+            locationRadius: 50,
+            preferredLocation: null,
+            eventTypePreference: null, // Phase 2B: free/paid preference
+            priceRange: null // Phase 2B: min/max price range
+        };
+
+        await userRef.update({
+            eventPreferences: defaultPreferences,
+            updatedAt: admin.firestore.Timestamp.now()
+        });
+
+        console.log(`Event preferences initialized for user ${userId}`);
+
+        res.status(200).json({
+            success: true,
+            message: 'Event preferences initialized successfully',
+            preferences: defaultPreferences
+        });
+
+    } catch (error) {
+        console.error('Error initializing event preferences:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error initializing preferences',
+            error: error.message
+        });
+    }
+};
+
+// Set user subscription level for testing (Phase 2B)
+exports.setUserSubscriptionLevel = async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        const { subscriptionLevel } = req.body;
+
+        console.log(`[SubscriptionLevel] 🔍 Setting subscription level for user: ${userId}`);
+        console.log(`[SubscriptionLevel] 📝 Requested level: ${subscriptionLevel}`);
+
+        if (!subscriptionLevel || !['free', 'premium'].includes(subscriptionLevel)) {
+            console.log(`[SubscriptionLevel] ❌ Invalid subscription level: ${subscriptionLevel}`);
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid subscription level. Must be "free" or "premium"'
+            });
+        }
+
+        const userRef = db.collection('users').doc(userId);
+        const userDoc = await userRef.get();
+
+        if (!userDoc.exists) {
+            console.log(`[SubscriptionLevel] ❌ User not found: ${userId}`);
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Log current user data before update
+        const currentData = userDoc.data();
+        console.log(`[SubscriptionLevel] 📋 Current user data:`);
+        console.log(`[SubscriptionLevel]   - Current plan: ${currentData.plan || 'undefined'}`);
+        console.log(`[SubscriptionLevel]   - Email: ${currentData.email}`);
+
+        // Update user subscription level
+        console.log(`[SubscriptionLevel] 🔄 Updating plan field to: ${subscriptionLevel}`);
+        await userRef.update({
+            plan: subscriptionLevel,
+            updatedAt: admin.firestore.Timestamp.now()
+        });
+        console.log(`[SubscriptionLevel] ✅ Database update completed`);
+
+        // Verify the update by reading the document again
+        const updatedDoc = await userRef.get();
+        const updatedData = updatedDoc.data();
+        console.log(`[SubscriptionLevel] 🔍 Verification - Updated plan field: ${updatedData.plan}`);
+
+        console.log(`[SubscriptionLevel] ✅ User ${userId} subscription level set to: ${subscriptionLevel}`);
+
+        res.status(200).json({
+            success: true,
+            message: `User subscription level set to ${subscriptionLevel}`,
+            subscriptionLevel,
+            verification: {
+                oldPlan: currentData.plan || 'undefined',
+                newPlan: updatedData.plan,
+                userId: userId
+            }
+        });
+
+    } catch (error) {
+        console.error('[SubscriptionLevel] ❌ Error setting user subscription level:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error setting subscription level',
+            error: error.message
+        });
+    }
+};

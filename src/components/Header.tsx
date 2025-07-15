@@ -6,7 +6,7 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useColorScheme } from '../context/ColorSchemeContext';
-import { API_BASE_URL, performServerLogout } from '../utils/api';
+import { API_BASE_URL, performServerLogout, authenticatedFetchWithRefresh, ENDPOINTS } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 
 // Update this type to match your actual navigation type
@@ -17,9 +17,12 @@ type RootStackParamList = {
   SignIn: undefined;
   UnlockPremium: undefined;
   Cards: undefined;
+  Events: undefined;
   Contacts: undefined;
   AdminDashboard: undefined;
   MainApp: undefined;
+  EventPreferences: undefined;
+  MyEvents: undefined;
 };
 
 interface HeaderProps {
@@ -35,21 +38,89 @@ export default function Header({ title, rightIcon, showAddButton = false }: Head
   const { colorScheme } = useColorScheme();
   const { logout } = useAuth(); // Use our centralized auth context
 
-  // Add this useEffect to get the user's plan
+  // 🔥 FIX: Enhanced plan checking with backend synchronization
   useEffect(() => {
-    const getUserPlan = async () => {
+    const syncUserPlan = async () => {
       try {
+        // First, get cached plan from AsyncStorage
         const userData = await AsyncStorage.getItem('userData');
         if (userData) {
           const { plan } = JSON.parse(userData);
           setUserPlan(plan);
+          console.log('Header: Loaded cached plan:', plan);
+        }
+
+        // Then, sync with backend to ensure accuracy
+        try {
+          const response = await authenticatedFetchWithRefresh(ENDPOINTS.SUBSCRIPTION_STATUS, {
+            method: 'GET',
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            console.log('Header: Subscription status check:', data);
+            
+            let actualPlan = 'free'; // Default
+            
+            // Check if user has active subscription
+            if (data.status && data.data?.isActive) {
+              actualPlan = 'premium';
+              console.log('Header: User has active subscription status - setting to premium');
+            }
+            
+            // 🔥 ADDITIONAL CHECK: Also check the user's plan field directly from GET_USER endpoint
+            try {
+              const userResponse = await authenticatedFetchWithRefresh(ENDPOINTS.GET_USER, {
+                method: 'GET',
+              });
+              
+              if (userResponse.ok) {
+                const userResponseData = await userResponse.json();
+                console.log('Header: User data check:', userResponseData);
+                
+                // Check if user data indicates premium plan
+                const userPlan = userResponseData.user?.plan || userResponseData.plan;
+                if (userPlan === 'premium' || userPlan === 'enterprise') {
+                  actualPlan = userPlan;
+                  console.log(`Header: User data shows plan: ${userPlan} - overriding subscription check`);
+                }
+              }
+            } catch (userError) {
+              console.log('Header: Could not fetch user data for plan check:', userError instanceof Error ? userError.message : 'Unknown error');
+            }
+            
+            console.log('Header: Final determined plan:', actualPlan);
+            
+            // Update UI immediately
+            setUserPlan(actualPlan);
+            
+            // Update cached data if it's different
+            if (userData) {
+              const parsedUserData = JSON.parse(userData);
+              if (parsedUserData.plan !== actualPlan) {
+                console.log(`Header: Plan mismatch detected! Cached: ${parsedUserData.plan}, Actual: ${actualPlan}`);
+                console.log('Header: Updating cached plan to match backend');
+                
+                parsedUserData.plan = actualPlan;
+                await AsyncStorage.setItem('userData', JSON.stringify(parsedUserData));
+                console.log('Header: Successfully updated cached plan');
+              } else {
+                console.log('Header: Cached plan matches backend plan');
+              }
+            }
+          } else {
+            console.log('Header: Could not check subscription status, using cached plan');
+          }
+        } catch (syncError) {
+          console.log('Header: Sync failed, using cached plan:', syncError instanceof Error ? syncError.message : 'Unknown error');
+          // Continue with cached plan if sync fails
         }
       } catch (error) {
-        console.error('Error fetching user plan:', error);
+        console.error('Header: Error in plan synchronization:', error);
       }
     };
 
-    getUserPlan();
+    syncUserPlan();
   }, []);
 
   const handleAddPress = () => {
@@ -112,6 +183,9 @@ export default function Header({ title, rightIcon, showAddButton = false }: Head
       // For AdminDashboard, just navigate directly
       if (screenName === 'AdminDashboard') {
         navigation.navigate('AdminDashboard');
+      } else if (screenName === 'Cards' || screenName === 'Contacts') {
+        // For tab screens, navigate to MainTabs with the specific screen
+        (navigation as any).navigate('MainTabs', { screen: screenName });
       } else {
         navigation.navigate(screenName);
       }
@@ -177,6 +251,14 @@ export default function Header({ title, rightIcon, showAddButton = false }: Head
             >
               <MaterialIcons name="credit-card" size={24} color={COLORS.secondary} />
               <Text style={[styles.menuText, { color: COLORS.secondary }]}>Cards</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => handleNavigate('Events')}
+            >
+              <MaterialIcons name="event" size={24} color={COLORS.secondary} />
+              <Text style={[styles.menuText, { color: COLORS.secondary }]}>Events</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 

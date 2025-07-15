@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Failed - XSCard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            background-color: #f9f9f9;
+            }
+        .container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: center;
+            }
+        .header {
+            background-color: #1a1a2e;
+            color: white;
+            width: 100%;
+            padding: 20px 0;
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .logo {
+            max-width: 150px;
+            margin-bottom: 10px;
+        }
+        .error-icon {
+            font-size: 80px;
+            color: #e74c3c;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #e74c3c;
+            margin-bottom: 20px;
+        }
+        p {
+            color: #333;
+            line-height: 1.6;
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+        .button {
+            background-color: #1a1a2e;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            margin: 10px;
+            display: inline-block;
+        }
+        .button:hover {
+            background-color: #16213e;
+        }
+        .retry-button {
+            background-color: #e74c3c;
+        }
+        .retry-button:hover {
+            background-color: #c0392b;
+        }
+        .footer {
+            background-color: #1a1a2e;
+            color: white;
+            text-align: center;
+            padding: 20px;
+            width: 100%;
+            margin-top: 40px;
+        }
+        .details {
+            background-color: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin: 20px 0;
+                width: 100%;
+            max-width: 500px;
+            }
+        .error-reason {
+            font-weight: bold;
+            color: #e74c3c;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2>XSCard</h2>
+    </div>
+    
+    <div class="container">
+        <div class="error-icon">✗</div>
+            <h1>Payment Failed</h1>
+            
+        <div id="registrationContent" style="display: none">
+            <p>We were unable to process your payment for the event registration.</p>
+            </div>
+            
+        <div id="publishingContent" style="display: none">
+            <p>We were unable to process your payment for publishing the event.</p>
+            </div>
+            
+        <div class="details">
+            <p>Error reason: <span class="error-reason" id="errorReason">Unknown error</span></p>
+            <p id="errorMessage">There was a problem processing your payment. Please try again or contact support if the issue persists.</p>
+        </div>
+        
+        <a href="#" class="button retry-button" id="retryPayment">Try Again</a>
+        <a href="#" class="button" id="openApp">Return to App</a>
+    </div>
+    
+    <div class="footer">
+        <p>&copy; 2024 XSCard. All rights reserved.</p>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Parse URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+            const reason = urlParams.get('reason') || 'unknown_error';
+            const type = urlParams.get('type') || 'event';
+            const eventId = urlParams.get('eventId') || urlParams.get('event');
+        
+            // Show appropriate content based on payment type
+            if (type === 'registration') {
+                document.getElementById('registrationContent').style.display = 'block';
+            } else {
+                document.getElementById('publishingContent').style.display = 'block';
+            }
+            
+            // Set error reason based on URL parameter
+            const errorReasonElement = document.getElementById('errorReason');
+            const errorMessageElement = document.getElementById('errorMessage');
+            
+            // Map error codes to user-friendly messages
+            const errorMessages = {
+                'missing_reference': 'Payment reference not found.',
+                'verification_failed': 'Payment verification failed.',
+                'invalid_metadata': 'Invalid payment data received.',
+                'incomplete_metadata': 'Incomplete payment information.',
+                'registration_not_found': 'Registration record not found.',
+                'event_not_found': 'Event record not found.',
+                'server_error': 'Server error occurred during payment processing.',
+                'unknown_error': 'Unknown error occurred.'
+            };
+            
+            // Set error message
+            if (errorReasonElement) {
+                errorReasonElement.textContent = errorMessages[reason] || 'Unknown error';
+            }
+            
+            // Set detailed message based on error type
+            if (errorMessageElement) {
+                if (reason === 'verification_failed') {
+                    errorMessageElement.textContent = 'Your payment could not be verified. This could be due to a network issue or a problem with the payment provider.';
+                } else if (reason === 'missing_reference') {
+                    errorMessageElement.textContent = 'The payment reference was not found. Please try again with a new payment session.';
+            }
+        }
+        
+            // Set up retry button
+            const retryButton = document.getElementById('retryPayment');
+            if (retryButton && eventId) {
+                // Create deep link to retry payment
+                let deepLink = '';
+                
+                if (type === 'registration') {
+                    deepLink = `xscard://events/${eventId}/retry-payment?type=registration`;
+                } else {
+                    deepLink = `xscard://events/${eventId}/retry-payment?type=publishing`;
+                }
+                
+                retryButton.href = deepLink;
+        }
+        
+            // Set up return to app button
+            const openAppButton = document.getElementById('openApp');
+            if (openAppButton && eventId) {
+                // Create deep link to return to event
+                let deepLink = `xscard://events/${eventId}`;
+                openAppButton.href = deepLink;
+                
+                // Fallback for web - if app doesn't open after 1 second
+                openAppButton.addEventListener('click', function(e) {
+                    const start = Date.now();
+                    
+                    setTimeout(function() {
+                        if (Date.now() - start < 1500) {
+                            // App didn't open, redirect to website
+                            window.location.href = 'https://xscard.co.za';
+            }
+                    }, 1000);
+                });
+            }
+        });
+    </script>
+</body>
+</html>

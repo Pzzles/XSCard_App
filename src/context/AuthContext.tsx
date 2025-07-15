@@ -204,12 +204,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 const data = await response.json();
                 console.log('AuthProvider: Successfully recovered user data from backend');
                 
-                const userData = {
-                  ...data.user,
-                  id: data.user.uid || firebaseUser.uid,
-                  name: data.user.name || '',
-                  email: data.user.email || firebaseUser.email || ''
-                };
+                // 🔥 FIX: Improved user data structure handling
+                let userData;
+                
+                if (data.user) {
+                  // Backend returned user object in data.user
+                  userData = {
+                    ...data.user,
+                    id: data.user.uid || data.user.id || firebaseUser.uid,
+                    uid: data.user.uid || data.user.id || firebaseUser.uid,
+                    name: data.user.name || data.user.displayName || '',
+                    email: data.user.email || firebaseUser.email || ''
+                  };
+                } else {
+                  // Backend returned user data directly or use Firebase user as fallback
+                  userData = {
+                    id: firebaseUser.uid,
+                    uid: firebaseUser.uid,
+                    name: firebaseUser.displayName || data.name || '',
+                    email: firebaseUser.email || data.email || '',
+                    plan: data.plan || 'free'
+                  };
+                }
 
                 // Get keepLoggedIn preference (should still exist)
                 const keepLoggedIn = await getKeepLoggedInPreference();
@@ -236,6 +252,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 
                 console.log('AuthProvider: Data recovery successful - user re-authenticated');
               } else {
+                console.error('AuthProvider: Backend user recovery failed with status:', response.status);
                 throw new Error(`Backend responded with ${response.status}`);
               }
             } catch (recoveryError) {
@@ -284,21 +301,34 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       try {
         dispatch({ type: 'SET_LOADING', payload: true });
         
+        console.log('AuthProvider: Restoring auth state from storage');
+        
+        // First, always load the keepLoggedIn preference
+        const keepLoggedIn = await getKeepLoggedInPreference();
+        console.log('AuthProvider: Loaded keepLoggedIn preference:', keepLoggedIn);
+        dispatch({ type: 'SET_KEEP_LOGGED_IN', payload: keepLoggedIn });
+        
+        // Then check for stored auth data
         const authData = await getStoredAuthData();
         
         if (authData) {
-          console.log('AuthProvider: Restoring auth state from storage');
-          dispatch({ type: 'RESTORE_AUTH', payload: authData });
+          console.log('AuthProvider: Found stored auth data');
+          console.log('AuthProvider: Stored keepLoggedIn:', authData.keepLoggedIn);
+          console.log('AuthProvider: Loaded keepLoggedIn preference:', keepLoggedIn);
+          
+          // Use the preference from storage (authData.keepLoggedIn) as it's more reliable
+          const finalKeepLoggedIn = authData.keepLoggedIn !== undefined ? authData.keepLoggedIn : keepLoggedIn;
+          console.log('AuthProvider: Final keepLoggedIn value:', finalKeepLoggedIn);
+          
+          dispatch({ type: 'RESTORE_AUTH', payload: { ...authData, keepLoggedIn: finalKeepLoggedIn } });
           
           // Firebase auth state listener will handle token refresh automatically
         } else {
-          // No stored auth data, get keepLoggedIn preference only
-          const keepLoggedIn = await getKeepLoggedInPreference();
-          dispatch({ type: 'SET_KEEP_LOGGED_IN', payload: keepLoggedIn });
+          console.log('AuthProvider: No stored auth data found');
           dispatch({ type: 'SET_LOADING', payload: false });
         }
       } catch (error) {
-        console.error('Error restoring auth state:', error);
+        console.error('AuthProvider: Error restoring auth state:', error);
         
         // Handle storage errors gracefully
         await handleStorageError(error);

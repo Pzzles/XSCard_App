@@ -50,4 +50,12 @@ router.patch('/Users/:id/company-logo', handleSingleUpload('companyLogo'), userC
 router.patch('/Users/:id/color', userController.updateUserColor);
 router.patch('/Users/:id/upgrade', authenticateUser, userController.upgradeToPremium);
 
+// Event preferences routes
+router.get('/user/event-preferences', userController.getEventPreferences);
+router.patch('/user/event-preferences', userController.updateEventPreferences);
+router.post('/user/event-preferences/initialize', userController.initializeEventPreferences);
+
+// Testing endpoint for Phase 2B
+router.post('/user/subscription-level', userController.setUserSubscriptionLevel);
+
 module.exports = router;

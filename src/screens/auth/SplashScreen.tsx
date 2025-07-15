@@ -28,25 +28,38 @@ export default function SplashScreen() {
     if (!isLoading && minDisplayTimeElapsed) {
       console.log('SplashScreen: Auth state determined:', { isAuthenticated, keepLoggedIn });
       
-      if (isAuthenticated && keepLoggedIn) {
-        console.log('SplashScreen: User authenticated with keepLoggedIn enabled');
-        setAuthCheckStatus('Welcome back!');
+      if (isAuthenticated) {
+        console.log('SplashScreen: User is authenticated');
         
-        // Validate token in background but don't block navigation
-        validateCurrentToken().then(isValid => {
-          if (!isValid) {
-            console.log('SplashScreen: Token validation failed, but AuthContext will handle refresh');
-          }
-        }).catch(error => {
-          console.log('SplashScreen: Token validation error:', error);
-        });
-        
-        setTimeout(() => {
-          console.log('SplashScreen: Navigating to MainApp');
-          navigation.replace('MainApp');
-        }, 500);
+        if (keepLoggedIn) {
+          console.log('SplashScreen: User authenticated with keepLoggedIn enabled');
+          setAuthCheckStatus('Welcome back!');
+          
+          // Validate token in background but don't block navigation
+          validateCurrentToken().then(isValid => {
+            if (!isValid) {
+              console.log('SplashScreen: Token validation failed, but AuthContext will handle refresh');
+            } else {
+              console.log('SplashScreen: Token validation successful');
+            }
+          }).catch(error => {
+            console.log('SplashScreen: Token validation error:', error);
+          });
+          
+          setTimeout(() => {
+            console.log('SplashScreen: Navigating to MainApp');
+            navigation.replace('MainApp');
+          }, 500);
+        } else {
+          console.log('SplashScreen: User authenticated but keepLoggedIn is disabled - treating as new session');
+          setAuthCheckStatus('Please sign in again');
+          setTimeout(() => {
+            console.log('SplashScreen: Navigating to SignIn due to keepLoggedIn disabled');
+            navigation.replace('SignIn');
+          }, 500);
+        }
       } else {
-        console.log('SplashScreen: User not authenticated or keepLoggedIn disabled');
+        console.log('SplashScreen: User not authenticated, keepLoggedIn:', keepLoggedIn);
         setAuthCheckStatus('Loading...');
         setTimeout(() => {
           console.log('SplashScreen: Navigating to SignIn');
@@ -61,7 +74,7 @@ export default function SplashScreen() {
         setAuthCheckStatus('Loading...');
       }
     }
-  }, [isLoading, isAuthenticated, keepLoggedIn, minDisplayTimeElapsed, navigation]);
+  }, [isLoading, minDisplayTimeElapsed, isAuthenticated, keepLoggedIn, navigation]);
 
   return (
     <View style={styles.container}>

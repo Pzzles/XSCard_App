@@ -31,4 +31,26 @@ const formatDate = (date) => {
     .replace(/(\d+:\d+:\d+)/, 'at $1');
 };
 
-module.exports = { formatDate };
+const convertToISOString = (date) => {
+    if (!date) return null;
+    
+    // If date is a Firestore Timestamp
+    if (date?._seconds) {
+        date = new Date(date._seconds * 1000);
+    }
+    
+    // If date is a string, convert to Date object
+    if (typeof date === 'string') {
+        date = new Date(date);
+    }
+
+    // Handle invalid dates
+    if (!(date instanceof Date) || isNaN(date)) {
+        console.error('Invalid date for ISO conversion:', date);
+        return null;
+    }
+
+    return date.toISOString();
+};
+
+module.exports = { formatDate, convertToISOString };
