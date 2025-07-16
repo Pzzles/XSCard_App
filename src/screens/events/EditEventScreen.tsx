@@ -66,6 +66,10 @@ export default function EditEventScreen() {
   const [loading, setLoading] = useState(!passedEvent);
   const [saving, setSaving] = useState(false);
 
+  // Image upload state
+  const [selectedImages, setSelectedImages] = useState<string[]>([]);
+  const [uploadingImages, setUploadingImages] = useState(false);
+
   // State for event data
   const [eventData, setEventData] = useState<CreateEventData>({
     title: '',
@@ -140,6 +144,56 @@ export default function EditEventScreen() {
       images: event.images || [],
       tags: event.tags || [],
     });
+
+    // Set existing images for display
+    // Check if event has both bannerImage and images array or just images array
+    const existingImages = [];
+    
+    if (event.bannerImage) {
+      existingImages.push(event.bannerImage);
+    }
+    
+    if (event.images && Array.isArray(event.images)) {
+      // If we already added banner image, skip it in the images array
+      const imagesToAdd = event.bannerImage 
+        ? event.images.filter(img => img !== event.bannerImage)
+        : event.images;
+      existingImages.push(...imagesToAdd);
+    }
+
+    if (existingImages.length > 0) {
+      setSelectedImages(existingImages);
+    }
+  };
+
+  // Image handling functions
+  const pickImages = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        toast.warning('Permission needed', 'Please grant permission to access your photo library.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.8,
+        aspect: [16, 9],
+      });
+
+      if (!result.canceled && result.assets) {
+        const newImages = result.assets.map(asset => asset.uri);
+        setSelectedImages(prev => [...prev, ...newImages].slice(0, 5)); // Max 5 images
+      }
+    } catch (error) {
+      console.error('Error picking images:', error);
+      toast.error('Error', 'Failed to pick images. Please try again.');
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setSelectedImages(prev => prev.filter((_, i) => i !== index));
   };
 
   // Validation functions
@@ -150,10 +204,7 @@ export default function EditEventScreen() {
       case STEPS.DETAILS:
         return eventData.eventType === 'free' || (eventData.eventType === 'paid' && eventData.ticketPrice > 0);
       case STEPS.LOCATION:
-        return eventData.location.venue.trim() && 
-               eventData.location.address.trim() && 
-               eventData.location.city.trim() && 
-               eventData.location.country.trim();
+        return eventData.location.venue.trim() && eventData.location.city.trim();
       default:
         return true;
     }
@@ -163,82 +214,155 @@ export default function EditEventScreen() {
     return eventData.title.trim() && 
            eventData.description.trim() &&
            eventData.location.venue.trim() && 
-           eventData.location.address.trim() && 
-           eventData.location.city.trim() && 
-           eventData.location.country.trim();
+           eventData.location.city.trim();
   };
 
   const handleUpdateEvent = async () => {
     try {
       setSaving(true);
 
-      // Prepare the update data with proper date formatting
-      const updateData = {
-        title: eventData.title,
-        description: eventData.description,
-        eventDate: eventData.eventDate, // Keep as string - backend will handle conversion
-        endDate: eventData.endDate || null, // Ensure null if undefined
-        category: eventData.category,
-        eventType: eventData.eventType,
-        ticketPrice: eventData.ticketPrice,
-        maxAttendees: eventData.maxAttendees,
-        visibility: eventData.visibility,
-        location: eventData.location,
-        images: eventData.images,
-        tags: eventData.tags,
-      };
+      // Final validation
+      if (!isFormValid()) {
+        toast.warning('Validation Error', 'Please fix the errors before updating the event.');
+        return;
+      }
 
-      // Validate dates are proper ISO strings before sending
-      if (updateData.eventDate) {
-        const eventDate = new Date(updateData.eventDate);
-        if (isNaN(eventDate.getTime())) {
-          throw new Error('Invalid event date');
+      // Check if we have new images (local URIs) that need to be uploaded
+      const newImages = selectedImages.filter(uri => uri.startsWith('file://') || uri.startsWith('content://'));
+      const existingImages = selectedImages.filter(uri => !uri.startsWith('file://') && !uri.startsWith('content://'));
+
+      console.log('Image analysis:', {
+        totalImages: selectedImages.length,
+        newImages: newImages.length,
+        existingImages: existingImages.length
+      });
+
+      // Prepare payload - use FormData if we have new images, otherwise use JSON
+      if (newImages.length > 0) {
+        // --------------------------
+        // FormData approach (with new images)
+        // --------------------------
+        const payload = new FormData();
+
+        // Append basic string/numeric fields
+        payload.append('title', eventData.title);
+        payload.append('description', eventData.description);
+        payload.append('eventDate', eventData.eventDate ? new Date(eventData.eventDate).toISOString() : '');
+        payload.append('endDate', eventData.endDate ? new Date(eventData.endDate).toISOString() : '');
+        payload.append('category', eventData.category);
+        payload.append('eventType', eventData.eventType);
+        payload.append('ticketPrice', eventData.ticketPrice.toString());
+        payload.append('maxAttendees', eventData.maxAttendees.toString());
+        payload.append('visibility', eventData.visibility);
+
+        // Location & tags as JSON strings
+        payload.append('location', JSON.stringify(eventData.location));
+        payload.append('tags', JSON.stringify(eventData.tags || []));
+
+        // Handle images - first image as banner, rest as event images
+        if (selectedImages.length > 0) {
+          const firstImage = selectedImages[0];
+          
+          // If first image is new, add it as banner
+          if (firstImage.startsWith('file://') || firstImage.startsWith('content://')) {
+            const bannerName = firstImage.split('/').pop() || `banner_${Date.now()}.jpg`;
+            payload.append('bannerImage', {
+              uri: firstImage,
+              name: bannerName,
+              type: 'image/jpeg',
+            } as any);
+          } else {
+            // Keep existing banner image
+            payload.append('bannerImage', firstImage);
+          }
+
+          // Add remaining images
+          selectedImages.slice(1).forEach((uri, idx) => {
+            if (uri.startsWith('file://') || uri.startsWith('content://')) {
+              const name = uri.split('/').pop() || `image_${idx}_${Date.now()}.jpg`;
+              payload.append('eventImages', {
+                uri,
+                name,
+                type: 'image/jpeg',
+              } as any);
+            } else {
+              // Keep existing image
+              payload.append('eventImages', uri);
+            }
+          });
         }
-        updateData.eventDate = eventDate.toISOString();
-      }
 
-      if (updateData.endDate) {
-        const endDate = new Date(updateData.endDate);
-        if (isNaN(endDate.getTime())) {
-          throw new Error('Invalid end date');
+        // Send existing images that weren't replaced
+        if (existingImages.length > 0) {
+          payload.append('existingImages', JSON.stringify(existingImages));
         }
-        updateData.endDate = endDate.toISOString();
-      }
 
-      console.log('Updating event with data:', updateData);
-      console.log('Using endpoint:', ENDPOINTS.UPDATE_EVENT.replace(':eventId', eventId));
+        console.log('[UpdateEvent] Submitting FormData with fields:', Array.from(payload.keys()));
 
-      const response = await authenticatedFetchWithRefresh(
-        ENDPOINTS.UPDATE_EVENT.replace(':eventId', eventId),
-        {
-          method: 'PATCH', // Changed from PUT to PATCH
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updateData),
+        const response = await authenticatedFetchWithRefresh(
+          ENDPOINTS.UPDATE_EVENT.replace(':eventId', eventId),
+          {
+            method: 'PATCH',
+            body: payload,
+          }
+        );
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || `Failed to update event: ${response.status}`);
         }
-      );
 
-      console.log('Update response status:', response.status);
-      const responseText = await response.text();
-      console.log('Update response body:', responseText);
-
-      if (!response.ok) {
-        throw new Error(`Failed to update event: ${response.status} - ${responseText}`);
-      }
-
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error('Failed to parse response:', parseError);
-        throw new Error('Invalid response format from server');
-      }
-
-      if (data.success) {
-        toast.success('Success', 'Event updated successfully');
-        navigation.navigate('MyEvents');
+        const result = await response.json();
+        if (result.success) {
+          toast.success('Success', 'Event updated successfully');
+          navigation.navigate('MyEvents');
+        } else {
+          throw new Error(result.message || 'Failed to update event');
+        }
       } else {
-        throw new Error(data.message || 'Failed to update event');
+        // --------------------------
+        // JSON approach (no new images)
+        // --------------------------
+        const updateData = {
+          title: eventData.title,
+          description: eventData.description,
+          eventDate: eventData.eventDate ? new Date(eventData.eventDate).toISOString() : '',
+          endDate: eventData.endDate ? new Date(eventData.endDate).toISOString() : null,
+          category: eventData.category,
+          eventType: eventData.eventType,
+          ticketPrice: eventData.ticketPrice,
+          maxAttendees: eventData.maxAttendees,
+          visibility: eventData.visibility,
+          location: eventData.location,
+          images: selectedImages, // Keep existing images
+          tags: eventData.tags,
+        };
+
+        console.log('[UpdateEvent] Submitting JSON data:', updateData);
+
+        const response = await authenticatedFetchWithRefresh(
+          ENDPOINTS.UPDATE_EVENT.replace(':eventId', eventId),
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updateData),
+          }
+        );
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || `Failed to update event: ${response.status}`);
+        }
+
+        const result = await response.json();
+        if (result.success) {
+          toast.success('Success', 'Event updated successfully');
+          navigation.navigate('MyEvents');
+        } else {
+          throw new Error(result.message || 'Failed to update event');
+        }
       }
+
     } catch (error) {
       console.error('Error updating event:', error);
       toast.error('Error', error instanceof Error ? error.message : 'Failed to update event. Please try again.');
@@ -362,7 +486,8 @@ export default function EditEventScreen() {
 
   const renderLocation = () => (
     <View style={styles.stepContent}>
-      <Text style={styles.stepTitle}>Location & Venue</Text>
+      <Text style={styles.stepTitle}>Where will it happen?</Text>
+      <Text style={styles.stepSubtitle}>Please provide the venue and city for your event</Text>
       
       <View style={styles.inputGroup}>
         <Text style={styles.label}>Venue Name *</Text>
@@ -373,12 +498,12 @@ export default function EditEventScreen() {
             ...prev, 
             location: { ...prev.location, venue: text }
           }))}
-          placeholder="Enter venue name"
+          placeholder="Enter venue name (required)"
         />
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Address *</Text>
+        <Text style={styles.label}>Street Address</Text>
         <TextInput
           style={styles.input}
           value={eventData.location.address}
@@ -386,7 +511,7 @@ export default function EditEventScreen() {
             ...prev, 
             location: { ...prev.location, address: text }
           }))}
-          placeholder="Enter street address"
+          placeholder="Street address (optional)"
         />
       </View>
 
@@ -399,12 +524,12 @@ export default function EditEventScreen() {
             ...prev, 
             location: { ...prev.location, city: text }
           }))}
-          placeholder="Enter city"
+          placeholder="Enter city name (required)"
         />
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Country *</Text>
+        <Text style={styles.label}>Country</Text>
         <TextInput
           style={styles.input}
           value={eventData.location.country}
@@ -412,10 +537,129 @@ export default function EditEventScreen() {
             ...prev, 
             location: { ...prev.location, country: text }
           }))}
-          placeholder="Enter country"
+          placeholder="Country (optional)"
         />
       </View>
     </View>
+  );
+
+  const renderMediaStep = () => (
+    <View style={styles.stepContent}>
+      <Text style={styles.stepTitle}>Add some visuals</Text>
+      <Text style={styles.stepSubtitle}>Images help attract more attendees to your event</Text>
+
+      <TouchableOpacity style={styles.imagePickerButton} onPress={pickImages}>
+        <MaterialIcons name="add-photo-alternate" size={48} color={COLORS.primary} />
+        <Text style={[styles.imagePickerText, { color: COLORS.primary }]}>
+          Add Event Images
+        </Text>
+        <Text style={styles.imagePickerSubtext}>
+          Select up to 5 images (first image will be the banner)
+        </Text>
+      </TouchableOpacity>
+
+      {selectedImages.length > 0 && (
+        <View style={styles.imageGrid}>
+          {selectedImages.map((image, index) => (
+            <View key={index} style={styles.imageContainer}>
+              <Image source={{ uri: image }} style={styles.eventImage} />
+              {index === 0 && (
+                <View style={styles.bannerBadge}>
+                  <Text style={styles.bannerText}>Banner</Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={styles.removeImageButton}
+                onPress={() => removeImage(index)}
+              >
+                <MaterialIcons name="close" size={20} color={COLORS.white} />
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+
+  const renderReviewStep = () => (
+    <ScrollView style={styles.stepContent}>
+      <Text style={styles.stepTitle}>Review Your Changes</Text>
+      <Text style={styles.stepSubtitle}>Make sure everything looks good before updating</Text>
+
+      <View style={styles.reviewSection}>
+        <Text style={styles.reviewSectionTitle}>Basic Information</Text>
+        <View style={styles.reviewItem}>
+          <Text style={styles.reviewLabel}>Title:</Text>
+          <Text style={styles.reviewValue}>{eventData.title}</Text>
+        </View>
+        <View style={styles.reviewItem}>
+          <Text style={styles.reviewLabel}>Category:</Text>
+          <Text style={styles.reviewValue}>{eventData.category}</Text>
+        </View>
+        <View style={styles.reviewItem}>
+          <Text style={styles.reviewLabel}>Date:</Text>
+          <Text style={styles.reviewValue}>
+            {eventData.eventDate ? new Date(eventData.eventDate).toLocaleString() : 'Not set'}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.reviewSection}>
+        <Text style={styles.reviewSectionTitle}>Event Details</Text>
+        <View style={styles.reviewItem}>
+          <Text style={styles.reviewLabel}>Type:</Text>
+          <Text style={styles.reviewValue}>
+            {eventData.eventType === 'free' ? 'Free' : `Paid - R${eventData.ticketPrice}`}
+          </Text>
+        </View>
+        <View style={styles.reviewItem}>
+          <Text style={styles.reviewLabel}>Max Attendees:</Text>
+          <Text style={styles.reviewValue}>{eventData.maxAttendees === -1 ? 'Unlimited' : eventData.maxAttendees}</Text>
+        </View>
+        <View style={styles.reviewItem}>
+          <Text style={styles.reviewLabel}>Visibility:</Text>
+          <Text style={styles.reviewValue}>{eventData.visibility}</Text>
+        </View>
+      </View>
+
+      <View style={styles.reviewSection}>
+        <Text style={styles.reviewSectionTitle}>Location</Text>
+        <View style={styles.reviewItem}>
+          <Text style={styles.reviewLabel}>Venue:</Text>
+          <Text style={styles.reviewValue}>{eventData.location.venue}</Text>
+        </View>
+        <View style={styles.reviewItem}>
+          <Text style={styles.reviewLabel}>Address:</Text>
+          <Text style={styles.reviewValue}>
+            {eventData.location.address}, {eventData.location.city}, {eventData.location.country}
+          </Text>
+        </View>
+      </View>
+
+      {eventData.tags && eventData.tags.length > 0 && (
+        <View style={styles.reviewSection}>
+          <Text style={styles.reviewSectionTitle}>Tags</Text>
+          <View style={styles.tagContainer}>
+            {eventData.tags.map((tag, index) => (
+              <View key={index} style={styles.reviewTag}>
+                <Text style={styles.tagText}>{tag}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {selectedImages.length > 0 && (
+        <View style={styles.reviewSection}>
+          <Text style={styles.reviewSectionTitle}>Images ({selectedImages.length})</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {selectedImages.map((image, index) => (
+              <Image key={index} source={{ uri: image }} style={styles.reviewImage} />
+            ))}
+          </ScrollView>
+        </View>
+      )}
+    </ScrollView>
   );
 
   if (loading) {
@@ -459,6 +703,8 @@ export default function EditEventScreen() {
         {currentStep === STEPS.BASIC_INFO && renderBasicInfo()}
         {currentStep === STEPS.DETAILS && renderDetails()}
         {currentStep === STEPS.LOCATION && renderLocation()}
+        {currentStep === STEPS.MEDIA && renderMediaStep()}
+        {currentStep === STEPS.REVIEW && renderReviewStep()}
         
         {/* Navigation buttons */}
         <View style={styles.navigationContainer}>
@@ -471,7 +717,7 @@ export default function EditEventScreen() {
             </TouchableOpacity>
           )}
 
-          {currentStep < STEPS.LOCATION ? (
+          {currentStep < STEPS.REVIEW ? (
             <TouchableOpacity 
               style={styles.primaryButton} 
               onPress={() => setCurrentStep(prev => prev + 1)}
@@ -544,6 +790,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.black,
     marginBottom: 20,
+  },
+  stepSubtitle: {
+    fontSize: 16,
+    color: COLORS.gray,
+    marginBottom: 24,
   },
   inputGroup: {
     marginBottom: 20,
@@ -664,5 +915,120 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: 16,
     fontWeight: '600',
+  },
+  imagePickerButton: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    marginBottom: 20,
+  },
+  imagePickerText: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 10,
+  },
+  imagePickerSubtext: {
+    fontSize: 14,
+    color: COLORS.gray,
+    marginTop: 5,
+  },
+  imageGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
+    marginTop: 10,
+  },
+  imageContainer: {
+    width: '30%', // Adjust as needed for 3 columns
+    aspectRatio: 1,
+    marginVertical: 5,
+    position: 'relative',
+  },
+  eventImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+    resizeMode: 'cover',
+  },
+  bannerBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: COLORS.primary,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    zIndex: 1,
+  },
+  bannerText: {
+    color: COLORS.white,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    backgroundColor: COLORS.error,
+    borderRadius: 10,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  reviewSection: {
+    marginBottom: 20,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  reviewSectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.black,
+    marginBottom: 10,
+  },
+  reviewItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  reviewLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: COLORS.gray,
+  },
+  reviewValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.black,
+  },
+  tagContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  reviewTag: {
+    backgroundColor: COLORS.background,
+    borderRadius: 15,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  tagText: {
+    fontSize: 14,
+    color: COLORS.gray,
+  },
+  reviewImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    marginRight: 10,
+    resizeMode: 'cover',
   },
 });

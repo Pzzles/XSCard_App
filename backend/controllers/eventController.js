@@ -1033,7 +1033,9 @@ exports.updateEvent = async (req, res) => {
         ...updateData,
         eventDate: updateData.eventDate,
         endDate: updateData.endDate
-      }
+      },
+      files: req.files,
+      firebaseStorageUrls: req.firebaseStorageUrls
     });
 
     const eventRef = db.collection('events').doc(eventId);
@@ -1050,11 +1052,143 @@ exports.updateEvent = async (req, res) => {
       return sendError(res, 403, 'Not authorized to update this event');
     }
 
+    // Handle image URLs from Firebase Storage
+    let bannerImageUrl = null;
+    let eventImagesUrls = [];
+    
+    if (req.firebaseStorageUrls) {
+      bannerImageUrl = req.firebaseStorageUrls.bannerImage || null;
+      
+      // Handle multiple event images
+      if (req.firebaseStorageUrls.eventImages) {
+        if (Array.isArray(req.firebaseStorageUrls.eventImages)) {
+          eventImagesUrls = req.firebaseStorageUrls.eventImages;
+        } else {
+          eventImagesUrls = [req.firebaseStorageUrls.eventImages];
+        }
+      }
+    }
+
+    // Handle existing images that weren't replaced
+    let existingImages = [];
+    if (updateData.existingImages) {
+      try {
+        existingImages = JSON.parse(updateData.existingImages);
+      } catch (err) {
+        console.warn('Error parsing existing images:', err);
+        existingImages = [];
+      }
+    }
+
+    // If we have a mix of new and existing images, combine them
+    if (req.firebaseStorageUrls) {
+      // Handle banner image
+      if (!bannerImageUrl && updateData.bannerImage && !updateData.bannerImage.startsWith('file://')) {
+        bannerImageUrl = updateData.bannerImage;
+      }
+
+      // Handle event images - combine new uploads with existing images
+      const allEventImages = [...eventImagesUrls];
+      
+      // Add existing images that weren't replaced
+      if (existingImages.length > 0) {
+        allEventImages.push(...existingImages);
+      }
+      
+      // Add any existing images passed as eventImages (for non-file URLs)
+      if (updateData.eventImages) {
+        const existingEventImages = Array.isArray(updateData.eventImages) 
+          ? updateData.eventImages 
+          : [updateData.eventImages];
+        
+        existingEventImages.forEach(img => {
+          if (typeof img === 'string' && !img.startsWith('file://') && !img.startsWith('content://')) {
+            allEventImages.push(img);
+          }
+        });
+      }
+
+      eventImagesUrls = allEventImages;
+    } else {
+      // No file uploads, just handle existing images from JSON
+      if (updateData.images && Array.isArray(updateData.images)) {
+        if (updateData.images.length > 0) {
+          bannerImageUrl = updateData.images[0];
+          eventImagesUrls = updateData.images.slice(1);
+        }
+      }
+    }
+
+    // Parse JSON fields that were stringified in FormData (or use plain objects if provided)
+    let location = {};
+    let tags = [];
+    
+    // Handle location field
+    if (updateData.location) {
+      if (typeof updateData.location === 'string') {
+        try {
+          location = JSON.parse(updateData.location);
+        } catch (locationErr) {
+          console.warn('Error parsing location JSON string:', locationErr);
+          location = updateData.location;
+        }
+      } else if (typeof updateData.location === 'object') {
+        location = updateData.location;
+      }
+    }
+
+    // Handle tags field
+    if (updateData.tags) {
+      if (typeof updateData.tags === 'string') {
+        try {
+          tags = JSON.parse(updateData.tags);
+        } catch (tagsErr) {
+          console.warn('Error parsing tags JSON string:', tagsErr);
+          tags = updateData.tags;
+        }
+      } else if (Array.isArray(updateData.tags)) {
+        tags = updateData.tags;
+      }
+    }
+
     // Prepare update data
     const updates = {
       ...updateData,
       updatedAt: admin.firestore.Timestamp.now()
     };
+
+    // Update location and tags if provided
+    if (Object.keys(location).length > 0) {
+      updates.location = location;
+    }
+    if (tags.length > 0) {
+      updates.tags = tags;
+    }
+
+    // Update images if new ones were uploaded
+    if (bannerImageUrl || eventImagesUrls.length > 0) {
+      if (bannerImageUrl) {
+        updates.bannerImage = bannerImageUrl;
+      }
+      if (eventImagesUrls.length > 0) {
+        updates.images = eventImagesUrls;
+      }
+    }
+
+    // Always update images array if provided (even if empty to clear images)
+    if (req.firebaseStorageUrls || (updateData.images !== undefined)) {
+      // Combine banner and event images for the images array
+      const allImages = [];
+      if (bannerImageUrl) {
+        allImages.push(bannerImageUrl);
+      }
+      if (eventImagesUrls.length > 0) {
+        allImages.push(...eventImagesUrls);
+      }
+      
+      updates.images = allImages;
+      updates.bannerImage = bannerImageUrl;
+    }
 
     // Convert dates if provided with validation
     if (updates.eventDate && typeof updates.eventDate === 'string') {
@@ -1106,6 +1240,12 @@ exports.updateEvent = async (req, res) => {
     // Get updated event
     const updatedDoc = await eventRef.get();
     const updatedEvent = updatedDoc.data();
+
+    console.log('Event updated successfully with images:', {
+      bannerImage: !!bannerImageUrl,
+      eventImages: eventImagesUrls.length,
+      totalImages: (bannerImageUrl ? 1 : 0) + eventImagesUrls.length
+    });
 
     res.status(200).json({
       success: true,

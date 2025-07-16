@@ -32,7 +32,11 @@
       "package": "com.p.zzles.xscard",
       "permissions": [
         "INTERNET",
-        "CAMERA"
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO"
       ]
     },
     "web": {
@@ -46,7 +50,14 @@
     "owner": "p.zzles",
     "id": "a84f7923-57e3-41c8-a3dc-3c07fb9013dc",
     "plugins": [
-      "expo-font"
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to let you upload profile images and company logos.",
+          "cameraPermission": "The app accesses your camera to let you take photos for profile images and company logos."
+        }
+      ]
     ]
   }
 }

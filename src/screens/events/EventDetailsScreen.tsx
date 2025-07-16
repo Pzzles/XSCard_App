@@ -37,6 +37,7 @@ type RootStackParamList = {
   QRScanner: { event: Event };
   CheckInDashboard: { event: Event };
   CreateEvent: { editEvent?: Event };
+  EditEvent: { eventId: string; event?: Event };
   EventAnalytics: { event: Event };
   PaymentPending: { eventId: string; paymentUrl?: string; paymentReference?: string; paymentType?: string; registrationId?: string };
 };
@@ -611,7 +612,7 @@ export default function EventDetailsScreen() {
         title="Event Details"
         rightIcon={
           isOrganizer ? (
-            <TouchableOpacity onPress={() => navigation.navigate('CreateEvent', { editEvent: event })}>
+            <TouchableOpacity onPress={() => navigation.navigate('EditEvent', { eventId: event.id, event: event })}>
               <MaterialIcons name="edit" size={24} color={COLORS.black} />
             </TouchableOpacity>
           ) : undefined
