@@ -146,23 +146,12 @@ export default function EditEventScreen() {
     });
 
     // Set existing images for display
-    // Check if event has both bannerImage and images array or just images array
-    const existingImages = [];
-    
-    if (event.bannerImage) {
-      existingImages.push(event.bannerImage);
-    }
-    
-    if (event.images && Array.isArray(event.images)) {
-      // If we already added banner image, skip it in the images array
-      const imagesToAdd = event.bannerImage 
-        ? event.images.filter(img => img !== event.bannerImage)
-        : event.images;
-      existingImages.push(...imagesToAdd);
-    }
-
-    if (existingImages.length > 0) {
-      setSelectedImages(existingImages);
+    // Use the images array from the event, which should contain all images including banner
+    if (event.images && Array.isArray(event.images) && event.images.length > 0) {
+      setSelectedImages(event.images);
+    } else if (event.bannerImage) {
+      // Fallback: if no images array but has banner image
+      setSelectedImages([event.bannerImage]);
     }
   };
 
@@ -227,140 +216,103 @@ export default function EditEventScreen() {
         return;
       }
 
-      // Check if we have new images (local URIs) that need to be uploaded
-      const newImages = selectedImages.filter(uri => uri.startsWith('file://') || uri.startsWith('content://'));
-      const existingImages = selectedImages.filter(uri => !uri.startsWith('file://') && !uri.startsWith('content://'));
+      // Separate new images (local files) from existing images (URLs)
+      const newImages: string[] = [];
+      const existingImages: string[] = [];
 
-      console.log('Image analysis:', {
+      selectedImages.forEach(uri => {
+        if (uri.startsWith('file://') || uri.startsWith('content://') || uri.startsWith('ph://')) {
+          // These are new images picked from gallery
+          newImages.push(uri);
+        } else if (uri.startsWith('https://') || uri.startsWith('http://')) {
+          // These are existing Firebase Storage URLs
+          existingImages.push(uri);
+        }
+      });
+
+      console.log('Image separation:', {
         totalImages: selectedImages.length,
         newImages: newImages.length,
         existingImages: existingImages.length
       });
 
-      // Prepare payload - use FormData if we have new images, otherwise use JSON
+      // --------------------------
+      // Prepare FormData payload
+      // --------------------------
+      const payload = new FormData();
+
+      // Append basic string/numeric fields (all must be strings in FormData)
+      payload.append('title', eventData.title);
+      payload.append('description', eventData.description);
+      payload.append('eventDate', eventData.eventDate ? new Date(eventData.eventDate).toISOString() : '');
+      if (eventData.endDate) {
+        payload.append('endDate', new Date(eventData.endDate).toISOString());
+      }
+      payload.append('category', eventData.category);
+      payload.append('eventType', eventData.eventType);
+      payload.append('ticketPrice', eventData.ticketPrice.toString());
+      payload.append('maxAttendees', eventData.maxAttendees.toString());
+      payload.append('visibility', eventData.visibility);
+
+      // Location & tags as JSON strings for backend parsing
+      payload.append('location', JSON.stringify(eventData.location));
+      payload.append('tags', JSON.stringify(eventData.tags || []));
+
+      // Send existing images as URLs (not files)
+      if (existingImages.length > 0) {
+        payload.append('existingImages', JSON.stringify(existingImages));
+      }
+
+      // Send new images as files for Firebase upload
       if (newImages.length > 0) {
-        // --------------------------
-        // FormData approach (with new images)
-        // --------------------------
-        const payload = new FormData();
-
-        // Append basic string/numeric fields
-        payload.append('title', eventData.title);
-        payload.append('description', eventData.description);
-        payload.append('eventDate', eventData.eventDate ? new Date(eventData.eventDate).toISOString() : '');
-        payload.append('endDate', eventData.endDate ? new Date(eventData.endDate).toISOString() : '');
-        payload.append('category', eventData.category);
-        payload.append('eventType', eventData.eventType);
-        payload.append('ticketPrice', eventData.ticketPrice.toString());
-        payload.append('maxAttendees', eventData.maxAttendees.toString());
-        payload.append('visibility', eventData.visibility);
-
-        // Location & tags as JSON strings
-        payload.append('location', JSON.stringify(eventData.location));
-        payload.append('tags', JSON.stringify(eventData.tags || []));
-
-        // Handle images - first image as banner, rest as event images
-        if (selectedImages.length > 0) {
-          const firstImage = selectedImages[0];
-          
-          // If first image is new, add it as banner
-          if (firstImage.startsWith('file://') || firstImage.startsWith('content://')) {
-            const bannerName = firstImage.split('/').pop() || `banner_${Date.now()}.jpg`;
-            payload.append('bannerImage', {
-              uri: firstImage,
-              name: bannerName,
-              type: 'image/jpeg',
-            } as any);
-          } else {
-            // Keep existing banner image
-            payload.append('bannerImage', firstImage);
-          }
-
-          // Add remaining images
-          selectedImages.slice(1).forEach((uri, idx) => {
-            if (uri.startsWith('file://') || uri.startsWith('content://')) {
-              const name = uri.split('/').pop() || `image_${idx}_${Date.now()}.jpg`;
-              payload.append('eventImages', {
-                uri,
-                name,
-                type: 'image/jpeg',
-              } as any);
-            } else {
-              // Keep existing image
-              payload.append('eventImages', uri);
-            }
-          });
+        // First new image becomes banner if it's the first overall image
+        if (selectedImages[0] && newImages.includes(selectedImages[0])) {
+          const bannerUri = selectedImages[0];
+          const bannerName = bannerUri.split('/').pop() || `banner_${Date.now()}.jpg`;
+          payload.append('bannerImage', {
+            uri: bannerUri,
+            name: bannerName,
+            type: 'image/jpeg',
+          } as any);
         }
 
-        // Send existing images that weren't replaced
-        if (existingImages.length > 0) {
-          payload.append('existingImages', JSON.stringify(existingImages));
+        // Add other new images as event images
+        const otherNewImages = newImages.filter(img => img !== selectedImages[0]);
+        otherNewImages.forEach((uri, idx) => {
+          const name = uri.split('/').pop() || `image_${idx}_${Date.now()}.jpg`;
+          payload.append('eventImages', {
+            uri,
+            name,
+            type: 'image/jpeg',
+          } as any);
+        });
+      }
+
+      // Send the order of all images (mix of existing URLs and new files)
+      payload.append('imageOrder', JSON.stringify(selectedImages));
+
+      console.log('[UpdateEvent] Submitting FormData with fields:', Array.from(payload.keys()));
+
+      const response = await authenticatedFetchWithRefresh(
+        ENDPOINTS.UPDATE_EVENT.replace(':eventId', eventId),
+        {
+          method: 'PATCH',
+          body: payload,
         }
+      );
 
-        console.log('[UpdateEvent] Submitting FormData with fields:', Array.from(payload.keys()));
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Failed to update event: ${response.status}`);
+      }
 
-        const response = await authenticatedFetchWithRefresh(
-          ENDPOINTS.UPDATE_EVENT.replace(':eventId', eventId),
-          {
-            method: 'PATCH',
-            body: payload,
-          }
-        );
+      const result = await response.json();
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || `Failed to update event: ${response.status}`);
-        }
-
-        const result = await response.json();
-        if (result.success) {
-          toast.success('Success', 'Event updated successfully');
-          navigation.navigate('MyEvents');
-        } else {
-          throw new Error(result.message || 'Failed to update event');
-        }
+      if (result.success) {
+        toast.success('Success', 'Event updated successfully');
+        navigation.navigate('MyEvents');
       } else {
-        // --------------------------
-        // JSON approach (no new images)
-        // --------------------------
-        const updateData = {
-          title: eventData.title,
-          description: eventData.description,
-          eventDate: eventData.eventDate ? new Date(eventData.eventDate).toISOString() : '',
-          endDate: eventData.endDate ? new Date(eventData.endDate).toISOString() : null,
-          category: eventData.category,
-          eventType: eventData.eventType,
-          ticketPrice: eventData.ticketPrice,
-          maxAttendees: eventData.maxAttendees,
-          visibility: eventData.visibility,
-          location: eventData.location,
-          images: selectedImages, // Keep existing images
-          tags: eventData.tags,
-        };
-
-        console.log('[UpdateEvent] Submitting JSON data:', updateData);
-
-        const response = await authenticatedFetchWithRefresh(
-          ENDPOINTS.UPDATE_EVENT.replace(':eventId', eventId),
-          {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(updateData),
-          }
-        );
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || `Failed to update event: ${response.status}`);
-        }
-
-        const result = await response.json();
-        if (result.success) {
-          toast.success('Success', 'Event updated successfully');
-          navigation.navigate('MyEvents');
-        } else {
-          throw new Error(result.message || 'Failed to update event');
-        }
+        throw new Error(result.message || 'Failed to update event');
       }
 
     } catch (error) {
