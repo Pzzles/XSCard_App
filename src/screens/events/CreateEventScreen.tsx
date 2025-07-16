@@ -13,10 +13,11 @@ import {
   Platform,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { useCallback } from 'react';
 
 import { COLORS } from '../../constants/colors';
 import EventHeader from '../../components/EventHeader';
@@ -28,6 +29,7 @@ import {
   EventCategory,
   EventLocation,
 } from '../../types/events';
+import { getUserPlan, getPlanLimits } from '../../utils/userPlan';
 
 type NavigationProp = NativeStackNavigationProp<any>;
 
@@ -71,7 +73,7 @@ export default function CreateEventScreen() {
     category: 'other' as EventCategory,
     eventType: 'free' as 'free' | 'paid',
     ticketPrice: 0,
-    maxAttendees: 50,
+    maxAttendees: 0,
     visibility: 'public' as 'public' | 'private' | 'invite-only',
     images: [],
     tags: [],
@@ -88,6 +90,78 @@ export default function CreateEventScreen() {
   // Form validation
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // User plan for image limits
+  const [userPlan, setUserPlan] = useState<string>('free');
+  const [maxImages, setMaxImages] = useState<number>(1);
+  // Check if user is registered as event organiser
+  const [isOrganiser, setIsOrganiser] = useState<boolean>(false);
+  const [checkingOrganiserStatus, setCheckingOrganiserStatus] = useState<boolean>(false);
+  const [lastStatusCheck, setLastStatusCheck] = useState<number>(0);
+
+    // Check user plan on component mount
+  useEffect(() => {
+    const checkUserPlan = async () => {
+      const plan = await getUserPlan();
+      const limits = getPlanLimits(plan);
+      setUserPlan(plan);
+      setMaxImages(limits.maxImages);
+    };
+    checkUserPlan();
+  }, []);
+
+  // Check organiser status function with debouncing
+  const checkOrganiserStatus = useCallback(async (force: boolean = false) => {
+    // Debounce: Don't check if we checked less than 5 seconds ago (unless forced)
+    const now = Date.now();
+    if (!force && (now - lastStatusCheck) < 5000) {
+      console.log('Skipping organiser status check - too soon since last check');
+      return;
+    }
+    
+    setLastStatusCheck(now);
+    setCheckingOrganiserStatus(true);
+    
+    try {
+      const response = await authenticatedFetchWithRefresh(ENDPOINTS.GET_ORGANISER_STATUS);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Organiser status response:', data);
+        const isActiveOrganiser = data.success && data.data?.status === 'active';
+        setIsOrganiser(isActiveOrganiser);
+        
+        // Only show success message if this was a manual refresh
+        if (isActiveOrganiser && force) {
+          console.log('User is now an active organiser');
+        }
+      } else {
+        console.log('Failed to check organiser status:', response.status);
+        if (response.status === 404) {
+          console.log('Organiser endpoint not found - user is not registered as organiser');
+          // Don't show error toast for 404 - it just means user isn't an organiser
+        }
+        setIsOrganiser(false);
+      }
+    } catch (error) {
+      console.error('Error checking organiser status:', error);
+      if (error instanceof Error && error.message?.includes('fetch')) {
+        // Only show network error toast if this was a manual refresh
+        if (force) {
+          toast.warning('Network Error', 'Unable to connect to server. Please check your network connection and ensure the backend is running.');
+        }
+      }
+      setIsOrganiser(false);
+    } finally {
+      setCheckingOrganiserStatus(false);
+    }
+  }, [toast, lastStatusCheck]);
+
+  // Check organiser status when screen is focused (including when returning from registration)
+  useFocusEffect(
+    useCallback(() => {
+      checkOrganiserStatus();
+    }, [checkOrganiserStatus])
+  );
+
   // Step validation
   const validateStep = (step: number): boolean => {
     const newErrors: Record<string, string> = {};
@@ -103,8 +177,8 @@ export default function CreateEventScreen() {
         if (formData.eventType === 'paid' && formData.ticketPrice <= 0) {
           newErrors.ticketPrice = 'Ticket price must be greater than 0 for paid events';
         }
-        if (formData.maxAttendees <= 0) {
-          newErrors.maxAttendees = 'Maximum attendees must be greater than 0';
+        if (formData.maxAttendees < 0) {
+          newErrors.maxAttendees = 'Maximum attendees cannot be negative (0 = unlimited)';
         }
         break;
 
@@ -194,6 +268,21 @@ export default function CreateEventScreen() {
   // Image handling
   const pickImages = async () => {
     try {
+      // Check user plan limits
+      const userPlan = await getUserPlan();
+      const planLimits = getPlanLimits(userPlan);
+      const maxImages = planLimits.maxImages;
+      
+      // Check if user has reached their limit
+      if (selectedImages.length >= maxImages) {
+        if (userPlan === 'free') {
+          toast.warning('Image Limit Reached', 'Free users can upload 1 image. Upgrade to Premium for up to 5 images.');
+        } else {
+          toast.warning('Image Limit Reached', `You can upload up to ${maxImages} images with your current plan.`);
+        }
+        return;
+      }
+
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
         toast.warning('Permission needed', 'Please grant permission to access your photo library.');
@@ -202,14 +291,21 @@ export default function CreateEventScreen() {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsMultipleSelection: true,
+        allowsMultipleSelection: userPlan !== 'free', // Only allow multiple selection for non-free users
         quality: 0.8,
         aspect: [16, 9],
       });
 
       if (!result.canceled && result.assets) {
         const newImages = result.assets.map(asset => asset.uri);
-        setSelectedImages(prev => [...prev, ...newImages].slice(0, 5)); // Max 5 images
+        const availableSlots = maxImages - selectedImages.length;
+        const imagesToAdd = newImages.slice(0, availableSlots);
+        
+        if (newImages.length > availableSlots) {
+          toast.warning('Image Limit', `Only ${availableSlots} more images can be added with your current plan.`);
+        }
+        
+        setSelectedImages(prev => [...prev, ...imagesToAdd]);
       }
     } catch (error) {
       console.error('Error picking images:', error);
@@ -246,6 +342,15 @@ export default function CreateEventScreen() {
       // Final validation
       if (!validateStep(STEPS.BASIC_INFO) || !validateStep(STEPS.DETAILS) || !validateStep(STEPS.LOCATION)) {
         toast.warning('Validation Error', 'Please fix the errors before creating the event.');
+        return;
+      }
+      
+      // Check if trying to create a paid event without being an organiser
+      if (formData.eventType === 'paid' && formData.ticketPrice > 0 && !isOrganiser) {
+        toast.warning(
+          'Organiser Registration Required', 
+          'You must register as an event organiser to create paid events.'
+        );
         return;
       }
 
@@ -505,18 +610,60 @@ export default function CreateEventScreen() {
       </View>
 
       {formData.eventType === 'paid' && (
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Ticket Price (R) *</Text>
-          <TextInput
-            style={[styles.input, errors.ticketPrice && styles.inputError]}
-            value={formData.ticketPrice.toString()}
-            onChangeText={(text) => updateFormData({ ticketPrice: parseInt(text) || 0 })}
-            placeholder="0"
-            placeholderTextColor={COLORS.gray}
-            keyboardType="numeric"
-          />
-          {errors.ticketPrice && <Text style={styles.errorText}>{errors.ticketPrice}</Text>}
-        </View>
+        <>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Ticket Price (R) *</Text>
+            <TextInput
+              style={[styles.input, errors.ticketPrice && styles.inputError]}
+              value={formData.ticketPrice.toString()}
+              onChangeText={(text) => updateFormData({ ticketPrice: parseInt(text) || 0 })}
+              placeholder="0"
+              placeholderTextColor={COLORS.gray}
+              keyboardType="numeric"
+            />
+            {errors.ticketPrice && <Text style={styles.errorText}>{errors.ticketPrice}</Text>}
+          </View>
+          
+          {checkingOrganiserStatus ? (
+            <View style={styles.organiserInfoContainer}>
+              <ActivityIndicator size="small" color={COLORS.primary} />
+              <Text style={styles.organiserInfoText}>
+                Checking organiser status...
+              </Text>
+            </View>
+          ) : !isOrganiser && (
+            <View style={styles.organiserInfoContainer}>
+              <MaterialIcons name="info-outline" size={24} color={COLORS.primary} />
+              <Text style={styles.organiserInfoText}>
+                To create paid events, you must register as an event organiser to collect payments.
+              </Text>
+              <View style={styles.organiserButtonContainer}>
+                <TouchableOpacity 
+                  style={styles.organiserButton}
+                  onPress={() => {
+                    navigation.navigate('OrganiserRegistration');
+                    // Refresh organiser status when user returns
+                    const unsubscribe = navigation.addListener('focus', () => {
+                      checkOrganiserStatus();
+                      unsubscribe();
+                    });
+                  }}
+                >
+                  <Text style={styles.organiserButtonText}>Become an Event Organiser</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={styles.refreshButton}
+                  onPress={() => checkOrganiserStatus(true)}
+                  disabled={checkingOrganiserStatus}
+                >
+                  <MaterialIcons name="refresh" size={16} color={COLORS.primary} />
+                  <Text style={styles.refreshButtonText}>Refresh Status</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </>
       )}
 
       <View style={styles.inputGroup}>
@@ -524,8 +671,14 @@ export default function CreateEventScreen() {
         <TextInput
           style={[styles.input, errors.maxAttendees && styles.inputError]}
           value={formData.maxAttendees.toString()}
-          onChangeText={(text) => updateFormData({ maxAttendees: parseInt(text) || 50 })}
-          placeholder="50"
+          onChangeText={(text) => {
+            const parsed = parseInt(text);
+            // Allow empty string (will be 0) or valid numbers
+            if (text === '' || !isNaN(parsed)) {
+              updateFormData({ maxAttendees: parsed || 0 });
+            }
+          }}
+          placeholder="0 (unlimited)"
           placeholderTextColor={COLORS.gray}
           keyboardType="numeric"
         />
@@ -679,7 +832,10 @@ export default function CreateEventScreen() {
           Add Event Images
         </Text>
         <Text style={styles.imagePickerSubtext}>
-          Select up to 5 images (first image will be the banner)
+          {userPlan === 'free' 
+            ? 'Free users: 1 image (first image will be the banner)'
+            : `Select up to ${maxImages} images (first image will be the banner)`
+          }
         </Text>
       </TouchableOpacity>
 
@@ -739,7 +895,7 @@ export default function CreateEventScreen() {
         </View>
         <View style={styles.reviewItem}>
           <Text style={styles.reviewLabel}>Max Attendees:</Text>
-          <Text style={styles.reviewValue}>{formData.maxAttendees}</Text>
+          <Text style={styles.reviewValue}>{formData.maxAttendees === 0 ? 'Unlimited' : formData.maxAttendees}</Text>
         </View>
         <View style={styles.reviewItem}>
           <Text style={styles.reviewLabel}>Visibility:</Text>
@@ -1176,5 +1332,55 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: COLORS.white,
+  },
+  organiserInfoContainer: {
+    flexDirection: 'column',
+    backgroundColor: '#f0f9ff',
+    padding: 16,
+    borderRadius: 12,
+    marginVertical: 8,
+    borderWidth: 1,
+    borderColor: '#d0e8ff',
+    gap: 12,
+  },
+  organiserInfoText: {
+    fontSize: 14,
+    color: COLORS.black,
+    lineHeight: 20,
+  },
+  organiserButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  organiserButtonText: {
+    color: COLORS.white,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  organiserButtonContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  refreshButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    marginLeft: 12,
+  },
+  refreshButtonText: {
+    color: COLORS.primary,
+    fontSize: 12,
+    marginLeft: 4,
   },
 }); 

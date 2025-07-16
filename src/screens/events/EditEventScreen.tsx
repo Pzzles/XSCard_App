@@ -28,6 +28,7 @@ import {
   EventLocation,
   Event,
 } from '../../types/events';
+import { getUserPlan, getPlanLimits } from '../../utils/userPlan';
 
 type RootStackParamList = {
   EditEvent: { eventId: string; event?: Event };
@@ -79,7 +80,7 @@ export default function EditEventScreen() {
     category: 'other' as EventCategory,
     eventType: 'free',
     ticketPrice: 0,
-    maxAttendees: -1,
+    maxAttendees: 0,
     visibility: 'public',
     location: {
       venue: '',
@@ -158,6 +159,21 @@ export default function EditEventScreen() {
   // Image handling functions
   const pickImages = async () => {
     try {
+      // Check user plan limits
+      const userPlan = await getUserPlan();
+      const planLimits = getPlanLimits(userPlan);
+      const maxImages = planLimits.maxImages;
+      
+      // Check if user has reached their limit
+      if (selectedImages.length >= maxImages) {
+        if (userPlan === 'free') {
+          toast.warning('Image Limit Reached', 'Free users can upload 1 image. Upgrade to Premium for up to 5 images.');
+        } else {
+          toast.warning('Image Limit Reached', `You can upload up to ${maxImages} images with your current plan.`);
+        }
+        return;
+      }
+
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
         toast.warning('Permission needed', 'Please grant permission to access your photo library.');
@@ -166,14 +182,21 @@ export default function EditEventScreen() {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsMultipleSelection: true,
+        allowsMultipleSelection: userPlan !== 'free', // Only allow multiple selection for non-free users
         quality: 0.8,
         aspect: [16, 9],
       });
 
       if (!result.canceled && result.assets) {
         const newImages = result.assets.map(asset => asset.uri);
-        setSelectedImages(prev => [...prev, ...newImages].slice(0, 5)); // Max 5 images
+        const availableSlots = maxImages - selectedImages.length;
+        const imagesToAdd = newImages.slice(0, availableSlots);
+        
+        if (newImages.length > availableSlots) {
+          toast.warning('Image Limit', `Only ${availableSlots} more images can be added with your current plan.`);
+        }
+        
+        setSelectedImages(prev => [...prev, ...imagesToAdd]);
       }
     } catch (error) {
       console.error('Error picking images:', error);
@@ -426,12 +449,18 @@ export default function EditEventScreen() {
         <Text style={styles.label}>Maximum Attendees</Text>
         <TextInput
           style={styles.input}
-          value={eventData.maxAttendees === -1 ? '' : eventData.maxAttendees.toString()}
-          onChangeText={(text) => setEventData(prev => ({ ...prev, maxAttendees: text === '' ? -1 : parseInt(text) || -1 }))}
-          placeholder="Unlimited"
+          value={eventData.maxAttendees === 0 ? '' : eventData.maxAttendees.toString()}
+          onChangeText={(text) => {
+            const parsed = parseInt(text);
+            // Allow empty string (will be 0) or valid numbers
+            if (text === '' || !isNaN(parsed)) {
+              setEventData(prev => ({ ...prev, maxAttendees: parsed || 0 }));
+            }
+          }}
+          placeholder="0 (unlimited)"
           keyboardType="numeric"
         />
-        <Text style={styles.helperText}>Leave empty for unlimited attendees</Text>
+        <Text style={styles.helperText}>Leave empty or enter 0 for unlimited attendees</Text>
       </View>
     </View>
   );
@@ -506,7 +535,8 @@ export default function EditEventScreen() {
           Add Event Images
         </Text>
         <Text style={styles.imagePickerSubtext}>
-          Select up to 5 images (first image will be the banner)
+          {/* Dynamic text based on user plan will be added here */}
+          Select images for your event (first image will be the banner)
         </Text>
       </TouchableOpacity>
 
@@ -566,7 +596,7 @@ export default function EditEventScreen() {
         </View>
         <View style={styles.reviewItem}>
           <Text style={styles.reviewLabel}>Max Attendees:</Text>
-          <Text style={styles.reviewValue}>{eventData.maxAttendees === -1 ? 'Unlimited' : eventData.maxAttendees}</Text>
+          <Text style={styles.reviewValue}>{eventData.maxAttendees === 0 ? 'Unlimited' : eventData.maxAttendees}</Text>
         </View>
         <View style={styles.reviewItem}>
           <Text style={styles.reviewLabel}>Visibility:</Text>

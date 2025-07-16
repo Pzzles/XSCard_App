@@ -57,6 +57,7 @@ export type RootStackParamList = {
   EventTicket: { event: any; ticket?: any };
   CheckInDashboard: { event: any };
   EventAnalytics: { event: any };
+  OrganiserRegistration: undefined;
 };
 
 export type RootTabParamList = {

@@ -8,7 +8,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ErrorPopup from '../../components/popups/ErrorPopup';
-import { setKeepLoggedInPreference, storeAuthData, updateLastLoginTime, getKeepLoggedInPreference } from '../../utils/authStorage';
+import { setKeepLoggedInPreference, storeAuthData, updateLastLoginTime } from '../../utils/authStorage';
 import { ErrorHandler, ERROR_CODES, handleAuthError, handleNetworkError, createAppError } from '../../utils/errorHandler';
 // Firebase integration
 import { auth } from '../../config/firebaseConfig';
@@ -119,7 +119,7 @@ export default function SignInScreen() {
       console.log('SignIn: Firebase token obtained');
       
       // Now get user data from your backend using the Firebase token
-      const response = await fetch(buildUrl(ENDPOINTS.GET_USER), {
+      const response = await fetch(buildUrl(`/Users/${firebaseUser.uid}`), {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -128,23 +128,23 @@ export default function SignInScreen() {
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const userData = await response.json();
         console.log('SignIn: User data retrieved from backend');
         
         // Store the token and user data using our enhanced storage system
         const token = `Bearer ${firebaseToken}`;
-        const userData = {
-          ...data.user,
-          id: firebaseUser.uid,
-          name: firebaseUser.displayName || '',
-          email: firebaseUser.email || ''
+        const finalUserData = {
+          ...userData,
+          id: userData.uid || firebaseUser.uid,
+          name: userData.name || '',
+          email: userData.email || firebaseUser.email || ''
         };
 
         // Use our Phase 1 storage system to store all auth data
         await storeAuthData({
           userToken: token,
-          userData: userData,
-          userRole: userData.plan === 'admin' ? 'admin' : 'user',
+          userData: finalUserData,
+          userRole: finalUserData.plan === 'admin' ? 'admin' : 'user',
           keepLoggedIn,
           lastLoginTime: Date.now(),
         });
@@ -153,15 +153,6 @@ export default function SignInScreen() {
         await updateLastLoginTime();
 
         console.log('SignIn: Data stored successfully, keepLoggedIn:', keepLoggedIn);
-        
-        // 🔥 FIX: Explicitly save and verify keepLoggedIn preference
-        await setKeepLoggedInPreference(keepLoggedIn);
-        console.log('SignIn: keepLoggedIn preference saved explicitly');
-        
-        // Verify it was saved correctly
-        const storedKeepLoggedIn = await getKeepLoggedInPreference();
-        console.log('SignIn: Verified keepLoggedIn preference:', storedKeepLoggedIn);
-        
         console.log('SignIn: Firebase auth state listener will now handle automatic token refresh');
         
         navigation.replace('MainApp');
@@ -189,14 +180,6 @@ export default function SignInScreen() {
         });
 
         await updateLastLoginTime();
-        
-        // 🔥 FIX: Explicitly save and verify keepLoggedIn preference (fallback case)
-        await setKeepLoggedInPreference(keepLoggedIn);
-        console.log('SignIn: keepLoggedIn preference saved explicitly (fallback case)');
-        
-        // Verify it was saved correctly
-        const storedKeepLoggedIn = await getKeepLoggedInPreference();
-        console.log('SignIn: Verified keepLoggedIn preference (fallback case):', storedKeepLoggedIn);
         
         console.log('SignIn: Firebase-only authentication successful');
         navigation.replace('MainApp');

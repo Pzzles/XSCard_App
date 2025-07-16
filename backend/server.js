@@ -38,6 +38,8 @@ const subscriptionRoutes = require('./routes/subscriptionRoutes'); // Add subscr
 const apkRoutes = require('./routes/apkRoutes'); // Add APK routes
 const eventRoutes = require('./routes/eventRoutes'); // Add event routes
 const testRoutes = require('./routes/testRoutes'); // Add test routes for debugging
+const ticketRoutes = require('./routes/ticketRoutes'); // Add ticket routes
+const eventOrganiserRoutes = require('./routes/eventOrganiserRoutes'); // Add event organiser routes
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -55,6 +57,7 @@ app.use('/', apkRoutes); // Add APK routes for public download
 app.use('/', eventRoutes); // Move event routes to public section for /api/events/public
 app.use('/', userRoutes); // Move user routes to public section so SignIn works
 app.use('/', contactRoutes); // Move contact routes to public section to keep save contact public
+app.use('/api', eventOrganiserRoutes); // Add event organiser routes
 app.use('/api', testRoutes); // Add test routes for debugging
 
 // Add the AddContact endpoint directly to server.js
@@ -609,6 +612,7 @@ app.post('/app-request', async (req, res) => {
 app.use('/', cardRoutes);
 app.use('/', meetingRoutes);
 app.use('/', paymentRoutes);
+app.use('/api/tickets', ticketRoutes);
 
 // Modify the user creation route to handle file upload
 app.post('/api/users', handleSingleUpload('profileImage'), (req, res, next) => {

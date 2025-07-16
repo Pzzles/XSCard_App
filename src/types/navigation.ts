@@ -32,6 +32,7 @@ export type RootStackParamList = {
     paymentType?: 'event_publishing' | 'event_registration';
     registrationId?: string;
   };
+  OrganiserRegistration: undefined;
 };
 
 export type EditCardScreenRouteProp = RouteProp<RootStackParamList, 'EditCard'>;

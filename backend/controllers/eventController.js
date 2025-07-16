@@ -135,7 +135,7 @@ exports.createEvent = async (req, res) => {
       category: req.body.category || 'other',
       eventType: req.body.eventType || 'free',
       ticketPrice: parseFloat(req.body.ticketPrice) || 0,
-      maxAttendees: parseInt(req.body.maxAttendees) || 50,
+      maxAttendees: parseInt(req.body.maxAttendees) || 0,
       visibility: req.body.visibility || 'public',
       location: location,
       tags: tags,
@@ -168,6 +168,24 @@ exports.createEvent = async (req, res) => {
     // Validate required location fields
     if (!eventData.location.venue || !eventData.location.city) {
       return sendError(res, 400, 'Missing required location fields: venue, city');
+    }
+
+    // Validate organiser permissions for paid events
+    if (eventData.eventType === 'paid' && eventData.ticketPrice > 0) {
+      try {
+        const organiserDoc = await db.collection('event_organisers').doc(userId).get();
+        if (!organiserDoc.exists) {
+          return sendError(res, 403, 'You must register as an event organiser to create paid events');
+        }
+        
+        const organiserData = organiserDoc.data();
+        if (organiserData.status !== 'active') {
+          return sendError(res, 403, 'Your event organiser account is not active. Please complete your registration or contact support.');
+        }
+      } catch (error) {
+        console.error('Error checking organiser status:', error);
+        return sendError(res, 500, 'Error validating organiser permissions');
+      }
     }
 
     // Convert date strings to Firestore Timestamps with validation
@@ -786,7 +804,7 @@ exports.registerForEvent = async (req, res) => {
       }
     }
 
-    // Check capacity
+    // Check capacity (0 means unlimited)
     if (eventData.maxAttendees > 0 && eventData.currentAttendees >= eventData.maxAttendees) {
       console.log('Event at full capacity');
       return sendError(res, 400, 'Event is at full capacity');
@@ -863,8 +881,24 @@ exports.registerForEvent = async (req, res) => {
         const randomSuffix = Math.random().toString(36).substring(2, 8);
         const paymentReference = `reg_${eventId.substring(0, 8)}_${timestamp}_${randomSuffix}`;
 
+        // Get event organiser's Paystack subaccount (if available)
+        let subaccount = null;
+        try {
+          const organiserDoc = await db.collection('event_organisers').doc(eventData.organizerId).get();
+          if (organiserDoc.exists) {
+            const organiserData = organiserDoc.data();
+            if (organiserData.status === 'active' && organiserData.paystackSubaccountCode) {
+              subaccount = organiserData.paystackSubaccountCode;
+              console.log('Using organiser subaccount:', subaccount);
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching organiser subaccount:', error);
+          // Continue without subaccount - payment will go to main account
+        }
+
         // Prepare Paystack request parameters
-        const params = JSON.stringify({
+        const paymentParams = {
           email: userInfo.email,
           amount: paymentAmount,
           reference: paymentReference,
@@ -875,9 +909,18 @@ exports.registerForEvent = async (req, res) => {
             registrationId,
             ticketId,
             type: 'event_registration',
+            organiser_id: eventData.organizerId,
             cancel_action: `${baseUrl}/events/registration/payment/cancelled`
           }
-        });
+        };
+
+        // Add subaccount if available
+        if (subaccount) {
+          paymentParams.subaccount = subaccount;
+          paymentParams.transaction_charge = 250; // 2.5% platform fee in kobo
+        }
+
+        const params = JSON.stringify(paymentParams);
 
         // Configure Paystack API request
         const options = {
@@ -1173,7 +1216,7 @@ exports.updateEvent = async (req, res) => {
       category: updateData.category || 'other',
       eventType: updateData.eventType || 'free',
       ticketPrice: parseFloat(updateData.ticketPrice) || 0,
-      maxAttendees: parseInt(updateData.maxAttendees) || 50,
+      maxAttendees: parseInt(updateData.maxAttendees) || 0,
       visibility: updateData.visibility || 'public',
       location: location,
       tags: tags,
@@ -1617,7 +1660,7 @@ exports.getEventById = async (req, res) => {
   }
 };
 
-// Unregister from event
+  // Unregister from event
 exports.unregisterFromEvent = async (req, res) => {
   try {
     const { eventId } = req.params;
@@ -1647,6 +1690,32 @@ exports.unregisterFromEvent = async (req, res) => {
       paymentStatus: registrationData.paymentStatus,
       ticketId: registrationData.ticketId
     });
+
+    // Check if user has been checked in (scanned) - if so, prevent unregistration
+    if (registrationData.ticketId) {
+      const ticketRef = db.collection('tickets').doc(registrationData.ticketId);
+      const ticketDoc = await ticketRef.get();
+      
+      if (ticketDoc.exists) {
+        const ticketData = ticketDoc.data();
+        console.log('Ticket check-in status:', {
+          checkedIn: ticketData.checkedIn,
+          checkedInAt: ticketData.checkedInAt,
+          checkedInBy: ticketData.checkedInBy
+        });
+        
+        // If user has been checked in, prevent unregistration
+        if (ticketData.checkedIn) {
+          console.log('User has been checked in, preventing unregistration');
+          return res.status(400).json({
+            success: false,
+            message: 'You cannot unregister from an event after being checked in. Please contact the event organizer for assistance.',
+            checkedIn: true,
+            checkedInAt: ticketData.checkedInAt ? ticketData.checkedInAt.toDate().toISOString() : null
+          });
+        }
+      }
+    }
 
     // ALWAYS delete the registration regardless of status
     try {
@@ -2713,6 +2782,12 @@ exports.handleRegistrationPaymentCallback = async (req, res) => {
         return res.redirect(`/event-payment-failed.html?reason=reference_mismatch&type=registration&eventId=${eventId}`);
       }
       
+      // Check if registration is already completed to prevent duplicate processing
+      if (registrationData.status === 'registered' && registrationData.paymentStatus === 'completed') {
+        console.log(`[handleRegistrationPaymentCallback] Registration ${registrationId} already completed, skipping duplicate processing`);
+        return res.redirect(`/event-payment-success.html?eventId=${eventId}&registrationId=${registrationId}&type=registration`);
+      }
+      
       // Update registration status
       await registrationRef.update({
         status: 'registered',
@@ -2820,9 +2895,9 @@ exports.handleRegistrationPaymentWebhook = async (req, res) => {
       
       const registrationData = registrationDoc.data();
       
-      // Skip if already completed
+      // Skip if already completed to prevent duplicate processing and notifications
       if (registrationData.status === 'registered' && registrationData.paymentStatus === 'completed') {
-        console.log(`Registration ${registrationId} already completed, skipping webhook`);
+        console.log(`[handleRegistrationPaymentWebhook] Registration ${registrationId} already completed, skipping webhook to prevent duplicate notifications`);
         return res.status(200).send('Webhook received but registration already completed');
       }
       

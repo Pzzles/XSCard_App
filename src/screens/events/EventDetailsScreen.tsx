@@ -268,8 +268,8 @@ export default function EventDetailsScreen() {
     try {
       setRegistering(true);
 
-      // Check if event is full
-      if (event.maxAttendees !== -1 && event.currentAttendees >= event.maxAttendees) {
+      // Check if event is full (0 means unlimited)
+      if (event.maxAttendees > 0 && event.currentAttendees >= event.maxAttendees) {
         toast.warning('Event Full', 'This event is at full capacity.');
         return;
       }
@@ -367,7 +367,22 @@ export default function EventDetailsScreen() {
               );
 
               if (!response.ok) {
-                throw new Error(`Unregistration failed: ${response.status}`);
+                const errorData = await response.json().catch(() => ({}));
+                
+                // Handle specific case when user has been checked in
+                if (response.status === 400 && errorData.checkedIn) {
+                  const checkedInDate = errorData.checkedInAt 
+                    ? new Date(errorData.checkedInAt).toLocaleDateString()
+                    : 'unknown date';
+                  
+                  toast.error(
+                    'Cannot Unregister',
+                    `You cannot unregister from this event because you have already been checked in on ${checkedInDate}. Please contact the event organizer for assistance.`
+                  );
+                  return;
+                }
+                
+                throw new Error(errorData.message || `Unregistration failed: ${response.status}`);
               }
 
               const responseData = await response.json();

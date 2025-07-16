@@ -23,6 +23,7 @@ import { Event, EventTicket, QRCodeData } from '../../types/events';
 import { COLORS } from '../../constants/colors';
 import * as ScreenCapture from 'expo-screen-capture';
 import { BlurView } from 'expo-blur';
+import { generateAndEmailTicketPDF, shareTicketInfo } from '../../services/ticketService';
 
 interface EventTicketScreenProps {
   route: {
@@ -53,6 +54,7 @@ export const EventTicketScreen: React.FC = () => {
   const [showQR, setShowQR] = useState(Platform.OS !== 'ios');
   const revealTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [isCaptured, setIsCaptured] = useState(false);
+  const [emailingPDF, setEmailingPDF] = useState(false);
 
   useEffect(() => {
     loadTicketData();
@@ -188,16 +190,47 @@ export const EventTicketScreen: React.FC = () => {
   };
 
   const shareTicket = async () => {
+    if (!ticket) return;
+    
     try {
-      const eventDate = event.eventDateISO ? new Date(event.eventDateISO) : new Date(event.eventDate);
-      const formattedDate = isNaN(eventDate.getTime()) ? 'Date TBD' : eventDate.toLocaleDateString();
-      
-      await Share.share({
-        message: `My ticket for ${event.title}\n\nEvent: ${event.title}\nDate: ${formattedDate}\nVenue: ${event.location.venue}\n\nTicket ID: ${ticket?.id}`,
-        title: `XSCard Event Ticket - ${event.title}`,
-      });
+      await shareTicketInfo(event, ticket);
     } catch (error) {
       console.error('Error sharing ticket:', error);
+    }
+  };
+
+  const handleEmailPDF = async () => {
+    if (!ticket || !qrData) {
+      Alert.alert('Error', 'Please generate your QR code first before emailing the ticket.');
+      return;
+    }
+
+    setEmailingPDF(true);
+    try {
+      const result = await generateAndEmailTicketPDF(event, ticket, qrData);
+      
+      if (result.success) {
+        Alert.alert(
+          'Success',
+          result.message,
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert(
+          'Error',
+          result.message || 'Failed to send PDF ticket. Please try again.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Error emailing PDF ticket:', error);
+      Alert.alert(
+        'Error',
+        'Failed to send PDF ticket. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setEmailingPDF(false);
     }
   };
 
@@ -306,9 +339,17 @@ export const EventTicketScreen: React.FC = () => {
           <MaterialIcons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Event Ticket</Text>
-          <TouchableOpacity onPress={() => setValueModalVisible(true)}>
-            <MaterialIcons name="download" size={24} color={COLORS.primary} />
-        </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={handleEmailPDF}
+            disabled={emailingPDF || !qrData}
+            style={{ opacity: emailingPDF || !qrData ? 0.5 : 1 }}
+          >
+            {emailingPDF ? (
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            ) : (
+              <MaterialIcons name="email" size={24} color={COLORS.primary} />
+            )}
+          </TouchableOpacity>
       </View>
 
       {/* Ticket Card */}
@@ -379,6 +420,32 @@ export const EventTicketScreen: React.FC = () => {
                 >
                     <MaterialIcons name="refresh" size={20} color={COLORS.primary} />
                   <Text style={styles.actionButtonText}>Refresh</Text>
+                </TouchableOpacity>
+              </View>
+              
+              {/* Ticket Actions */}
+              <View style={styles.ticketActions}>
+                <TouchableOpacity 
+                  style={styles.actionButton}
+                  onPress={shareTicket}
+                >
+                    <MaterialIcons name="share" size={20} color={COLORS.primary} />
+                  <Text style={styles.actionButtonText}>Share</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.actionButton, { backgroundColor: COLORS.primary }]}
+                  onPress={handleEmailPDF}
+                  disabled={emailingPDF}
+                >
+                  {emailingPDF ? (
+                    <ActivityIndicator size="small" color={COLORS.white} />
+                  ) : (
+                    <MaterialIcons name="email" size={20} color={COLORS.white} />
+                  )}
+                  <Text style={[styles.actionButtonText, { color: COLORS.white }]}>
+                    {emailingPDF ? 'Sending...' : 'Email PDF'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </>
@@ -659,6 +726,11 @@ const styles = StyleSheet.create({
   qrActions: {
     flexDirection: 'row',
     gap: 16,
+  },
+  ticketActions: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 16,
   },
   actionButton: {
     flexDirection: 'row',
