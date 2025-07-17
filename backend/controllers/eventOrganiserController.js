@@ -12,8 +12,8 @@ const createPaystackSubaccount = async (organiserData) => {
     business_name: organiserData.businessName,
     settlement_bank: organiserData.bankCode,
     account_number: organiserData.accountNumber,
-    percentage_charge: 2.5, // 2.5% fee for the platform
-    description: `Event organiser account for ${organiserData.businessName}`,
+            percentage_charge: 10, // 10% fee for the platform
+    description: `Payment collection account for ${organiserData.businessName}`,
     primary_contact_email: organiserData.email,
     primary_contact_name: organiserData.contactName,
     primary_contact_phone: organiserData.phone,
@@ -210,7 +210,7 @@ const registerOrganiserStep1 = async (req, res) => {
     if (existingOrganiser.exists) {
       return res.status(409).json({
         success: false,
-        message: 'User is already registered as an event organiser'
+        message: 'User is already registered for payment collection'
       });
     }
 
@@ -464,7 +464,7 @@ const registerOrganiserStep3 = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Event organiser registration completed successfully',
+      message: 'Payment collection registration completed successfully',
       data: {
         status: 'active',
         canCreatePaidEvents: true

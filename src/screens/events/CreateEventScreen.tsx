@@ -349,7 +349,7 @@ export default function CreateEventScreen() {
       if (formData.eventType === 'paid' && formData.ticketPrice > 0 && !isOrganiser) {
         toast.warning(
           'Organiser Registration Required', 
-          'You must register as an event organiser to create paid events.'
+          'You must register to collect payments to create paid events.'
         );
         return;
       }
@@ -635,7 +635,7 @@ export default function CreateEventScreen() {
             <View style={styles.organiserInfoContainer}>
               <MaterialIcons name="info-outline" size={24} color={COLORS.primary} />
               <Text style={styles.organiserInfoText}>
-                To create paid events, you must register as an event organiser to collect payments.
+                To create paid events, you must register to collect payments from attendees.
               </Text>
               <View style={styles.organiserButtonContainer}>
                 <TouchableOpacity 
@@ -649,7 +649,7 @@ export default function CreateEventScreen() {
                     });
                   }}
                 >
-                  <Text style={styles.organiserButtonText}>Become an Event Organiser</Text>
+                  <Text style={styles.organiserButtonText}>Register for Payment Collection</Text>
                 </TouchableOpacity>
                 
                 <TouchableOpacity 

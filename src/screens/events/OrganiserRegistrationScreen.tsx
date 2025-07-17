@@ -241,7 +241,7 @@ export default function OrganiserRegistrationScreen({ navigation }: OrganiserReg
           // Registration completed
           Alert.alert(
             'Registration Complete!',
-            'Your event organiser account has been created successfully. You can now create paid events and collect payments.',
+            'Your payment collection account has been created successfully. You can now create paid events and collect payments from attendees.',
             [
               {
                 text: 'Start Creating Events',
@@ -316,7 +316,7 @@ export default function OrganiserRegistrationScreen({ navigation }: OrganiserReg
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>Business Information</Text>
       <Text style={styles.stepDescription}>
-        Provide your business details to set up your event organiser account.
+        Provide your business details to set up your payment collection account.
       </Text>
 
       <View style={styles.inputContainer}>
@@ -508,7 +508,7 @@ export default function OrganiserRegistrationScreen({ navigation }: OrganiserReg
         <MaterialIcons name="info" size={20} color={COLORS.primary} />
         <Text style={styles.infoText}>
           Your banking details are securely stored and will be used to receive payments from event attendees. 
-          We charge a 2.5% platform fee on each transaction.
+          We charge a 10% platform fee on each transaction.
         </Text>
       </View>
     </View>
@@ -622,7 +622,7 @@ export default function OrganiserRegistrationScreen({ navigation }: OrganiserReg
 
   return (
     <SafeAreaView style={styles.container}>
-      <EventHeader title="Event Organiser Registration" />
+      <EventHeader title="Payment Collection Registration" />
 
       {/* Progress indicator */}
       <View style={styles.progressContainer}>

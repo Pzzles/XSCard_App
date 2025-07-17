@@ -175,12 +175,12 @@ exports.createEvent = async (req, res) => {
       try {
         const organiserDoc = await db.collection('event_organisers').doc(userId).get();
         if (!organiserDoc.exists) {
-          return sendError(res, 403, 'You must register as an event organiser to create paid events');
+          return sendError(res, 403, 'You must register to collect payments to create paid events');
         }
         
         const organiserData = organiserDoc.data();
         if (organiserData.status !== 'active') {
-          return sendError(res, 403, 'Your event organiser account is not active. Please complete your registration or contact support.');
+          return sendError(res, 403, 'Your payment collection account is not active. Please complete your registration or contact support.');
         }
       } catch (error) {
         console.error('Error checking organiser status:', error);
@@ -917,7 +917,7 @@ exports.registerForEvent = async (req, res) => {
         // Add subaccount if available
         if (subaccount) {
           paymentParams.subaccount = subaccount;
-          paymentParams.transaction_charge = 250; // 2.5% platform fee in kobo
+          paymentParams.transaction_charge = 1000; // 10% platform fee in kobo
         }
 
         const params = JSON.stringify(paymentParams);
