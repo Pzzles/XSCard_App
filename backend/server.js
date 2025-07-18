@@ -49,18 +49,210 @@ app.get('/saveContact', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'saveContact.html'));
 });
 
-// Public routes - must be before authentication middleware
-app.use(express.static(path.join(__dirname, 'public')));
-app.use('/', paymentRoutes); // Add this line before protected routes
-app.use('/', subscriptionRoutes); // Add subscription routes
-app.use('/', apkRoutes); // Add APK routes for public download
-app.use('/', eventRoutes); // Move event routes to public section for /api/events/public
-app.use('/', userRoutes); // Move user routes to public section so SignIn works
-app.use('/', contactRoutes); // Move contact routes to public section to keep save contact public
-app.use('/api', eventOrganiserRoutes); // Add event organiser routes
-app.use('/api', testRoutes); // Add test routes for debugging
+// Define public endpoints that need to be accessible without authentication
+// These MUST be defined before any routes that might have authentication middleware
 
-// Add the AddContact endpoint directly to server.js
+// Modified public endpoint to get specific card by userId and cardIndex - MOVED TO VERY TOP
+app.get('/public/cards/:id', async (req, res) => {
+    try {
+        const userId = req.params.id;
+        const cardIndex = parseInt(req.query.cardIndex) || 0;
+        console.log(`Fetching public card for user ${userId}, card index ${cardIndex}`);
+
+        const cardRef = db.collection('cards').doc(userId);
+        const doc = await cardRef.get();
+        
+        if (!doc.exists) {
+            console.log(`User ${userId} not found`);
+            return res.status(404).send({ message: 'User not found' });
+        }
+
+        const userData = doc.data();
+        if (!userData.cards || !userData.cards[cardIndex]) {
+            console.log(`Card index ${cardIndex} not found for user ${userId}`);
+            return res.status(404).send({ message: 'Card not found' });
+        }
+
+        // Get the specific card and add user ID
+        const card = {
+            id: userId,
+            ...userData.cards[cardIndex]
+        };
+
+        // Log image URLs for debugging
+        console.log('Card data being sent to client:');
+        console.log('- Profile Image:', card.profileImage);
+        console.log('- Company Logo:', card.companyLogo);
+
+        res.status(200).send(card);
+    } catch (error) {
+        console.error('Error fetching public card:', error);
+        res.status(500).send({ 
+            message: 'Error fetching card', 
+            error: error.message 
+        });
+    }
+});
+
+// Add scan tracking endpoint as public
+app.post('/track-scan', async (req, res) => {
+    const { userId, cardIndex = 0, scanType = 'save' } = req.body;
+    
+    console.log('Track scan called:', { userId, cardIndex, scanType });
+    
+    // Validate required parameters
+    if (!userId) {
+        return res.status(400).send({ 
+            success: false,
+            message: 'User ID is required'
+        });
+    }
+
+    // Validate cardIndex is a number
+    const parsedCardIndex = parseInt(cardIndex);
+    if (isNaN(parsedCardIndex) || parsedCardIndex < 0) {
+        return res.status(400).send({ 
+            success: false,
+            message: 'Valid card index is required'
+        });
+    }
+
+    try {
+        // Get user's cards
+        const cardRef = db.collection('cards').doc(userId);
+        const cardDoc = await cardRef.get();
+
+        if (!cardDoc.exists) {
+            return res.status(404).send({ 
+                success: false,
+                message: 'User cards not found' 
+            });
+        }
+
+        const cardsData = cardDoc.data();
+        if (!cardsData.cards || !Array.isArray(cardsData.cards)) {
+            return res.status(404).send({ 
+                success: false,
+                message: 'No cards found for user' 
+            });
+        }
+
+        // Check if cardIndex is valid
+        if (parsedCardIndex >= cardsData.cards.length) {
+            return res.status(404).send({ 
+                success: false,
+                message: 'Card index out of range' 
+            });
+        }
+
+        // Update the cards array
+        const updatedCards = [...cardsData.cards];
+        
+        // Initialize scans field if it doesn't exist, then increment
+        if (!updatedCards[parsedCardIndex].scans) {
+            updatedCards[parsedCardIndex].scans = 0;
+        }
+        updatedCards[parsedCardIndex].scans += 1;
+
+        // Save back to database
+        await cardRef.update({
+            cards: updatedCards
+        });
+
+        console.log(`Scan tracked for user ${userId}, card ${parsedCardIndex}. New count: ${updatedCards[parsedCardIndex].scans}`);
+
+        res.status(200).send({ 
+            success: true,
+            message: 'Scan tracked successfully',
+            cardIndex: parsedCardIndex,
+            newScanCount: updatedCards[parsedCardIndex].scans,
+            scanType: scanType
+        });
+
+    } catch (error) {
+        console.error('Error tracking scan:', error);
+        res.status(500).send({ 
+            success: false,
+            message: 'Failed to track scan',
+            error: error.message 
+        });
+    }
+});
+
+// Add a route to handle query form submissions
+app.post('/submit-query', async (req, res) => {
+  try {
+    console.log('Received query form submission:', req.body);
+    
+    const { name, email, message, to, type, ...rest } = req.body;
+    
+    if (!name || !email || !message) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields (name, email, message)',
+      });
+    }
+    
+    const mailOptions = {
+      from: process.env.EMAIL_USER, // Use system email as from address
+      replyTo: email, // Set reply-to as the user's email address
+      to: to || 'xscard@xspark.co.za', // Use provided destination or default
+      subject: `New Contact Query from ${name}`,
+      html: `
+        <h2>New Query from XS Card Website</h2>
+        <p><strong>From:</strong> ${name} (${email})</p>
+        <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 10px 0;">
+          <p><strong>Message:</strong></p>
+          <p>${message.replace(/\n/g, '<br>')}</p>
+        </div>
+        <p style="color: #666; font-size: 12px;">This message was sent from the XS Card contact form.</p>
+      `
+    };
+
+    const result = await sendMailWithStatus(mailOptions);
+    console.log('Query email send attempt completed:', result);
+
+    // --- Save to Firestore ---
+    try {
+      const messageDoc = {
+        type: type || 'contact',
+        name,
+        email,
+        message,
+        submittedAt: admin.firestore.Timestamp.now(),
+        ...rest // Save any extra fields (company, job title, etc.)
+      };
+      await db.collection('messages').add(messageDoc);
+      console.log('Message saved to Firestore:', messageDoc);
+    } catch (dbError) {
+      console.error('Failed to save message to Firestore:', dbError);
+      // Do not fail the request if DB write fails, just log
+    }
+    // --- End Firestore save ---
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Your message has been sent successfully'
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: 'Failed to send your message',
+        details: result
+      });
+    }
+  } catch (error) {
+    console.error('Query submission error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to process your message',
+      error: error.message
+    });
+  }
+});
+
+// Add the AddContact endpoint directly to server.js - MOVED TO TOP
 // This bypasses any router or authentication middleware issues
 app.post('/AddContact', async (req, res) => {
     const { userId, contactInfo } = req.body;
@@ -179,6 +371,19 @@ app.post('/AddContact', async (req, res) => {
     }
 });
 
+// Public routes - must be before authentication middleware
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/', paymentRoutes); // Add this line before protected routes
+app.use('/', subscriptionRoutes); // Add subscription routes
+app.use('/', apkRoutes); // Add APK routes for public download
+app.use('/', eventRoutes); // Move event routes to public section for /api/events/public
+app.use('/', userRoutes); // Move user routes to public section so SignIn works
+app.use('/', contactRoutes); // Move contact routes to public section to keep save contact public
+app.use('/api', eventOrganiserRoutes); // Add event organiser routes
+app.use('/api', testRoutes); // Add test routes for debugging
+
+
+
 // Add new contact saving endpoint
 app.post('/saveContact', async (req, res) => {
     const { userId, contactInfo } = req.body;
@@ -260,187 +465,9 @@ app.post('/saveContact', async (req, res) => {
     }
 });
 
-// Modified public endpoint to get specific card by userId and cardIndex
-app.get('/public/cards/:id', async (req, res) => {
-    try {
-        const userId = req.params.id;
-        const cardIndex = parseInt(req.query.cardIndex) || 0;
-        console.log(`Fetching public card for user ${userId}, card index ${cardIndex}`);
 
-        const cardRef = db.collection('cards').doc(userId);
-        const doc = await cardRef.get();
-        
-        if (!doc.exists) {
-            console.log(`User ${userId} not found`);
-            return res.status(404).send({ message: 'User not found' });
-        }
 
-        const userData = doc.data();
-        if (!userData.cards || !userData.cards[cardIndex]) {
-            console.log(`Card index ${cardIndex} not found for user ${userId}`);
-            return res.status(404).send({ message: 'Card not found' });
-        }
 
-        // Get the specific card and add user ID
-        const card = {
-            id: userId,
-            ...userData.cards[cardIndex]
-        };
-
-        // Log image URLs for debugging
-        console.log('Card data being sent to client:');
-        console.log('- Profile Image:', card.profileImage);
-        console.log('- Company Logo:', card.companyLogo);
-
-        res.status(200).send(card);
-    } catch (error) {
-        console.error('Error fetching public card:', error);
-        res.status(500).send({ 
-            message: 'Error fetching card', 
-            error: error.message 
-        });
-    }
-});
-
-// Add a route to handle query form submissions
-app.post('/submit-query', async (req, res) => {
-  try {
-    console.log('Received query form submission:', req.body);
-    
-    const { name, email, message, to } = req.body;
-    
-    if (!name || !email || !message) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required fields (name, email, message)',
-      });
-    }
-    
-    const mailOptions = {
-      from: process.env.EMAIL_USER, // Use system email as from address
-      replyTo: email, // Set reply-to as the user's email address
-      to: to || 'xscard@xspark.co.za', // Use provided destination or default
-      subject: `New Contact Query from ${name}`,
-      html: `
-        <h2>New Query from XS Card Website</h2>
-        <p><strong>From:</strong> ${name} (${email})</p>
-        <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 10px 0;">
-          <p><strong>Message:</strong></p>
-          <p>${message.replace(/\n/g, '<br>')}</p>
-        </div>
-        <p style="color: #666; font-size: 12px;">This message was sent from the XS Card contact form.</p>
-      `
-    };
-
-    const result = await sendMailWithStatus(mailOptions);
-    console.log('Query email send attempt completed:', result);
-    
-    if (result.success) {
-      res.json({
-        success: true,
-        message: 'Your message has been sent successfully'
-      });
-    } else {
-      res.status(500).json({
-        success: false,
-        message: 'Failed to send your message',
-        details: result
-      });
-    }
-  } catch (error) {
-    console.error('Query submission error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to process your message',
-      error: error.message
-    });
-  }
-});
-
-// Add scan tracking endpoint
-app.post('/track-scan', async (req, res) => {
-    const { userId, cardIndex = 0, scanType = 'save' } = req.body;
-    
-    console.log('Track scan called:', { userId, cardIndex, scanType });
-    
-    // Validate required parameters
-    if (!userId) {
-        return res.status(400).send({ 
-            success: false,
-            message: 'User ID is required'
-        });
-    }
-
-    // Validate cardIndex is a number
-    const parsedCardIndex = parseInt(cardIndex);
-    if (isNaN(parsedCardIndex) || parsedCardIndex < 0) {
-        return res.status(400).send({ 
-            success: false,
-            message: 'Valid card index is required'
-        });
-    }
-
-    try {
-        // Get user's cards
-        const cardRef = db.collection('cards').doc(userId);
-        const cardDoc = await cardRef.get();
-
-        if (!cardDoc.exists) {
-            return res.status(404).send({ 
-                success: false,
-                message: 'User cards not found' 
-            });
-        }
-
-        const cardsData = cardDoc.data();
-        if (!cardsData.cards || !Array.isArray(cardsData.cards)) {
-            return res.status(404).send({ 
-                success: false,
-                message: 'No cards found for user' 
-            });
-        }
-
-        // Check if cardIndex is valid
-        if (parsedCardIndex >= cardsData.cards.length) {
-            return res.status(404).send({ 
-                success: false,
-                message: 'Card index out of range' 
-            });
-        }
-
-        // Update the cards array
-        const updatedCards = [...cardsData.cards];
-        
-        // Initialize scans field if it doesn't exist, then increment
-        if (!updatedCards[parsedCardIndex].scans) {
-            updatedCards[parsedCardIndex].scans = 0;
-        }
-        updatedCards[parsedCardIndex].scans += 1;
-
-        // Save back to database
-        await cardRef.update({
-            cards: updatedCards
-        });
-
-        console.log(`Scan tracked for user ${userId}, card ${parsedCardIndex}. New count: ${updatedCards[parsedCardIndex].scans}`);
-
-        res.status(200).send({ 
-            success: true,
-            message: 'Scan tracked successfully',
-            cardIndex: parsedCardIndex,
-            newScanCount: updatedCards[parsedCardIndex].scans,
-            scanType: scanType
-        });
-
-    } catch (error) {
-        console.error('Error tracking scan:', error);
-        res.status(500).send({ 
-            success: false,
-            message: 'Failed to track scan',
-            error: error.message 
-        });
-    }
-});
 
 // Data migration endpoint - run once to initialize scans field for existing cards
 app.post('/migrate-scans', async (req, res) => {

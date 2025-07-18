@@ -1660,7 +1660,7 @@ exports.getEventById = async (req, res) => {
   }
 };
 
-  // Unregister from event
+// Unregister from event
 exports.unregisterFromEvent = async (req, res) => {
   try {
     const { eventId } = req.params;

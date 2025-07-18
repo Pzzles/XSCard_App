@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,8 @@ import {
   Platform,
   Modal,
   FlatList,
+  TouchableWithoutFeedback,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -63,20 +65,32 @@ const STEPS = {
   VERIFICATION: 2,
 } as const;
 
+type StepType = typeof STEPS[keyof typeof STEPS];
+
 const STEP_TITLES = [
   'Business Information',
   'Banking Details',
   'Verification & Terms',
 ];
 
+// Animation and UI constants
+const ANIMATION_DURATION = 200;
+const DROPDOWN_MAX_HEIGHT = 200;
+const VERIFICATION_DELAY = 2000;
+const DROPDOWN_SLIDE_OFFSET = 10;
+
 export default function OrganiserRegistrationScreen({ navigation }: OrganiserRegistrationScreenProps) {
   const toast = useToast();
-  const [currentStep, setCurrentStep] = useState(STEPS.BUSINESS_INFO);
+  const [currentStep, setCurrentStep] = useState<StepType>(STEPS.BUSINESS_INFO);
   const [loading, setLoading] = useState(false);
   const [banks, setBanks] = useState<Bank[]>([]);
   const [showBankModal, setShowBankModal] = useState(false);
   const [bankSearchQuery, setBankSearchQuery] = useState('');
   const [verifyingAccount, setVerifyingAccount] = useState(false);
+  const [showBusinessTypeDropdown, setShowBusinessTypeDropdown] = useState(false);
+  const dropdownRef = useRef<View>(null);
+  const dropdownAnimation = useRef(new Animated.Value(0)).current;
+  const scrollViewRef = useRef<ScrollView>(null);
 
   const [formData, setFormData] = useState<OrganiserFormData>({
     businessName: '',
@@ -97,7 +111,7 @@ export default function OrganiserRegistrationScreen({ navigation }: OrganiserReg
     marketingConsent: false,
   });
 
-  const [errors, setErrors] = useState<Partial<OrganiserFormData>>({});
+  const [errors, setErrors] = useState<Partial<Record<keyof OrganiserFormData, string>>>({});
 
   useEffect(() => {
     loadBanks();
@@ -111,9 +125,20 @@ export default function OrganiserRegistrationScreen({ navigation }: OrganiserReg
         setBanks(data.data);
       }
     } catch (error) {
-      console.error('Error loading banks:', error);
+      // Log error for debugging in development
+      if (__DEV__) {
+        console.error('Error loading banks:', error);
+      }
       toast.error('Error', 'Failed to load banks. Please try again.');
     }
+  };
+
+  const animateDropdown = (show: boolean) => {
+    Animated.timing(dropdownAnimation, {
+      toValue: show ? 1 : 0,
+      duration: ANIMATION_DURATION,
+      useNativeDriver: false,
+    }).start();
   };
 
   const updateFormData = (updates: Partial<OrganiserFormData>) => {
@@ -127,7 +152,7 @@ export default function OrganiserRegistrationScreen({ navigation }: OrganiserReg
   };
 
   const validateStep = (step: number): boolean => {
-    const newErrors: Partial<OrganiserFormData> = {};
+    const newErrors: Partial<Record<keyof OrganiserFormData, string>> = {};
 
     switch (step) {
       case STEPS.BUSINESS_INFO:
@@ -161,12 +186,12 @@ export default function OrganiserRegistrationScreen({ navigation }: OrganiserReg
 
   const nextStep = () => {
     if (validateStep(currentStep)) {
-      setCurrentStep(prev => Math.min(prev + 1, STEPS.VERIFICATION));
+      setCurrentStep(prev => Math.min(prev + 1, STEPS.VERIFICATION) as StepType);
     }
   };
 
   const prevStep = () => {
-    setCurrentStep(prev => Math.max(prev - 1, STEPS.BUSINESS_INFO));
+    setCurrentStep(prev => Math.max(prev - 1, STEPS.BUSINESS_INFO) as StepType);
   };
 
   const selectBank = (bank: Bank) => {
@@ -265,7 +290,10 @@ export default function OrganiserRegistrationScreen({ navigation }: OrganiserReg
         throw new Error(data.message || 'Registration failed');
       }
     } catch (error) {
-      console.error('Registration error:', error);
+      // Log error for debugging in development
+      if (__DEV__) {
+        console.error('Registration error:', error);
+      }
       
       let errorMessage = 'Failed to complete registration. Please try again.';
       
@@ -298,9 +326,9 @@ export default function OrganiserRegistrationScreen({ navigation }: OrganiserReg
     try {
       // This would typically be a separate endpoint to verify account
       // For now, we'll just simulate verification
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, VERIFICATION_DELAY));
       
-      // Mock account name - in real implementation, this would come from bank verification
+      // Mock account name - in real implementation, this would come from bank verification API
       const mockAccountName = `${formData.contactName.toUpperCase()} BUSINESS ACCOUNT`;
       updateFormData({ accountName: mockAccountName });
       
@@ -333,28 +361,85 @@ export default function OrganiserRegistrationScreen({ navigation }: OrganiserReg
 
       <View style={styles.inputContainer}>
         <Text style={styles.label}>Business Type *</Text>
-        <TouchableOpacity
-          style={[styles.input, styles.pickerInput, errors.businessType && styles.inputError]}
-          onPress={() => {
-            // Show business type picker
-            Alert.alert(
-              'Select Business Type',
-              '',
-              BUSINESS_TYPES.map(type => ({
-                text: type.label,
-                onPress: () => updateFormData({ businessType: type.value })
-              }))
-            );
-          }}
-        >
-          <Text style={formData.businessType ? styles.inputText : styles.placeholderText}>
-            {formData.businessType 
-              ? BUSINESS_TYPES.find(t => t.value === formData.businessType)?.label 
-              : 'Select business type'
-            }
-          </Text>
-          <MaterialIcons name="arrow-drop-down" size={24} color={COLORS.gray} />
-        </TouchableOpacity>
+        <TouchableWithoutFeedback onPress={() => {
+          setShowBusinessTypeDropdown(false);
+          animateDropdown(false);
+        }}>
+          <View style={styles.dropdownContainer} ref={dropdownRef}>
+            <TouchableOpacity
+              style={[styles.input, styles.pickerInput, errors.businessType && styles.inputError]}
+              onPress={() => {
+                const newState = !showBusinessTypeDropdown;
+                setShowBusinessTypeDropdown(newState);
+                animateDropdown(newState);
+              }}
+            >
+              <Text style={formData.businessType ? styles.inputText : styles.placeholderText}>
+                {formData.businessType 
+                  ? BUSINESS_TYPES.find(t => t.value === formData.businessType)?.label 
+                  : 'Select business type'
+                }
+              </Text>
+              <MaterialIcons 
+                name={showBusinessTypeDropdown ? "arrow-drop-up" : "arrow-drop-down"} 
+                size={24} 
+                color={COLORS.gray} 
+              />
+            </TouchableOpacity>
+            
+            <Animated.View 
+              style={[
+                styles.dropdownList,
+                {
+                  opacity: dropdownAnimation,
+                  transform: [{
+                    translateY: dropdownAnimation.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-DROPDOWN_SLIDE_OFFSET, 0],
+                    })
+                  }],
+                  maxHeight: dropdownAnimation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, DROPDOWN_MAX_HEIGHT],
+                  }),
+                }
+              ]}
+            >
+              <ScrollView 
+                style={styles.dropdownScrollView}
+                nestedScrollEnabled={true}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
+                {BUSINESS_TYPES.map((type, index) => (
+                  <TouchableOpacity
+                    key={type.value}
+                    style={[
+                      styles.dropdownItem,
+                      formData.businessType === type.value && styles.dropdownItemSelected,
+                      index === BUSINESS_TYPES.length - 1 && styles.dropdownItemLast
+                    ]}
+                    onPress={() => {
+                      updateFormData({ businessType: type.value });
+                      setShowBusinessTypeDropdown(false);
+                      animateDropdown(false);
+                    }}
+                  >
+                    <Text style={[
+                      styles.dropdownItemText,
+                      formData.businessType === type.value && styles.dropdownItemTextSelected
+                    ]}>
+                      {type.label}
+                    </Text>
+                    {formData.businessType === type.value && (
+                      <MaterialIcons name="check" size={20} color={COLORS.primary} />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </Animated.View>
+          </View>
+        </TouchableWithoutFeedback>
         {errors.businessType && <Text style={styles.errorText}>{errors.businessType}</Text>}
       </View>
 
@@ -443,10 +528,10 @@ export default function OrganiserRegistrationScreen({ navigation }: OrganiserReg
         Provide your banking details to receive payments from event attendees.
       </Text>
       
-      {/* Development mode indicator */}
+      {/* Development mode indicator - only show in development */}
       {__DEV__ && (
         <View style={styles.devModeContainer}>
-          <MaterialIcons name="info" size={16} color="#FF9800" />
+          <MaterialIcons name="info" size={16} color={COLORS.warning} />
           <Text style={styles.devModeText}>
             Development Mode: Bank verification is simulated for testing
           </Text>
@@ -646,7 +731,13 @@ export default function OrganiserRegistrationScreen({ navigation }: OrganiserReg
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardAvoidingView}
       >
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          ref={scrollViewRef}
+          style={styles.content} 
+          showsVerticalScrollIndicator={false}
+          scrollEnabled={!showBusinessTypeDropdown}
+          nestedScrollEnabled={true}
+        >
           {renderStepContent()}
         </ScrollView>
 
@@ -837,7 +928,7 @@ const styles = StyleSheet.create({
   accountNameContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.lightGreen,
+    backgroundColor: COLORS.successLight,
     padding: 12,
     borderRadius: 8,
     marginTop: 16,
@@ -850,7 +941,7 @@ const styles = StyleSheet.create({
   },
   infoBox: {
     flexDirection: 'row',
-    backgroundColor: COLORS.lightBlue,
+    backgroundColor: COLORS.warningLight,
     padding: 16,
     borderRadius: 8,
     marginTop: 16,
@@ -1006,5 +1097,57 @@ const styles = StyleSheet.create({
     color: '#F57C00',
     marginLeft: 8,
     flex: 1,
+  },
+  dropdownContainer: {
+    position: 'relative',
+    zIndex: 1000,
+  },
+  dropdownList: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 8,
+    marginTop: 2,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 1001,
+    overflow: 'hidden',
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.lightGray,
+  },
+  dropdownItemLast: {
+    borderBottomWidth: 0,
+  },
+  dropdownItemSelected: {
+    backgroundColor: COLORS.warningLight,
+  },
+  dropdownItemText: {
+    fontSize: 16,
+    color: COLORS.black,
+    flex: 1,
+  },
+  dropdownItemTextSelected: {
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  dropdownScrollView: {
+    maxHeight: DROPDOWN_MAX_HEIGHT,
   },
 }); 

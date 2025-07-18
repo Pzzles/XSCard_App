@@ -311,26 +311,26 @@
                 <span class="success-icon">✓</span>
             </div>
             
-            <h1>Payment Successful!</h1>
+        <h1>Payment Successful!</h1>
             
-            <div id="registrationContent" style="display: none;">
-                <p>Your event registration payment has been processed successfully.</p>
+        <div id="registrationContent" style="display: none;">
+            <p>Your event registration payment has been processed successfully.</p>
                 <div class="event-details">
                     <h3>Registration Confirmed</h3>
-                    <p>You are now registered for the event. Your ticket is ready!</p>
+                <p>You are now registered for the event. Your ticket is ready!</p>
                     <p>You will receive a confirmation email shortly with your ticket details and event information.</p>
-                </div>
+            </div>
             </div>
             
-            <div id="publishingContent" style="display: none;">
-                <p>Your event publishing payment has been processed successfully.</p>
+        <div id="publishingContent" style="display: none;">
+            <p>Your event publishing payment has been processed successfully.</p>
                 <div class="event-details">
                     <h3>Event Published</h3>
-                    <p>Your event is now published and visible to users.</p>
-                    <p>You can now manage your event and track registrations in the app.</p>
-                </div>
+                <p>Your event is now published and visible to users.</p>
+                <p>You can now manage your event and track registrations in the app.</p>
             </div>
-            
+        </div>
+        
             
         </div>
     </div>
@@ -345,7 +345,7 @@
         
         document.addEventListener('DOMContentLoaded', function() {
             // Parse URL parameters
-            const urlParams = new URLSearchParams(window.location.search);
+        const urlParams = new URLSearchParams(window.location.search);
             const eventId = urlParams.get('eventId') || urlParams.get('event');
             const registrationId = urlParams.get('registrationId');
             const title = urlParams.get('title');

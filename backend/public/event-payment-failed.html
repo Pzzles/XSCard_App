@@ -323,19 +323,19 @@
             <h1>Payment Failed</h1>
             
             <div id="registrationContent" style="display: none;">
-                <p>We were unable to process your payment for the event registration.</p>
+            <p>We were unable to process your payment for the event registration.</p>
             </div>
             
             <div id="publishingContent" style="display: none;">
-                <p>We were unable to process your payment for publishing the event.</p>
+            <p>We were unable to process your payment for publishing the event.</p>
             </div>
             
             <div class="error-details">
                 <h3>Error Details</h3>
-                <p>Error reason: <span class="error-reason" id="errorReason">Unknown error</span></p>
-                <p id="errorMessage">There was a problem processing your payment. Please try again or contact support if the issue persists.</p>
-            </div>
-            
+            <p>Error reason: <span class="error-reason" id="errorReason">Unknown error</span></p>
+            <p id="errorMessage">There was a problem processing your payment. Please try again or contact support if the issue persists.</p>
+        </div>
+        
 
         </div>
     </div>
@@ -350,7 +350,7 @@
         
         document.addEventListener('DOMContentLoaded', function() {
             // Parse URL parameters
-            const urlParams = new URLSearchParams(window.location.search);
+        const urlParams = new URLSearchParams(window.location.search);
             const reason = urlParams.get('reason') || 'unknown_error';
             const type = urlParams.get('type') || 'event';
             const eventId = urlParams.get('eventId') || urlParams.get('event');
@@ -389,8 +389,8 @@
                     errorMessageElement.textContent = 'Your payment could not be verified. This could be due to a network issue or a problem with the payment provider.';
                 } else if (reason === 'missing_reference') {
                     errorMessageElement.textContent = 'The payment reference was not found. Please try again with a new payment session.';
-                }
             }
+        }
         
 
         });
