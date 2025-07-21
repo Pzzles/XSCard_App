@@ -2,6 +2,7 @@ const https = require('https');
 const { db } = require('../firebase');
 const admin = require('firebase-admin');
 const { formatDate } = require('../utils/dateFormatter');
+const { saveBankCardData } = require('./subscriptionController');
 
 /**
  * Create a Paystack subaccount for the event organiser
@@ -268,7 +269,8 @@ const registerOrganiserStep2 = async (req, res) => {
       accountNumber,
       bankCode,
       bankName,
-      accountName
+      accountName,
+      startSubscriptionTrial = false // New optional parameter
     } = req.body;
 
     // Validate required fields
@@ -390,13 +392,41 @@ const registerOrganiserStep2 = async (req, res) => {
       organiserStatus: 'pending_verification'
     });
 
+    // Save banking data to user_bank_cards collection if subscription trial requested
+    if (startSubscriptionTrial) {
+      try {
+        await saveBankCardData(userId, {
+          accountNumber,
+          bankCode,
+          bankName,
+          accountName: resolvedAccountName,
+          isVerified: true,
+          verificationData: verificationResult.data || null
+        });
+        console.log(`Banking data saved to user_bank_cards for user ${userId}`);
+      } catch (error) {
+        console.error('Failed to save banking data to user_bank_cards:', error);
+        // Don't fail the request if this fails
+      }
+    }
+
+    const responseData = {
+      accountName: resolvedAccountName,
+      subaccountCode: subaccountResult.data?.subaccount_code || null
+    };
+
+    // If subscription trial was requested, add trial information to response
+    if (startSubscriptionTrial) {
+      responseData.subscriptionTrialAvailable = true;
+      responseData.message = 'Banking details saved. You can now start your premium subscription trial.';
+    }
+
     res.status(200).json({
       success: true,
-      message: 'Banking details saved and payment account created successfully',
-      data: {
-        accountName: resolvedAccountName,
-        subaccountCode: subaccountResult.data?.subaccount_code || null
-      }
+      message: startSubscriptionTrial ? 
+        'Banking details saved and subscription trial is ready to start' :
+        'Banking details saved and payment account created successfully',
+      data: responseData
     });
   } catch (error) {
     console.error('Error in registerOrganiserStep2:', error);

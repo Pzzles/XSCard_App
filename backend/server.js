@@ -8,6 +8,14 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const https = require('https');
+const axios = require('axios');
+
+// Rate limiting for failed captcha attempts
+const failedCaptchaAttempts = new Map();
+const CAPTCHA_RATE_LIMIT = {
+  maxAttempts: 5,
+  windowMs: 60 * 60 * 1000 // 60 minutes
+};
 const { db, admin, storage, bucket } = require('./firebase.js');
 const { sendMailWithStatus } = require('./public/Utils/emailService');
 const { handleSingleUpload } = require('./middleware/fileUpload');
@@ -32,6 +40,7 @@ app.use((req, res, next) => {
 const userRoutes = require('./routes/userRoutes');
 const cardRoutes = require('./routes/cardRoutes');
 const contactRoutes = require('./routes/contactRoutes');
+const contactRequestRoutes = require('./routes/contactRequestRoutes'); // Add contact request routes
 const meetingRoutes = require('./routes/meetingRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const subscriptionRoutes = require('./routes/subscriptionRoutes'); // Add subscription routes
@@ -184,7 +193,17 @@ app.post('/submit-query', async (req, res) => {
   try {
     console.log('Received query form submission:', req.body);
     
-    const { name, email, message, to, type, ...rest } = req.body;
+    const { name, email, message, to, type, captchaToken, ...rest } = req.body;
+    
+    // Verify hCaptcha first
+    const clientIP = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'];
+    const captchaValid = await verifyHCaptcha(captchaToken, clientIP);
+    if (!captchaValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Captcha verification failed. Please try again.',
+      });
+    }
     
     if (!name || !email || !message) {
       return res.status(400).json({
@@ -219,6 +238,7 @@ app.post('/submit-query', async (req, res) => {
         name,
         email,
         message,
+        status: 'open', // Set default status to 'open' for new requests
         submittedAt: admin.firestore.Timestamp.now(),
         ...rest // Save any extra fields (company, job title, etc.)
       };
@@ -379,6 +399,7 @@ app.use('/', apkRoutes); // Add APK routes for public download
 app.use('/', eventRoutes); // Move event routes to public section for /api/events/public
 app.use('/', userRoutes); // Move user routes to public section so SignIn works
 app.use('/', contactRoutes); // Move contact routes to public section to keep save contact public
+app.use('/api', contactRequestRoutes); // Add contact request routes
 app.use('/api', eventOrganiserRoutes); // Add event organiser routes
 app.use('/api', testRoutes); // Add test routes for debugging
 
@@ -697,6 +718,90 @@ app.post('/send-email', async (req, res) => {
     });
   }
 });
+
+/**
+ * Check if IP is rate limited for captcha attempts
+ * @param {string} ip - The client IP address
+ * @returns {boolean} - Whether the IP is rate limited
+ */
+const isRateLimited = (ip) => {
+  const now = Date.now();
+  const attempts = failedCaptchaAttempts.get(ip) || [];
+  
+  // Remove old attempts outside the window
+  const recentAttempts = attempts.filter(timestamp => 
+    now - timestamp < CAPTCHA_RATE_LIMIT.windowMs
+  );
+  
+  // Update attempts for this IP
+  failedCaptchaAttempts.set(ip, recentAttempts);
+  
+  return recentAttempts.length >= CAPTCHA_RATE_LIMIT.maxAttempts;
+};
+
+/**
+ * Record a failed captcha attempt
+ * @param {string} ip - The client IP address
+ */
+const recordFailedAttempt = (ip) => {
+  const now = Date.now();
+  const attempts = failedCaptchaAttempts.get(ip) || [];
+  attempts.push(now);
+  failedCaptchaAttempts.set(ip, attempts);
+};
+
+/**
+ * Verify hCaptcha token
+ * @param {string} token - The hCaptcha token from the frontend
+ * @param {string} ip - The client IP address for rate limiting
+ * @returns {Promise<boolean>} - Whether the captcha is valid
+ */
+const verifyHCaptcha = async (token, ip) => {
+  try {
+    // Check rate limiting first
+    if (isRateLimited(ip)) {
+      console.log(`IP ${ip} is rate limited for captcha attempts`);
+      return false;
+    }
+
+    if (!token) {
+      console.log('No hCaptcha token provided');
+      recordFailedAttempt(ip);
+      return false;
+    }
+
+    const secretKey = process.env.HCAPTCHA_SECRET_KEY;
+    if (!secretKey) {
+      console.error('HCAPTCHA_SECRET_KEY not configured');
+      return false;
+    }
+    
+    console.log('Using hCaptcha secret key:', secretKey.substring(0, 10) + '...');
+    console.log('Verifying token:', token.substring(0, 20) + '...');
+
+    const formData = new URLSearchParams();
+    formData.append('secret', secretKey);
+    formData.append('response', token);
+
+    const response = await axios.post('https://hcaptcha.com/siteverify', formData, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
+
+    console.log('hCaptcha verification response:', response.data);
+    
+    if (response.data.success !== true) {
+      recordFailedAttempt(ip);
+    }
+    
+    return response.data.success === true;
+  } catch (error) {
+    console.error('hCaptcha verification error:', error);
+    recordFailedAttempt(ip);
+    return false;
+  }
+};
 
 // Cleanup expired blacklisted tokens every 24 hours
 setInterval(async () => {
