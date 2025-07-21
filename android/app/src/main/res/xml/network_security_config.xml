@@ -11,6 +11,7 @@
     <!-- Allow HTTPS traffic for production -->
     <domain-config cleartextTrafficPermitted="false">
         <domain includeSubdomains="true">xscard-app.onrender.com</domain>
+        <domain includeSubdomains="true">*.onrender.com</domain>
     </domain-config>
     
     <!-- Default config for all other domains -->

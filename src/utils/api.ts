@@ -40,7 +40,7 @@ export const setGlobalNavigationRef = (navigationRef: any) => {
 // Helper function to get the appropriate base URL
 const getBaseUrl = () => {
   // For production, use the deployed server
-  // return 'https://xscard-app.onrender.com';
+  return 'https://xscard-app.onrender.com';
   
   // For development, try multiple local addresses
   // You can uncomment the appropriate line for your network setup
@@ -50,7 +50,7 @@ const getBaseUrl = () => {
   // return 'http://127.0.0.1:8383';
   
   // Network IP addresses (update based on your network)
-     return 'http://192.168.8.8:8383';
+  // return 'http://192.168.8.8:8383';
   // return 'http://192.168.68.101:8383';
   // return 'http://192.168.1.100:8383';
 
