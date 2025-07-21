@@ -11,7 +11,7 @@ export type RootStackParamList = {
   CardsScreen: undefined;
   AddCards: undefined;
   ContactScreen: undefined;
-  EditCard: { cardId: string };
+  EditCard: { cardIndex: number };
   EventsScreen: undefined;
   EventDetailsScreen: { eventId: string };
   CreateEventScreen: undefined;
@@ -32,6 +32,7 @@ export type RootStackParamList = {
     paymentType?: 'event_publishing' | 'event_registration';
     registrationId?: string;
   };
+  OrganiserRegistration: undefined;
 };
 
 export type EditCardScreenRouteProp = RouteProp<RootStackParamList, 'EditCard'>;

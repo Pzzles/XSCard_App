@@ -62,10 +62,8 @@ const PaymentPendingScreen = () => {
         // Navigate back after short delay
         setTimeout(() => {
           if (paymentType === 'event_registration') {
-            navigation.navigate('EventDetails', { 
-              eventId,
-              paymentCompleted: true,
-              registrationId
+                        navigation.navigate('EventDetails', {
+              eventId
             });
           } else {
             navigation.navigate('EventDetails', { eventId });
@@ -146,9 +144,7 @@ const PaymentPendingScreen = () => {
           setTimeout(() => {
             // Pass a flag to indicate payment was completed
             navigation.navigate('EventDetails', { 
-              eventId,
-              paymentCompleted: true,
-              registrationId: registrationId
+              eventId
             });
           }, 1500);
           return;

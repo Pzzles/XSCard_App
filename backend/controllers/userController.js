@@ -353,13 +353,21 @@ exports.signIn = async (req, res) => {
 
             const userData = userDoc.data();
 
+            // Enhanced email verification check with additional logging
+            console.log(`[SignIn] User ${localId} email verification status:`, userData.isEmailVerified);
+            
             if (!userData.isEmailVerified) {
+                console.log(`[SignIn] Blocking login for unverified user: ${userData.email}`);
                 return res.status(403).send({
-                    message: 'Email not verified. Please verify your email or request a new verification email.',
+                    message: 'Email not verified. Please verify your email before signing in. Check your inbox for the verification link.',
                     needsVerification: true,
-                    uid: localId
+                    uid: localId,
+                    email: userData.email,
+                    userExists: true
                 });
             }
+
+            console.log(`[SignIn] Email verified user ${localId} (${userData.email}) signing in successfully`);
 
             res.status(200).send({
                 message: 'Sign in successful',

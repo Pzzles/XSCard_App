@@ -1,17 +1,20 @@
 {
   "expo": {
-    "name": "xscard",
+    "name": "XSCard App",
     "slug": "xscard",
-    "version": "1.0.2",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icons/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
     "splash": {
-      "image": "./assets/icons/splash-icon.png",
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#000000"
+      "backgroundColor": "#ffffff"
     },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.p.zzles.xscard",
@@ -23,17 +26,21 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icons/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF"
       },
       "package": "com.p.zzles.xscard",
       "permissions": [
         "INTERNET",
-        "CAMERA"
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO"
       ]
     },
     "web": {
-      "favicon": "./assets/icons/favicon.png"
+      "favicon": "./assets/favicon.png"
     },
     "extra": {
       "eas": {
@@ -43,7 +50,14 @@
     "owner": "p.zzles",
     "id": "a84f7923-57e3-41c8-a3dc-3c07fb9013dc",
     "plugins": [
-      "expo-barcode-scanner"
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to let you upload profile images and company logos.",
+          "cameraPermission": "The app accesses your camera to let you take photos for profile images and company logos."
+        }
+      ]
     ]
   }
 }

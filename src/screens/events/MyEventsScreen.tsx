@@ -444,7 +444,7 @@ export default function MyEventsScreen() {
               <MaterialIcons name="people" size={16} color={COLORS.gray} />
               <Text style={styles.statText}>
                 {item.currentAttendees || 0}
-                {item.maxAttendees !== -1 && `/${item.maxAttendees}`} attendees
+                {item.maxAttendees > 0 && `/${item.maxAttendees}`} attendees
               </Text>
             </View>
             <View style={styles.statItem}>

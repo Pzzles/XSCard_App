@@ -10,6 +10,5 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Update static file serving
 app.use('/profiles', express.static(path.join(__dirname, 'public/profiles')));
 
-// ...existing code...
 
 module.exports = app;

@@ -64,6 +64,10 @@ router.get('/events/:eventId', authenticateUser, eventController.getEventById);
 
 router.patch('/events/:eventId', 
   authenticateUser,
+  handleMultipleUploads([
+    { name: 'bannerImage', maxCount: 1 },
+    { name: 'eventImages', maxCount: 5 }
+  ]),
   EventBroadcastMiddleware.conditionally(EventBroadcastMiddleware.broadcastAfterSuccess('event_update')),
   eventController.updateEvent
 );

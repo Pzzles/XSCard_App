@@ -23,6 +23,7 @@ import { EventTicketScreen } from '../screens/events/EventTicketScreen';
 import QRScannerScreen from '../screens/events/QRScannerScreen';
 import CheckInDashboard from '../screens/events/CheckInDashboard';
 import EventAnalyticsScreen from '../screens/events/EventAnalyticsScreen';
+import OrganiserRegistrationScreen from '../screens/events/OrganiserRegistrationScreen';
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
 const Stack = createStackNavigator<RootStackParamList>();
@@ -103,6 +104,7 @@ export default function AppNavigator() {
       <Stack.Screen name="QRScanner" component={QRScannerScreen} />
       <Stack.Screen name="CheckInDashboard" component={CheckInDashboard} />
       <Stack.Screen name="EventAnalytics" component={EventAnalyticsScreen} />
+      <Stack.Screen name="OrganiserRegistration" component={OrganiserRegistrationScreen} />
     </Stack.Navigator>
   );
 }

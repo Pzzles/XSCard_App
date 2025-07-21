@@ -4,6 +4,55 @@ const { SUBSCRIPTION_PLANS, SUBSCRIPTION_CONSTANTS, getPlanById } = require('../
 const { logSubscriptionEvent } = require('../models/subscriptionLog');
 
 /**
+ * Save bank card data to user_bank_cards collection
+ * @param {string} userId - User ID
+ * @param {object} bankingData - Banking information
+ */
+const saveBankCardData = async (userId, bankingData) => {
+    try {
+        const bankCardData = {
+            userId,
+            accountNumber: bankingData.accountNumber,
+            bankCode: bankingData.bankCode,
+            bankName: bankingData.bankName,
+            accountName: bankingData.accountName,
+            isVerified: bankingData.isVerified || false,
+            verificationData: bankingData.verificationData || null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+
+        // Use userId as document ID to ensure one bank account per user
+        await db.collection('user_bank_cards').doc(userId).set(bankCardData);
+        
+        console.log(`Bank card data saved for user ${userId}`);
+        return true;
+    } catch (error) {
+        console.error('Error saving bank card data:', error);
+        throw error;
+    }
+};
+
+/**
+ * Get user's saved bank card data
+ * @param {string} userId - User ID
+ */
+const getUserBankCardData = async (userId) => {
+    try {
+        const bankCardDoc = await db.collection('user_bank_cards').doc(userId).get();
+        
+        if (!bankCardDoc.exists) {
+            return null;
+        }
+        
+        return bankCardDoc.data();
+    } catch (error) {
+        console.error('Error getting bank card data:', error);
+        return null;
+    }
+};
+
+/**
  * Initialize a subscription with Paystack
  * Uses the authenticated user's email and the selected plan ID
  */
@@ -95,11 +144,13 @@ const initializeSubscription = async (req, res) => {
  * Initialize a trial subscription with Paystack
  * 1. Collect payment details (R1 charge)
  * 2. On verification, create subscription with 7-day start date
+ * 3. Optionally save banking information if provided
  */
 const initializeTrialSubscription = async (req, res) => {
     try {
-        const { planId } = req.body;
+        const { planId, bankingData } = req.body;
         const userEmail = req.user.email;
+        const userId = req.user.uid;
 
         // Validate request
         if (!planId) {
@@ -120,6 +171,20 @@ const initializeTrialSubscription = async (req, res) => {
 
         const baseUrl = process.env.APP_URL;
 
+        // Save banking data if provided
+        if (bankingData) {
+            try {
+                await saveBankCardData(userId, {
+                    ...bankingData,
+                    isVerified: true // Assume it's verified if we're starting subscription
+                });
+                console.log(`Banking data saved for user ${userId} during subscription trial`);
+            } catch (error) {
+                console.error('Failed to save banking data:', error);
+                // Don't fail the subscription if banking data save fails
+            }
+        }
+
         // Prepare Paystack request parameters for initial R1 verification
         const params = JSON.stringify({
             email: userEmail,
@@ -128,6 +193,8 @@ const initializeTrialSubscription = async (req, res) => {
             metadata: {
                 planId: plan.id,
                 isTrialSetup: true,
+                userId: userId, // Add userId to metadata
+                hasBankingData: !!bankingData, // Flag to indicate if banking data was provided
                 cancel_action: `${baseUrl}/subscription/cancel`
             }
         });
@@ -1182,34 +1249,103 @@ const getSubscriptionPlans = (req, res) => {
 
 /**
  * Get user's subscription status
+ * Checks both subscriptions collection and users collection for subscription data
  */
 const getSubscriptionStatus = async (req, res) => {
     try {
         const userId = req.user.uid;
         
-        // Get user document
+        // First, try to get subscription data from subscriptions collection
+        const subscriptionDoc = await db.collection('subscriptions').doc(userId).get();
+        
+        if (subscriptionDoc.exists) {
+            // Found subscription data in subscriptions collection
+            const subscriptionData = subscriptionDoc.data();
+            
+            // Determine subscription status
+            let subscriptionStatus = 'none';
+            if (subscriptionData.status) {
+                subscriptionStatus = subscriptionData.status;
+            } else if (subscriptionData.trialStartDate && subscriptionData.trialEndDate) {
+                const now = new Date();
+                const trialEnd = new Date(subscriptionData.trialEndDate);
+                subscriptionStatus = now < trialEnd ? 'trial' : 'expired';
+            }
+            
+            // Return subscription status info from subscriptions collection
+            return res.status(200).json({
+                status: true,
+                data: {
+                    subscriptionStatus: subscriptionStatus,
+                    subscriptionPlan: subscriptionData.planId || subscriptionData.plan || null,
+                    trialStartDate: subscriptionData.trialStartDate || null,
+                    trialEndDate: subscriptionData.trialEndDate || null,
+                    isActive: ['trial', 'active'].includes(subscriptionStatus),
+                    // Additional useful fields
+                    subscriptionCode: subscriptionData.subscriptionCode || null,
+                    customerCode: subscriptionData.customerCode || null,
+                    amount: subscriptionData.amount || null,
+                    interval: subscriptionData.interval || null,
+                    createdAt: subscriptionData.createdAt || null,
+                    lastUpdated: subscriptionData.lastUpdated || null,
+                    dataSource: 'subscriptions_collection'
+                }
+            });
+        }
+        
+        // If no subscription found in subscriptions collection, check users collection
         const userDoc = await db.collection('users').doc(userId).get();
         
         if (!userDoc.exists) {
-            return res.status(404).json({
-                status: false,
-                message: 'User not found'
+            // No user found - return default values
+            return res.status(200).json({
+                status: true,
+                data: {
+                    subscriptionStatus: 'none',
+                    subscriptionPlan: null,
+                    trialStartDate: null,
+                    trialEndDate: null,
+                    isActive: false,
+                    dataSource: 'no_data'
+                }
             });
         }
         
         const userData = userDoc.data();
         
-        // Return subscription status info
-        res.status(200).json({
+        // Check if user has subscription data
+        if (userData.subscriptionStatus || userData.plan || userData.trialStartDate) {
+            // Return subscription status info from users collection
+            return res.status(200).json({
+                status: true,
+                data: {
+                    subscriptionStatus: userData.subscriptionStatus || 'none',
+                    subscriptionPlan: userData.subscriptionPlan || userData.plan || null,
+                    trialStartDate: userData.trialStartDate || null,
+                    trialEndDate: userData.trialEndDate || null,
+                    isActive: ['trial', 'active'].includes(userData.subscriptionStatus || 'none'),
+                    // Additional fields from user document
+                    role: userData.role || null,
+                    organiserStatus: userData.organiserStatus || null,
+                    firstBillingDate: userData.firstBillingDate || null,
+                    dataSource: 'users_collection'
+                }
+            });
+        }
+        
+        // No subscription data found in either collection
+        return res.status(200).json({
             status: true,
             data: {
-                subscriptionStatus: userData.subscriptionStatus || 'none',
-                subscriptionPlan: userData.subscriptionPlan || null,
-                trialStartDate: userData.trialStartDate || null,
-                trialEndDate: userData.trialEndDate || null,
-                isActive: ['trial', 'active'].includes(userData.subscriptionStatus || 'none')
+                subscriptionStatus: 'none',
+                subscriptionPlan: null,
+                trialStartDate: null,
+                trialEndDate: null,
+                isActive: false,
+                dataSource: 'no_data'
             }
         });
+        
     } catch (error) {
         console.error('Error fetching subscription status:', error);
         res.status(500).json({
@@ -1246,14 +1382,115 @@ const getSubscriptionLogs = async (req, res) => {
     }
 };
 
+/**
+ * Initialize trial subscription with banking information
+ * This endpoint is specifically for users who complete banking registration
+ * and want to immediately start their premium subscription trial
+ */
+const initializeTrialWithBanking = async (req, res) => {
+    try {
+        const { 
+            planId = 'ANNUAL_PLAN', // Default to annual plan
+            accountNumber,
+            bankCode,
+            bankName,
+            accountName,
+            verificationData 
+        } = req.body;
+        
+        const userEmail = req.user.email;
+        const userId = req.user.uid;
+
+        // Validate banking information
+        if (!accountNumber || !bankCode || !bankName) {
+            return res.status(400).json({
+                status: false,
+                message: 'Banking information is required (accountNumber, bankCode, bankName)'
+            });
+        }
+
+        // Prepare banking data object
+        const bankingData = {
+            accountNumber,
+            bankCode,
+            bankName,
+            accountName,
+            isVerified: true,
+            verificationData: verificationData || null
+        };
+
+        // Call the regular trial initialization with banking data
+        // We'll modify the request object to include banking data
+        req.body = {
+            planId,
+            bankingData
+        };
+
+        // Call the existing trial initialization function
+        return await initializeTrialSubscription(req, res);
+
+    } catch (error) {
+        console.error('Trial with banking error:', error);
+        res.status(500).json({ 
+            status: false,
+            message: 'Internal server error',
+            error: error.message 
+        });
+    }
+};
+
+/**
+ * Get user's saved banking information
+ */
+const getUserBankingInfo = async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        
+        const bankingData = await getUserBankCardData(userId);
+        
+        if (!bankingData) {
+            return res.status(404).json({
+                status: false,
+                message: 'No banking information found'
+            });
+        }
+
+        // Remove sensitive information before sending
+        const { accountNumber, ...safeBankingData } = bankingData;
+        
+        // Only show last 4 digits of account number
+        const maskedAccountNumber = accountNumber ? 
+            `****${accountNumber.slice(-4)}` : null;
+
+        res.status(200).json({
+            status: true,
+            data: {
+                ...safeBankingData,
+                accountNumber: maskedAccountNumber
+            }
+        });
+    } catch (error) {
+        console.error('Error getting banking info:', error);
+        res.status(500).json({
+            status: false,
+            message: 'Internal server error',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     initializeSubscription,
     initializeTrialSubscription,
+    initializeTrialWithBanking, // New endpoint
     handleSubscriptionCallback,
     handleTrialCallback,
     handleSubscriptionWebhook,
     getSubscriptionPlans,
     getSubscriptionStatus,
-    cancelSubscription,  // Add new function to exports
-    getSubscriptionLogs
+    cancelSubscription,
+    getSubscriptionLogs,
+    getUserBankingInfo, // New endpoint
+    saveBankCardData, // Export for use in other controllers
+    getUserBankCardData // Export for use in other controllers
 };
