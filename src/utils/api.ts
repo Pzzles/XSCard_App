@@ -130,7 +130,7 @@ export const ENDPOINTS = {
     UPDATE_ORGANISER_PROFILE: '/api/event-organisers/profile',
     
     // User Management
-    DEACTIVATE_USER: '/api/Users',
+    DEACTIVATE_USER: '/Users',
 };
 
 export const buildUrl = (endpoint: string) => `${API_BASE_URL}${endpoint}`;

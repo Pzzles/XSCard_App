@@ -883,13 +883,21 @@ exports.registerForEvent = async (req, res) => {
 
         // Get event organiser's Paystack subaccount (if available)
         let subaccount = null;
+        const isDevelopment = process.env.NODE_ENV === 'development' || process.env.SKIP_BANK_VERIFICATION === 'true';
+        
         try {
           const organiserDoc = await db.collection('event_organisers').doc(eventData.organizerId).get();
           if (organiserDoc.exists) {
             const organiserData = organiserDoc.data();
             if (organiserData.status === 'active' && organiserData.paystackSubaccountCode) {
-              subaccount = organiserData.paystackSubaccountCode;
-              console.log('Using organiser subaccount:', subaccount);
+              // In development mode, skip subaccount to avoid Paystack validation errors
+              if (isDevelopment) {
+                console.log('Development mode: Skipping subaccount to avoid Paystack validation errors');
+                subaccount = null;
+              } else {
+                subaccount = organiserData.paystackSubaccountCode;
+                console.log('Using organiser subaccount:', subaccount);
+              }
             }
           }
         } catch (error) {
@@ -918,6 +926,9 @@ exports.registerForEvent = async (req, res) => {
         if (subaccount) {
           paymentParams.subaccount = subaccount;
           paymentParams.transaction_charge = 1000; // 10% platform fee in kobo
+        } else if (isDevelopment) {
+          // In development mode, add a note about subaccount being skipped
+          console.log('Development mode: Payment will go to main account (no subaccount)');
         }
 
         const params = JSON.stringify(paymentParams);
