@@ -40,20 +40,15 @@ export const setGlobalNavigationRef = (navigationRef: any) => {
 // Helper function to get the appropriate base URL
 const getBaseUrl = () => {
   // For production, use the deployed server
-  return 'https://xscard-app.onrender.com';
+ // return 'https://xscard-app.onrender.com';
   
   // For development, try multiple local addresses
   // You can uncomment the appropriate line for your network setup
   
   // Common localhost addresses
   // return 'http://localhost:8383';
-  // return 'http://127.0.0.1:8383';
+   return 'http://192.168.2.237:8383';
   
-  // Network IP addresses (update based on your network)
-  // return 'http://192.168.8.8:8383';
-  // return 'http://192.168.68.101:8383';
-  // return 'http://192.168.1.100:8383';
-
 };
 
 export const API_BASE_URL = getBaseUrl();
@@ -133,6 +128,9 @@ export const ENDPOINTS = {
     GET_ORGANISER_STATUS: '/api/event-organisers/status',
     GET_ORGANISER_PROFILE: '/api/event-organisers/profile',
     UPDATE_ORGANISER_PROFILE: '/api/event-organisers/profile',
+    
+    // User Management
+    DEACTIVATE_USER: '/api/Users',
 };
 
 export const buildUrl = (endpoint: string) => `${API_BASE_URL}${endpoint}`;

@@ -119,10 +119,17 @@ export default function OrganiserRegistrationScreen({ navigation }: OrganiserReg
 
   const loadBanks = async () => {
     try {
-      const response = await authenticatedFetchWithRefresh(ENDPOINTS.GET_ORGANISER_BANKS);
+      // Request South African banks specifically
+      const response = await authenticatedFetchWithRefresh(`${ENDPOINTS.GET_ORGANISER_BANKS}?currency=ZAR`);
       if (response.ok) {
         const data = await response.json();
         setBanks(data.data);
+      } else if (response.status === 401) {
+        // User not authenticated - redirect to login
+        toast.error('Authentication Required', 'Please log in to continue with organiser registration.');
+        navigation.navigate('SignIn');
+      } else {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
     } catch (error) {
       // Log error for debugging in development

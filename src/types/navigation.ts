@@ -33,6 +33,7 @@ export type RootStackParamList = {
     registrationId?: string;
   };
   OrganiserRegistration: undefined;
+  Settings: undefined;
 };
 
 export type EditCardScreenRouteProp = RouteProp<RootStackParamList, 'EditCard'>;

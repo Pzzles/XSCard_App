@@ -24,6 +24,7 @@ import QRScannerScreen from '../screens/events/QRScannerScreen';
 import CheckInDashboard from '../screens/events/CheckInDashboard';
 import EventAnalyticsScreen from '../screens/events/EventAnalyticsScreen';
 import OrganiserRegistrationScreen from '../screens/events/OrganiserRegistrationScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
 const Stack = createStackNavigator<RootStackParamList>();
@@ -78,6 +79,15 @@ function TabNavigator() {
           ),
         }}
       />
+      <Tab.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="settings" size={24} color={color} />
+          ),
+        }}
+      />
     </Tab.Navigator>
   );
 }
@@ -105,6 +115,7 @@ export default function AppNavigator() {
       <Stack.Screen name="CheckInDashboard" component={CheckInDashboard} />
       <Stack.Screen name="EventAnalytics" component={EventAnalyticsScreen} />
       <Stack.Screen name="OrganiserRegistration" component={OrganiserRegistrationScreen} />
+      <Stack.Screen name="Settings" component={SettingsScreen} />
     </Stack.Navigator>
   );
 }

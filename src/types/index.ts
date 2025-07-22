@@ -63,6 +63,7 @@ export type RootStackParamList = {
 export type RootTabParamList = {
   Cards: undefined;
   Contacts: undefined;
+  Settings: undefined;
 };
 
 export type AuthStackParamList = {

@@ -1341,3 +1341,70 @@ exports.setUserSubscriptionLevel = async (req, res) => {
         });
     }
 };
+
+exports.deactivateUser = async (req, res) => {
+    try {
+        const userId = req.user.uid;
+        const { active } = req.body;
+
+        console.log(`[DeactivateUser] 🔍 Deactivating user: ${userId}`);
+        console.log(`[DeactivateUser] 📝 Active status: ${active}`);
+
+        if (active !== false) {
+            console.log(`[DeactivateUser] ❌ Invalid active status: ${active}`);
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid request. Only deactivation (active: false) is supported.'
+            });
+        }
+
+        const userRef = db.collection('users').doc(userId);
+        const userDoc = await userRef.get();
+
+        if (!userDoc.exists) {
+            console.log(`[DeactivateUser] ❌ User not found: ${userId}`);
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Log current user data before update
+        const currentData = userDoc.data();
+        console.log(`[DeactivateUser] 📋 Current user data:`);
+        console.log(`[DeactivateUser]   - Current active status: ${currentData.active || 'undefined'}`);
+        console.log(`[DeactivateUser]   - Email: ${currentData.email}`);
+
+        // Update user active status
+        console.log(`[DeactivateUser] 🔄 Updating active field to: ${active}`);
+        await userRef.update({
+            active: false,
+            deactivatedAt: admin.firestore.Timestamp.now(),
+            updatedAt: admin.firestore.Timestamp.now()
+        });
+        console.log(`[DeactivateUser] ✅ Database update completed`);
+
+        // Verify the update by reading the document again
+        const updatedDoc = await userRef.get();
+        const updatedData = updatedDoc.data();
+        console.log(`[DeactivateUser] ✅ Verification - Updated active status: ${updatedData.active}`);
+
+        res.status(200).json({
+            success: true,
+            message: 'User account deactivated successfully',
+            data: {
+                userId: userId,
+                active: updatedData.active,
+                deactivatedAt: updatedData.deactivatedAt
+            }
+        });
+
+    } catch (error) {
+        console.error('[DeactivateUser] ❌ Error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to deactivate user account',
+            error: error.message
+        });
+    }
+};

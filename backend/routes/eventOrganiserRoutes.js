@@ -11,8 +11,8 @@ const {
 } = require('../controllers/eventOrganiserController');
 const { authenticateUser } = require('../middleware/auth');
 
-// Public routes
-router.get('/event-organisers/banks', getSupportedBanks);
+// Protected routes - require authentication
+router.get('/event-organisers/banks', authenticateUser, getSupportedBanks);
 
 // Protected routes - require authentication
 router.post('/event-organisers/register/step1', authenticateUser, registerOrganiserStep1);
