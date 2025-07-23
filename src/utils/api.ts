@@ -47,7 +47,7 @@ const getBaseUrl = () => {
   
   // Common localhost addresses
   // return 'http://localhost:8383';
-   return 'http://192.168.2.237:8383';
+   return 'http://192.168.8.79:8383'; // Old IP address
   
 };
 
@@ -104,6 +104,12 @@ export const ENDPOINTS = {
     // Event Registration
     REGISTER_EVENT: '/events/:eventId/register',
     UNREGISTER_EVENT: '/events/:eventId/unregister',
+    
+    // Bulk Registration
+    CREATE_BULK_REGISTRATION: '/api/events/:eventId/bulk-register',
+    GET_BULK_REGISTRATION: '/api/bulk-registrations/:bulkRegistrationId',
+    GET_USER_BULK_REGISTRATIONS: '/api/user/bulk-registrations',
+    CANCEL_BULK_REGISTRATION: '/api/bulk-registrations/:bulkRegistrationId',
     
     // User Events
     GET_USER_EVENTS: '/user/events',

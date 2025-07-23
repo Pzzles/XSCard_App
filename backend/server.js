@@ -49,6 +49,7 @@ const eventRoutes = require('./routes/eventRoutes'); // Add event routes
 const testRoutes = require('./routes/testRoutes'); // Add test routes for debugging
 const ticketRoutes = require('./routes/ticketRoutes'); // Add ticket routes
 const eventOrganiserRoutes = require('./routes/eventOrganiserRoutes'); // Add event organiser routes
+const bulkRegistrationRoutes = require('./routes/bulkRegistrationRoutes'); // Add bulk registration routes
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -401,6 +402,7 @@ app.use('/', userRoutes); // Move user routes to public section so SignIn works
 app.use('/', contactRoutes); // Move contact routes to public section to keep save contact public
 app.use('/api', contactRequestRoutes); // Add contact request routes
 app.use('/api', eventOrganiserRoutes); // Add event organiser routes
+app.use('/api', bulkRegistrationRoutes); // Add bulk registration routes
 app.use('/api', testRoutes); // Add test routes for debugging
 
 

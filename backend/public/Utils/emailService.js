@@ -1,6 +1,7 @@
 require('dotenv').config();
 const nodemailer = require('nodemailer');
 const sgMail = require('@sendgrid/mail'); // Add this line to import SendGrid
+const { db } = require('../../firebase.js');
 
 // Set SendGrid API key if available
 if (process.env.SENDGRID_API_KEY && process.env.SENDGRID_API_KEY !== 'YOUR_SENDGRID_API_KEY') {
@@ -212,8 +213,101 @@ const sendWithSendGrid = async (mailOptions) => {
   }
 };
 
+// Bulk registration email function
+const sendBulkRegistrationEmail = async (userId, bulkRegistrationId, eventData, tickets) => {
+  try {
+    // Get user details
+    const userDoc = await db.collection('users').doc(userId).get();
+    if (!userDoc.exists) {
+      console.error('User not found for bulk registration email:', userId);
+      return { success: false, error: 'User not found' };
+    }
+
+    const userData = userDoc.data();
+    const userEmail = userData.email;
+
+    if (!userEmail) {
+      console.error('User email not found for bulk registration email:', userId);
+      return { success: false, error: 'User email not found' };
+    }
+
+    // Create email content
+    const ticketList = tickets.map((ticket, index) => `
+      <tr>
+        <td style="padding: 8px; border-bottom: 1px solid #eee;">${index + 1}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee;">${ticket.attendeeName}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee;">${ticket.attendeeEmail}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee;">${ticket.id}</td>
+      </tr>
+    `).join('');
+
+    const emailContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+          <h1 style="color: #333; margin: 0;">Bulk Registration Confirmation</h1>
+        </div>
+        
+        <div style="padding: 20px;">
+          <h2 style="color: #333;">Event Details</h2>
+          <p><strong>Event:</strong> ${eventData.title}</p>
+          <p><strong>Date:</strong> ${new Date(eventData.date).toLocaleDateString()}</p>
+          <p><strong>Time:</strong> ${eventData.time}</p>
+          <p><strong>Location:</strong> ${eventData.location}</p>
+          <p><strong>Total Tickets:</strong> ${tickets.length}</p>
+          
+          <h2 style="color: #333; margin-top: 30px;">Attendee Details</h2>
+          <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+            <thead>
+              <tr style="background-color: #f8f9fa;">
+                <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">#</th>
+                <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Name</th>
+                <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Email</th>
+                <th style="padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Ticket ID</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${ticketList}
+            </tbody>
+          </table>
+          
+          <div style="background-color: #e8f5e8; padding: 15px; border-radius: 5px; margin-top: 20px;">
+            <p style="margin: 0; color: #2d5a2d;"><strong>Important:</strong> Each attendee will receive their individual ticket via email. Please ensure all attendees check their email for their personal QR code.</p>
+          </div>
+          
+          <div style="margin-top: 30px; padding: 15px; background-color: #f8f9fa; border-radius: 5px;">
+            <p style="margin: 0; color: #666; font-size: 14px;">
+              If you have any questions about your bulk registration, please contact the event organizer or our support team.
+            </p>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const mailOptions = {
+      to: userEmail,
+      subject: `Bulk Registration Confirmation - ${eventData.title}`,
+      html: emailContent
+    };
+
+    const result = await sendMailWithStatus(mailOptions);
+    
+    if (result.success) {
+      console.log(`Bulk registration email sent successfully to ${userEmail}`);
+    } else {
+      console.error('Failed to send bulk registration email:', result.error);
+    }
+
+    return result;
+
+  } catch (error) {
+    console.error('Error sending bulk registration email:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 module.exports = {
   transporter,
   sendMailWithStatus,
-  verifyTransporter
+  verifyTransporter,
+  sendBulkRegistrationEmail
 };

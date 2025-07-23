@@ -40,6 +40,7 @@ export interface Event {
   images?: string[];
   bannerImage?: string;
   tags?: string[];
+  allowBulkRegistrations?: boolean;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
@@ -243,6 +244,7 @@ export interface CreateEventData {
   images?: string[];
   bannerImage?: string;
   tags?: string[];
+  allowBulkRegistrations?: boolean;
 }
 
 // Event analytics data

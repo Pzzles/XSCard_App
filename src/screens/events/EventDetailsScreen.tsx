@@ -28,6 +28,8 @@ import {
   EventRegistrationResponse,
 } from '../../types/events';
 import { enhanceEventsWithOrganizerInfo, publishEvent } from '../../services/eventService';
+import { canBulkRegister } from '../../utils/bulkRegistrationUtils';
+import BulkRegistrationModal from '../../components/bulk/BulkRegistrationModal';
 
 // Navigation types
 type RootStackParamList = {
@@ -62,6 +64,7 @@ export default function EventDetailsScreen() {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [publishing, setPublishing] = useState(false);
   const [checkingPendingPayment, setCheckingPendingPayment] = useState(false);
+  const [showBulkRegistration, setShowBulkRegistration] = useState(false);
 
   // Load event details
   useEffect(() => {
@@ -619,6 +622,19 @@ export default function EventDetailsScreen() {
   const isEventFull = event.maxAttendees !== -1 && event.currentAttendees >= event.maxAttendees;
   const canRegister = !userRegistration && !isEventFull && event.status === 'published';
 
+  // Debug logging for bulk registration
+  console.log('🔍 Bulk Registration Debug:');
+  console.log('  - Event ID:', event.id);
+  console.log('  - Event Title:', event.title);
+  console.log('  - Event Status:', event.status);
+  console.log('  - Max Attendees:', event.maxAttendees);
+  console.log('  - Current Attendees:', event.currentAttendees);
+  console.log('  - Is Event Full:', isEventFull);
+  console.log('  - User Registration:', userRegistration);
+  console.log('  - Can Register:', canRegister);
+  console.log('  - Allow Bulk Registrations:', event.allowBulkRegistrations);
+  console.log('  - Can Bulk Register:', canBulkRegister(event, event.currentAttendees || 0));
+
   const allImages = getAllEventImages();
 
   return (
@@ -867,20 +883,33 @@ export default function EventDetailsScreen() {
             </TouchableOpacity>
           </View>
         ) : canRegister ? (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.primaryButton]}
-            onPress={handleRegister}
-            disabled={registering}
-          >
-            {registering ? (
-              <ActivityIndicator size="small" color={COLORS.white} />
-            ) : (
-              <>
-                <MaterialIcons name="event-available" size={20} color={COLORS.white} />
-                <Text style={styles.actionButtonText}>Register for Event</Text>
-              </>
+          <View style={styles.registrationButtonsContainer}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.primaryButton, { flex: 1, marginRight: 8 }]}
+              onPress={handleRegister}
+              disabled={registering}
+            >
+              {registering ? (
+                <ActivityIndicator size="small" color={COLORS.white} />
+              ) : (
+                <>
+                  <MaterialIcons name="event-available" size={20} color={COLORS.white} />
+                  <Text style={styles.actionButtonText}>Register</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            {canBulkRegister(event, event.currentAttendees || 0) && (
+              <TouchableOpacity
+                style={[styles.actionButton, styles.bulkButton, { flex: 1, marginLeft: 8 }]}
+                onPress={() => setShowBulkRegistration(true)}
+                disabled={registering}
+              >
+                <MaterialIcons name="group-add" size={20} color={COLORS.white} />
+                <Text style={styles.actionButtonText}>Register Multiple</Text>
+              </TouchableOpacity>
             )}
-          </TouchableOpacity>
+          </View>
         ) : (
           <View style={[styles.actionButton, styles.disabledButton]}>
             <Text style={[styles.actionButtonText, { color: COLORS.gray }]}>
@@ -930,6 +959,24 @@ export default function EventDetailsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Bulk Registration Modal */}
+      {event && (
+        <BulkRegistrationModal
+          visible={showBulkRegistration}
+          onClose={() => setShowBulkRegistration(false)}
+          event={event}
+          onSuccess={(bulkRegistrationId) => {
+            setShowBulkRegistration(false);
+            toast.success(
+              'Bulk Registration Complete!',
+              `Successfully registered ${event.quantity || 2} people for ${event.title}`
+            );
+            // Refresh event details to show updated registration status
+            loadEventDetails();
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -1109,11 +1156,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  registrationButtonsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   primaryButton: {
     backgroundColor: COLORS.primary,
   },
   secondaryButton: {
     backgroundColor: COLORS.secondary,
+  },
+  bulkButton: {
+    backgroundColor: '#4CAF50', // Success green for bulk registration
   },
   imageSection: {
     marginBottom: 24,

@@ -142,6 +142,8 @@ exports.createEvent = async (req, res) => {
       currentAttendees: 0,
       attendeesList: [],
       status: 'draft',
+      // Bulk registration support
+      allowBulkRegistrations: req.body.allowBulkRegistrations === 'true' || req.body.allowBulkRegistrations === true,
       // Image data from Firebase Storage
       bannerImage: bannerImageUrl,
       images: eventImagesUrls,
