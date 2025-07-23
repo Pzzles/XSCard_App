@@ -163,18 +163,13 @@ const BulkRegistrationModal: React.FC<BulkRegistrationModalProps> = ({
     switch (state.currentStep) {
       case 'quantity':
         return (
-          <View>
-            <Text style={{ color: 'red', fontSize: 16, padding: 20 }}>
-              DEBUG: Quantity step rendering
-            </Text>
-            <QuantitySelector
-              quantity={state.quantity}
-              onQuantityChange={handleQuantityChange}
-              ticketPrice={event.ticketPrice || 0}
-              eventCapacity={event.maxAttendees}
-              currentRegistrations={event.currentAttendees}
-            />
-          </View>
+          <QuantitySelector
+            quantity={state.quantity}
+            onQuantityChange={handleQuantityChange}
+            ticketPrice={event.ticketPrice || 0}
+            eventCapacity={event.maxAttendees}
+            currentRegistrations={event.currentAttendees}
+          />
         );
 
       case 'details':
@@ -208,7 +203,7 @@ const BulkRegistrationModal: React.FC<BulkRegistrationModalProps> = ({
   const canProceed = () => {
     switch (state.currentStep) {
       case 'quantity':
-        return hasInteractedWithQuantity && state.quantity >= 2 && state.quantity <= 50;
+        return state.quantity >= 2 && state.quantity <= 50;
       case 'details':
         return state.validation.overall;
       case 'review':
@@ -295,7 +290,11 @@ const BulkRegistrationModal: React.FC<BulkRegistrationModalProps> = ({
           </View>
 
           {/* Content */}
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          <ScrollView 
+            style={styles.content}
+            contentContainerStyle={{ paddingBottom: 40 }}
+            showsVerticalScrollIndicator={false}
+          >
             {renderStepContent()}
           </ScrollView>
 
@@ -347,6 +346,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     width: '95%',
     maxWidth: 500,
+    minHeight: 300, // Ensure modal is tall enough
     maxHeight: '90%',
     overflow: 'hidden',
   },
@@ -412,7 +412,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   content: {
-    flex: 1,
+    // flex: 1, // REMOVE THIS LINE
   },
   navigationContainer: {
     flexDirection: 'row',

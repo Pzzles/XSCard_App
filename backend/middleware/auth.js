@@ -63,6 +63,30 @@ exports.authenticateUser = async (req, res, next) => {
         }
         
         // Attach user info to request
+        // If email is missing, fetch from Firestore
+        if (!decodedToken.email) {
+            try {
+                const userDoc = await db.collection('users').doc(decodedToken.uid).get();
+                if (userDoc.exists) {
+                    const userData = userDoc.data();
+                    if (userData.email) {
+                        decodedToken.email = userData.email;
+                    }
+                }
+                // Fallback: check cards collection
+                if (!decodedToken.email) {
+                    const cardDoc = await db.collection('cards').doc(decodedToken.uid).get();
+                    if (cardDoc.exists) {
+                        const cardData = cardDoc.data();
+                        if (cardData.cards && cardData.cards.length > 0 && cardData.cards[0].email) {
+                            decodedToken.email = cardData.cards[0].email;
+                        }
+                    }
+                }
+            } catch (fetchError) {
+                console.warn('[Auth Middleware] Could not fetch email from Firestore:', fetchError.message);
+            }
+        }
         req.user = decodedToken;
         req.token = token;
         next();

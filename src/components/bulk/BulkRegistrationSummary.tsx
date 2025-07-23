@@ -42,7 +42,9 @@ const BulkRegistrationSummary: React.FC<BulkRegistrationSummaryProps> = ({
             <Text style={styles.eventDate}>
               {new Date(event.date).toLocaleDateString()} at {event.time}
             </Text>
-            <Text style={styles.eventLocation}>{event.location}</Text>
+            <Text style={styles.eventLocation}>
+              {event.location.venue}, {event.location.address}, {event.location.city}
+            </Text>
           </View>
         </View>
 

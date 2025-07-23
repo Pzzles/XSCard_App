@@ -57,9 +57,9 @@ const QuantitySelector: React.FC<QuantitySelectorProps> = ({
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Number of Tickets</Text>
+        <Text style={styles.title}>Select Number of Tickets</Text>
         <Text style={styles.subtitle}>
-          Select how many people you want to register
+          Choose how many people you want to register
         </Text>
       </View>
 
@@ -80,19 +80,16 @@ const QuantitySelector: React.FC<QuantitySelectorProps> = ({
           />
         </TouchableOpacity>
 
-        <Animated.View style={styles.quantityDisplay}>
-          <Animated.Text style={[styles.quantityText, { transform: [{ scale: animatedValue }] }]}>
-            {quantity}
-          </Animated.Text>
+        <View style={styles.quantityDisplay}>
+          <Text style={styles.quantityText}>{quantity}</Text>
           <Text style={styles.quantityLabel}>tickets</Text>
-        </Animated.View>
+        </View>
 
         <TouchableOpacity
           style={[
             styles.button,
             styles.incrementButton,
-            quantity >= maxQuantity && styles.buttonDisabled,
-            availableSpots !== undefined && quantity >= availableSpots && styles.buttonDisabled
+            (quantity >= maxQuantity || (availableSpots !== undefined && quantity >= availableSpots)) && styles.buttonDisabled
           ]}
           onPress={handleIncrement}
           disabled={
@@ -188,10 +185,10 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   decrementButton: {
-    backgroundColor: COLORS.error,
+    backgroundColor: COLORS.secondary,
   },
   incrementButton: {
-    backgroundColor: COLORS.success,
+    backgroundColor: COLORS.primary,
   },
   buttonDisabled: {
     backgroundColor: COLORS.lightGray,
@@ -216,7 +213,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: COLORS.warningLight,
+    backgroundColor: COLORS.lightGray,
     padding: 16,
     borderRadius: 8,
     marginBottom: 16,
@@ -234,14 +231,14 @@ const styles = StyleSheet.create({
   capacityInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.successLight,
+    backgroundColor: COLORS.background,
     padding: 12,
     borderRadius: 8,
     marginBottom: 12,
   },
   capacityText: {
     fontSize: 14,
-    color: COLORS.success,
+    color: COLORS.primary,
     marginLeft: 8,
     flex: 1,
   },

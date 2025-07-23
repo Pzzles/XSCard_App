@@ -3,8 +3,8 @@ const db = admin.firestore();
 
 // Reuse existing utilities and services
 const { sendError } = require('./eventController');
-const { generateTicketQR } = require('../services/qrService');
-const { sendBulkRegistrationEmail } = require('../public/Utils/emailService');
+const { generateTicketPDF, sendTicketEmail } = require('./ticketController');
+const QRService = require('../services/qrService');
 
 /**
  * Create a bulk registration for multiple attendees
@@ -33,6 +33,9 @@ const createBulkRegistration = async (req, res) => {
 
     const eventData = eventDoc.data();
     
+    // Add the document ID to eventData
+    eventData.id = eventId;
+    
     // Check if event allows bulk registrations
     if (!eventData.allowBulkRegistrations) {
       return sendError(res, 400, 'This event does not allow bulk registrations');
@@ -47,7 +50,8 @@ const createBulkRegistration = async (req, res) => {
       return sum + (doc.data().quantity || 1);
     }, 0);
 
-    if (totalExistingTickets + quantity > eventData.capacity) {
+    // Check capacity (0 means unlimited)
+    if (eventData.maxAttendees > 0 && (eventData.currentAttendees + quantity) > eventData.maxAttendees) {
       return sendError(res, 400, 'Event capacity exceeded');
     }
 
@@ -221,24 +225,66 @@ const processBulkRegistration = async (bulkRegistrationId, eventData, attendeeDe
     // Commit the batch
     await batch.commit();
 
-    // Generate QR codes for all tickets (reuse existing QR service)
+    // Update event attendance count
+    const eventRef = db.collection('events').doc(eventData.id);
+    await eventRef.update({
+      currentAttendees: admin.firestore.FieldValue.increment(attendeeDetails.length)
+    });
+
+    // Generate QR codes for all tickets and send PDF ticket emails
     for (const ticket of tickets) {
       try {
-        const qrCodeData = await generateTicketQR(ticket.id, eventData.id);
+        // Correct QR code generation: eventId, userId, ticketId
+        const qrResult = await QRService.generateTicketQR(
+          ticket.eventId,
+          ticket.userId,
+          ticket.id
+        );
         await db.collection('tickets').doc(ticket.id).update({
-          qrCode: qrCodeData
+          qrCode: qrResult.qrCode
+        });
+        // Fetch attendee info for PDF
+        const attendeeName = ticket.attendeeName;
+        const attendeeEmail = ticket.attendeeEmail;
+        const attendeePhone = ticket.attendeePhone;
+        // Compose ticket data for PDF
+        const ticketData = {
+          eventId: eventData.id,
+          ticketId: ticket.id,
+          eventTitle: eventData.title,
+          eventDate: eventData.eventDate || eventData.date,
+          eventTime: eventData.time || '',
+          venue: eventData.location?.venue || '',
+          city: eventData.location?.city || '',
+          userName: attendeeName,
+          qrCode: qrResult.qrDataString, // Use raw QR data string for PDF generation
+          ticketStatus: ticket.status
+        };
+        // Generate PDF
+        const pdfBuffer = await generateTicketPDF(ticketData);
+        // Send PDF ticket email
+        await sendTicketEmail({
+          userEmail: attendeeEmail,
+          userName: attendeeName,
+          eventTitle: eventData.title,
+          eventDate: ticketData.eventDate,
+          eventTime: ticketData.eventTime,
+          venue: ticketData.venue,
+          city: ticketData.city,
+          ticketId: ticket.id,
+          pdfBuffer
         });
       } catch (qrError) {
-        console.error(`Error generating QR for ticket ${ticket.id}:`, qrError);
+        console.error(`Error generating QR or sending PDF for ticket ${ticket.id}:`, qrError);
       }
     }
 
-    // Send bulk registration email (reuse existing email service)
-    try {
-      await sendBulkRegistrationEmail(userId, bulkRegistrationId, eventData, tickets);
-    } catch (emailError) {
-      console.error('Error sending bulk registration email:', emailError);
-    }
+    // Remove old bulk registration summary email logic
+    // try {
+    //   await sendBulkRegistrationEmail(userId, bulkRegistrationId, eventData, tickets);
+    // } catch (emailError) {
+    //   console.error('Error sending bulk registration email:', emailError);
+    // }
 
     return tickets;
 

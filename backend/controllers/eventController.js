@@ -815,6 +815,11 @@ exports.registerForEvent = async (req, res) => {
     // Get user info
     const userInfo = await getUserInfo(userId);
 
+    // Ensure a valid email is present before proceeding with payment
+    if (!userInfo.email || userInfo.email === 'No email') {
+      return sendError(res, 400, 'A valid email address is required to register for this event. Please update your profile.');
+    }
+
     // Check if payment is required (paid event with ticket price)
     const isPaidEvent = eventData.eventType === 'paid' && eventData.ticketPrice > 0;
     console.log('Is paid event (final check):', isPaidEvent);
