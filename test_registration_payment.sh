@@ -4,7 +4,7 @@
 # This script simulates the entire flow of registering for a paid event
 
 # Configuration
-BASE_URL="http://localhost:8383/api"
+BASE_URL="https://xscard-app.onrender.com/api"
 AUTH_TOKEN=""
 EVENT_ID=""
 REGISTRATION_ID=""

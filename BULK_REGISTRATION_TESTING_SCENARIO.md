@@ -269,7 +269,7 @@ This document outlines a complete testing scenario to validate the bulk registra
 #### **Test Endpoint: POST /api/events/{eventId}/bulk-register**
 ```bash
 # Test valid bulk registration
-curl -X POST http://localhost:8383/api/events/test-event-123/bulk-register \
+curl -X POST https://xscard-app.onrender.com/api/events/test-event-123/bulk-register \
   -H "Authorization: Bearer {token}" \
   -H "Content-Type: application/json" \
   -d '{
@@ -309,7 +309,7 @@ curl -X POST http://localhost:8383/api/events/test-event-123/bulk-register \
 
 #### **Test Endpoint: GET /api/bulk-registrations/{bulkRegistrationId}**
 ```bash
-curl -X GET http://localhost:8383/api/bulk-registrations/bulk_123456 \
+curl -X GET https://xscard-app.onrender.com/api/bulk-registrations/bulk_123456 \
   -H "Authorization: Bearer {token}"
 
 # Expected Response
