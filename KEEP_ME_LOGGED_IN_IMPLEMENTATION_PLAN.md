@@ -26,7 +26,7 @@
 - **Backend**: Firebase Authentication with custom token validation
 - **Frontend**: React Native with AsyncStorage for persistence
 - **Token Format**: `Bearer ${idToken}` (Firebase ID tokens)
-- **API Base**: `http://localhost:8383` (development)
+- **API Base**: `https://xscard-app.onrender.com` (production)
 - **Storage Keys**: `userToken`, `userData`, `userRole`
 
 ### **Current Authentication Flow**

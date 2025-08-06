@@ -58,4 +58,7 @@ router.post('/user/event-preferences/initialize', userController.initializeEvent
 // Testing endpoint for Phase 2B
 router.post('/user/subscription-level', userController.setUserSubscriptionLevel);
 
+// Account deactivation endpoint
+router.patch('/Users', userController.deactivateUser);
+
 module.exports = router;

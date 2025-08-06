@@ -142,6 +142,8 @@ exports.createEvent = async (req, res) => {
       currentAttendees: 0,
       attendeesList: [],
       status: 'draft',
+      // Bulk registration support
+      allowBulkRegistrations: req.body.allowBulkRegistrations === 'true' || req.body.allowBulkRegistrations === true,
       // Image data from Firebase Storage
       bannerImage: bannerImageUrl,
       images: eventImagesUrls,
@@ -813,6 +815,11 @@ exports.registerForEvent = async (req, res) => {
     // Get user info
     const userInfo = await getUserInfo(userId);
 
+    // Ensure a valid email is present before proceeding with payment
+    if (!userInfo.email || userInfo.email === 'No email') {
+      return sendError(res, 400, 'A valid email address is required to register for this event. Please update your profile.');
+    }
+
     // Check if payment is required (paid event with ticket price)
     const isPaidEvent = eventData.eventType === 'paid' && eventData.ticketPrice > 0;
     console.log('Is paid event (final check):', isPaidEvent);
@@ -883,13 +890,21 @@ exports.registerForEvent = async (req, res) => {
 
         // Get event organiser's Paystack subaccount (if available)
         let subaccount = null;
+        const isDevelopment = process.env.NODE_ENV === 'development' || process.env.SKIP_BANK_VERIFICATION === 'true';
+        
         try {
           const organiserDoc = await db.collection('event_organisers').doc(eventData.organizerId).get();
           if (organiserDoc.exists) {
             const organiserData = organiserDoc.data();
             if (organiserData.status === 'active' && organiserData.paystackSubaccountCode) {
-              subaccount = organiserData.paystackSubaccountCode;
-              console.log('Using organiser subaccount:', subaccount);
+              // In development mode, skip subaccount to avoid Paystack validation errors
+              if (isDevelopment) {
+                console.log('Development mode: Skipping subaccount to avoid Paystack validation errors');
+                subaccount = null;
+              } else {
+                subaccount = organiserData.paystackSubaccountCode;
+                console.log('Using organiser subaccount:', subaccount);
+              }
             }
           }
         } catch (error) {
@@ -918,6 +933,9 @@ exports.registerForEvent = async (req, res) => {
         if (subaccount) {
           paymentParams.subaccount = subaccount;
           paymentParams.transaction_charge = 1000; // 10% platform fee in kobo
+        } else if (isDevelopment) {
+          // In development mode, add a note about subaccount being skipped
+          console.log('Development mode: Payment will go to main account (no subaccount)');
         }
 
         const params = JSON.stringify(paymentParams);

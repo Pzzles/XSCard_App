@@ -6,7 +6,7 @@
 This guide provides all API endpoints, payloads, and explanations for integrating 
 the XSCard Events system into your frontend application.
 
-Base URL: http://localhost:8383
+Base URL: https://xscard-app.onrender.com
 Authentication: Bearer token in Authorization header
 
 ========================================================================

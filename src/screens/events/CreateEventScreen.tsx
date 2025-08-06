@@ -77,6 +77,7 @@ export default function CreateEventScreen() {
     visibility: 'public' as 'public' | 'private' | 'invite-only',
     images: [],
     tags: [],
+    allowBulkRegistrations: true, // Enable by default for testing
   });
 
   // UI state - Updated for Android compatibility
@@ -370,6 +371,7 @@ export default function CreateEventScreen() {
       payload.append('ticketPrice', formData.ticketPrice.toString());
       payload.append('maxAttendees', formData.maxAttendees.toString());
       payload.append('visibility', formData.visibility);
+      payload.append('allowBulkRegistrations', formData.allowBulkRegistrations?.toString() || 'true');
 
       // Location & tags as JSON strings for backend parsing
       payload.append('location', JSON.stringify(formData.location));
@@ -683,6 +685,24 @@ export default function CreateEventScreen() {
           keyboardType="numeric"
         />
         {errors.maxAttendees && <Text style={styles.errorText}>{errors.maxAttendees}</Text>}
+      </View>
+
+      <View style={styles.inputGroup}>
+        <Text style={styles.label}>Bulk Registration</Text>
+        <View style={styles.switchContainer}>
+          <Text style={styles.switchLabel}>
+            Allow users to register multiple people at once
+          </Text>
+          <Switch
+            value={formData.allowBulkRegistrations || false}
+            onValueChange={(value) => updateFormData({ allowBulkRegistrations: value })}
+            trackColor={{ false: COLORS.lightGray, true: COLORS.primary }}
+            thumbColor={COLORS.white}
+          />
+        </View>
+        <Text style={styles.helpText}>
+          When enabled, attendees can register 2-50 people in a single transaction
+        </Text>
       </View>
 
       <View style={styles.inputGroup}>
@@ -1382,5 +1402,23 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontSize: 12,
     marginLeft: 4,
+  },
+  switchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  switchLabel: {
+    fontSize: 16,
+    color: COLORS.black,
+    flex: 1,
+    marginRight: 16,
+  },
+  helpText: {
+    fontSize: 14,
+    color: COLORS.gray,
+    marginTop: 4,
+    lineHeight: 18,
   },
 }); 

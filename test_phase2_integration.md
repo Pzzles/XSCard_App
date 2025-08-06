@@ -106,20 +106,20 @@ To test the backend implementation directly:
 
 ```bash
 # 1. Test registration endpoint
-curl -X POST "http://localhost:8383/api/events/{eventId}/register" \
+curl -X POST "https://xscard-app.onrender.com/api/events/{eventId}/register" \
   -H "Authorization: Bearer {your_token}" \
   -H "Content-Type: application/json" \
   -d '{"specialRequests":"Test registration"}'
 
 # 2. Test payment status endpoint
-curl -X GET "http://localhost:8383/api/events/{eventId}/registration/{registrationId}/payment/status" \
+curl -X GET "https://xscard-app.onrender.com/api/events/{eventId}/registration/{registrationId}/payment/status" \
   -H "Authorization: Bearer {your_token}"
 
 # 3. Test payment callback (simulating Paystack)
-curl -X GET "http://localhost:8383/events/registration/payment/callback?reference={payment_reference}"
+curl -X GET "https://xscard-app.onrender.com/events/registration/payment/callback?reference={payment_reference}"
 
 # 4. Test payment webhook (simulating Paystack)
-curl -X POST "http://localhost:8383/events/registration/payment/webhook" \
+curl -X POST "https://xscard-app.onrender.com/events/registration/payment/webhook" \
   -H "Content-Type: application/json" \
   -d '{
     "event": "charge.success",

@@ -19,6 +19,7 @@ type RootStackParamList = {
   Cards: undefined;
   Events: undefined;
   Contacts: undefined;
+  Settings: undefined;
   AdminDashboard: undefined;
   MainApp: undefined;
   EventPreferences: undefined;
@@ -267,6 +268,14 @@ export default function Header({ title, rightIcon, showAddButton = false }: Head
             >
               <MaterialIcons name="people" size={24} color={COLORS.secondary} />
               <Text style={[styles.menuText, { color: COLORS.secondary }]}>Contacts</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => handleNavigate('Settings')}
+            >
+              <MaterialIcons name="settings" size={24} color={COLORS.secondary} />
+              <Text style={[styles.menuText, { color: COLORS.secondary }]}>Settings</Text>
             </TouchableOpacity>
 
             {userPlan !== 'enterprise' && (

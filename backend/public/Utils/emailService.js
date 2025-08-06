@@ -1,6 +1,7 @@
 require('dotenv').config();
 const nodemailer = require('nodemailer');
 const sgMail = require('@sendgrid/mail'); // Add this line to import SendGrid
+const { db } = require('../../firebase.js');
 
 // Set SendGrid API key if available
 if (process.env.SENDGRID_API_KEY && process.env.SENDGRID_API_KEY !== 'YOUR_SENDGRID_API_KEY') {
@@ -212,8 +213,144 @@ const sendWithSendGrid = async (mailOptions) => {
   }
 };
 
+// Bulk registration email function - sends individual emails to each attendee
+const sendBulkRegistrationEmail = async (userId, bulkRegistrationId, eventData, tickets) => {
+  try {
+    console.log(`Sending individual emails for bulk registration ${bulkRegistrationId} to ${tickets.length} attendees`);
+    
+    const emailResults = [];
+    
+    // Send individual email to each attendee
+    for (const ticket of tickets) {
+      try {
+        const attendeeEmail = ticket.attendeeEmail;
+        const attendeeName = ticket.attendeeName;
+        
+        if (!attendeeEmail) {
+          console.error(`No email found for attendee: ${attendeeName}`);
+          emailResults.push({ 
+            attendee: attendeeName, 
+            success: false, 
+            error: 'No email address' 
+          });
+          continue;
+        }
+
+        // Create individual email content for this attendee
+        const emailContent = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+              <h1 style="color: #333; margin: 0;">Event Registration Confirmation</h1>
+            </div>
+            
+            <div style="padding: 20px;">
+              <h2 style="color: #333;">Hello ${attendeeName}!</h2>
+              <p>You have been successfully registered for the following event:</p>
+              
+              <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="color: #FF4B6E; margin-top: 0;">${eventData.title}</h3>
+                <p><strong>Date:</strong> ${eventData.eventDate ? new Date(eventData.eventDate).toLocaleDateString() : 'Date TBD'}</p>
+                <p><strong>Time:</strong> ${eventData.time || 'Time TBD'}</p>
+                <p><strong>Location:</strong> ${eventData.location?.venue || 'Location TBD'}</p>
+                ${eventData.location?.address ? `<p><strong>Address:</strong> ${eventData.location.address}, ${eventData.location.city}</p>` : ''}
+              </div>
+              
+              <div style="background-color: #e8f5e8; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="color: #4CAF50; margin-top: 0;">Your Ticket Details</h3>
+                <p><strong>Ticket ID:</strong> ${ticket.id}</p>
+                <p><strong>Attendee:</strong> ${attendeeName}</p>
+                <p><strong>Email:</strong> ${attendeeEmail}</p>
+                ${ticket.attendeePhone ? `<p><strong>Phone:</strong> ${ticket.attendeePhone}</p>` : ''}
+                <p><strong>Status:</strong> Confirmed</p>
+              </div>
+              
+              <div style="background-color: #fff3cd; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="color: #856404; margin-top: 0;">Important Information</h3>
+                <ul style="color: #856404;">
+                  <li>Please bring this confirmation email to the event</li>
+                  <li>Your unique ticket ID will be used for check-in</li>
+                  <li>If you have any questions, please contact the event organizer</li>
+                </ul>
+              </div>
+              
+              <div style="text-align: center; margin: 30px 0;">
+                <p style="font-size: 14px; color: #666;">
+                  This is an automated email. Please do not reply to this message.
+                </p>
+              </div>
+            </div>
+            
+            <div style="background-color: #f8f9fa; padding: 20px; text-align: center; font-size: 12px; color: #666;">
+              <p>&copy; ${new Date().getFullYear()} XSCard. All Rights Reserved.</p>
+            </div>
+          </div>
+        `;
+
+        const mailOptions = {
+          from: `"XSCard Events" <${process.env.EMAIL_USER}>`,
+          to: attendeeEmail,
+          subject: `Event Registration Confirmation - ${eventData.title}`,
+          html: emailContent
+        };
+
+        // Send email to this attendee
+        const result = await sendMailWithStatus(mailOptions);
+        
+        if (result.success) {
+          console.log(`✅ Registration email sent successfully to ${attendeeName} (${attendeeEmail})`);
+          emailResults.push({ 
+            attendee: attendeeName, 
+            email: attendeeEmail,
+            success: true 
+          });
+        } else {
+          console.error(`❌ Failed to send email to ${attendeeName} (${attendeeEmail}):`, result.error);
+          emailResults.push({ 
+            attendee: attendeeName, 
+            email: attendeeEmail,
+            success: false, 
+            error: result.error 
+          });
+        }
+
+      } catch (attendeeError) {
+        console.error(`Error sending email to ${ticket.attendeeName}:`, attendeeError);
+        emailResults.push({ 
+          attendee: ticket.attendeeName, 
+          email: ticket.attendeeEmail,
+          success: false, 
+          error: attendeeError.message 
+        });
+      }
+    }
+
+    // Log summary
+    const successCount = emailResults.filter(r => r.success).length;
+    const failureCount = emailResults.filter(r => !r.success).length;
+    
+    console.log(`📧 Bulk registration email summary: ${successCount} sent, ${failureCount} failed out of ${tickets.length} total`);
+    
+    return { 
+      success: successCount > 0, 
+      results: emailResults,
+      successCount,
+      failureCount,
+      totalCount: tickets.length
+    };
+
+  } catch (error) {
+    console.error('Error in sendBulkRegistrationEmail:', error);
+    return { 
+      success: false, 
+      error: error.message,
+      results: []
+    };
+  }
+};
+
 module.exports = {
   transporter,
   sendMailWithStatus,
-  verifyTransporter
+  verifyTransporter,
+  sendBulkRegistrationEmail
 };

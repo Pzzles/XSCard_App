@@ -72,7 +72,7 @@ POST /api/events/{eventId}/register/bulk/{registrationId}/payment/callback
 
 ---
 
-## 📱 Phase 2: Frontend Implementation
+## 📱 Phase 2: Frocntend Implementation
 
 ### 2.1 New Screens
 

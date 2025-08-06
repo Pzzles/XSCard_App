@@ -61,6 +61,7 @@ class QRService {
       return {
         success: true,
         qrCode: qrCodeDataURL,
+        qrDataString: JSON.stringify(qrData), // Add raw QR data string for PDF generation
         verificationToken,
         expiresAt: new Date(timestamp + (24 * 60 * 60 * 1000)).toISOString()
       };

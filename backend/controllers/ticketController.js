@@ -392,3 +392,6 @@ const sendTicketEmail = async (emailData) => {
     };
   }
 }; 
+
+exports.generateTicketPDF = generateTicketPDF;
+exports.sendTicketEmail = sendTicketEmail; 

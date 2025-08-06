@@ -47,13 +47,8 @@ const getBaseUrl = () => {
   
   // Common localhost addresses
   // return 'http://localhost:8383';
-  // return 'http://127.0.0.1:8383';
+  // return 'http://192.168.68.104:8383';
   
-  // Network IP addresses (update based on your network)
-  // return 'http://192.168.8.8:8383';
-  // return 'http://192.168.68.101:8383';
-  // return 'http://192.168.1.100:8383';
-
 };
 
 export const API_BASE_URL = getBaseUrl();
@@ -110,6 +105,12 @@ export const ENDPOINTS = {
     REGISTER_EVENT: '/events/:eventId/register',
     UNREGISTER_EVENT: '/events/:eventId/unregister',
     
+    // Bulk Registration
+    CREATE_BULK_REGISTRATION: '/api/events/:eventId/bulk-register',
+    GET_BULK_REGISTRATION: '/api/bulk-registrations/:bulkRegistrationId',
+    GET_USER_BULK_REGISTRATIONS: '/api/user/bulk-registrations',
+    CANCEL_BULK_REGISTRATION: '/api/bulk-registrations/:bulkRegistrationId',
+    
     // User Events
     GET_USER_EVENTS: '/user/events',
     GET_USER_REGISTRATIONS: '/user/registrations',
@@ -133,6 +134,9 @@ export const ENDPOINTS = {
     GET_ORGANISER_STATUS: '/api/event-organisers/status',
     GET_ORGANISER_PROFILE: '/api/event-organisers/profile',
     UPDATE_ORGANISER_PROFILE: '/api/event-organisers/profile',
+    
+    // User Management
+    DEACTIVATE_USER: '/Users',
 };
 
 export const buildUrl = (endpoint: string) => `${API_BASE_URL}${endpoint}`;

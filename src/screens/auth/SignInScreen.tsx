@@ -10,6 +10,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import ErrorPopup from '../../components/popups/ErrorPopup';
 import { setKeepLoggedInPreference, storeAuthData, updateLastLoginTime } from '../../utils/authStorage';
 import { ErrorHandler, ERROR_CODES, handleAuthError, handleNetworkError, createAppError } from '../../utils/errorHandler';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../../config/firebaseConfig';
 
 type SignInScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'SignIn'>;
 
@@ -32,9 +34,8 @@ export default function SignInScreen() {
   });
   const [errorMessage, setErrorMessage] = useState('');
   const [showError, setShowError] = useState(false);
-  const [needsVerification, setNeedsVerification] = useState(false);
-  const [pendingVerificationUid, setPendingVerificationUid] = useState('');
-  const [resendingVerification, setResendingVerification] = useState(false);
+
+
 
   // Animated values for smooth toggle
   const toggleAnimation = useRef(new Animated.Value(1)).current; // Start at 1 (on position)
@@ -98,40 +99,7 @@ export default function SignInScreen() {
     return isValid;
   };
 
-  const handleResendVerification = async () => {
-    if (!pendingVerificationUid) {
-      setErrorMessage('Unable to resend verification. Please try signing up again.');
-      setShowError(true);
-      return;
-    }
 
-    setResendingVerification(true);
-
-    try {
-      const response = await fetch(buildUrl(`/resend-verification/${pendingVerificationUid}`), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        setErrorMessage('Verification email sent! Please check your inbox and verify your email.');
-        setShowError(true);
-        console.log('Verification email resent successfully');
-      } else {
-        const errorData = await response.json();
-        setErrorMessage(errorData.message || 'Failed to resend verification email. Please try again.');
-        setShowError(true);
-      }
-    } catch (error) {
-      console.error('Error resending verification:', error);
-      setErrorMessage('Failed to resend verification email. Please check your connection and try again.');
-      setShowError(true);
-    } finally {
-      setResendingVerification(false);
-    }
-  };
 
   const handleSignIn = async () => {
     if (!validateForm()) {
@@ -141,38 +109,51 @@ export default function SignInScreen() {
     setIsLoading(true);
 
     try {
-      console.log('SignIn: Starting backend authentication with email verification...');
+      console.log('SignIn: Starting Firebase authentication...');
       
-      // Use your backend endpoint that enforces email verification
-      const response = await fetch(buildUrl(ENDPOINTS.SIGN_IN), {
-        method: 'POST',
+      // Use Firebase client SDK for authentication
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const firebaseUser = userCredential.user;
+      
+      console.log('SignIn: Firebase authentication successful:', firebaseUser.uid);
+      
+      // Get Firebase ID token
+      const firebaseToken = await firebaseUser.getIdToken();
+      console.log('SignIn: Firebase token obtained');
+      
+      // Now get user data from your backend using the Firebase token
+      const response = await fetch(buildUrl(`${ENDPOINTS.GET_USER}/${firebaseUser.uid}`), {
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${firebaseToken}`,
         },
-        body: JSON.stringify({
-          email,
-          password,
-        }),
       });
 
       if (response.ok) {
-        const data = await response.json();
-        console.log('SignIn: Backend authentication successful');
+        const backendUserData = await response.json();
+        console.log('SignIn: User data retrieved from backend:', JSON.stringify(backendUserData, null, 2));
         
         // Store the token and user data using our enhanced storage system
-        const token = data.token;
-        const finalUserData = {
-          ...data.user,
-          id: data.user.uid,
-          name: data.user.name || '',
-          email: data.user.email || ''
+        const token = `Bearer ${firebaseToken}`;
+        
+        // Backend returns user data directly (not wrapped in a user property)
+        const userData = {
+          // Spread backend data safely
+          ...backendUserData,
+          // Ensure we have essential fields with fallbacks
+          id: backendUserData?.id || firebaseUser.uid,
+          uid: backendUserData?.id || firebaseUser.uid, // Backend uses 'id', we need 'uid'
+          name: backendUserData?.name || firebaseUser.displayName || '',
+          email: backendUserData?.email || firebaseUser.email || '',
+          plan: backendUserData?.plan || 'free' // Default plan
         };
 
         // Use our Phase 1 storage system to store all auth data
         await storeAuthData({
           userToken: token,
-          userData: finalUserData,
-          userRole: finalUserData.plan === 'admin' ? 'admin' : 'user',
+          userData: userData,
+          userRole: userData.plan === 'admin' ? 'admin' : 'user',
           keepLoggedIn,
           lastLoginTime: Date.now(),
         });
@@ -181,44 +162,72 @@ export default function SignInScreen() {
         await updateLastLoginTime();
 
         console.log('SignIn: Data stored successfully, keepLoggedIn:', keepLoggedIn);
+        console.log('SignIn: Firebase auth state listener will now handle automatic token refresh');
         
         navigation.replace('MainApp');
       } else {
-        const errorData = await response.json();
+        // Handle backend data retrieval failures
+        console.warn('SignIn: Backend user data retrieval failed, using Firebase user data');
         
-        // Handle email verification required
-        if (response.status === 403 && errorData.needsVerification) {
-          console.log('SignIn: Email verification required');
-          setNeedsVerification(true);
-          setPendingVerificationUid(errorData.uid);
-          setErrorMessage('Please verify your email before signing in. Check your inbox for the verification link.');
-          setShowError(true);
-          return;
-        }
+        // Fallback to Firebase user data if backend fails
+        const userData = {
+          id: firebaseUser.uid,
+          uid: firebaseUser.uid,
+          name: firebaseUser.displayName || '',
+          email: firebaseUser.email || '',
+          plan: 'free' // Default plan
+        };
+
+        const token = `Bearer ${firebaseToken}`;
         
-        // Handle other authentication errors
-        let errorMessage = 'Authentication failed';
+        await storeAuthData({
+          userToken: token,
+          userData: userData,
+          userRole: 'user',
+          keepLoggedIn,
+          lastLoginTime: Date.now(),
+        });
+
+        // Update last login time
+        await updateLastLoginTime();
+
+        console.log('SignIn: Data stored successfully with fallback data, keepLoggedIn:', keepLoggedIn);
         
-        if (response.status === 401) {
-          errorMessage = 'Invalid email or password';
-        } else if (response.status === 429) {
-          errorMessage = errorData.message || 'Too many login attempts. Please try again later.';
-        } else if (response.status === 404) {
-          errorMessage = 'Account not found. Please check your email or sign up.';
-        } else {
-          errorMessage = errorData.message || 'Authentication failed';
-        }
-        
-        const appError = createAppError(ERROR_CODES.AUTHENTICATION_FAILED, new Error(errorMessage));
-        await handleAuthError(appError);
-        setErrorMessage(errorMessage);
-        setShowError(true);
+        navigation.replace('MainApp');
       }
     } catch (error: any) {
       console.error('SignIn: Authentication error:', error);
       
-      // Handle network errors
-      if (error instanceof TypeError && error.message.includes('fetch')) {
+      // Handle Firebase authentication errors
+      if (error.code) {
+        let errorMessage = 'Authentication failed';
+        
+        switch (error.code) {
+          case 'auth/user-not-found':
+            errorMessage = 'No account found with this email address.';
+            break;
+          case 'auth/wrong-password':
+            errorMessage = 'Invalid password. Please try again.';
+            break;
+          case 'auth/invalid-email':
+            errorMessage = 'Invalid email address format.';
+            break;
+          case 'auth/user-disabled':
+            errorMessage = 'This account has been disabled.';
+            break;
+          case 'auth/too-many-requests':
+            errorMessage = 'Too many failed attempts. Please try again later.';
+            break;
+          case 'auth/network-request-failed':
+            errorMessage = 'Network error. Please check your internet connection.';
+            break;
+          default:
+            errorMessage = error.message || 'Authentication failed. Please try again.';
+        }
+        
+        setErrorMessage(errorMessage);
+      } else if (error instanceof TypeError && error.message.includes('fetch')) {
+        // Handle network errors for backend calls
         await handleNetworkError(error, async () => {
           await handleSignIn();
         });
@@ -352,18 +361,7 @@ export default function SignInScreen() {
         </Text>
       </TouchableOpacity>
 
-      {/* Show resend verification button when needed */}
-      {needsVerification && (
-        <TouchableOpacity 
-          style={[styles.resendButton, resendingVerification && styles.disabledButton]}
-          onPress={handleResendVerification}
-          disabled={resendingVerification}
-        >
-          <Text style={styles.resendButtonText}>
-            {resendingVerification ? 'Sending...' : 'Resend Verification Email'}
-          </Text>
-        </TouchableOpacity>
-      )}
+
 
       <View style={styles.signUpContainer}>
         <Text style={styles.signUpText}>Don't have an account? </Text>
@@ -409,18 +407,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
-  resendButton: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 25,
-    padding: 15,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  resendButtonText: {
-    color: COLORS.white,
-    fontSize: 16,
-    fontWeight: '600',
-  },
+
   signUpContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
