@@ -12,30 +12,49 @@ if (process.env.SENDGRID_API_KEY && process.env.SENDGRID_API_KEY !== 'YOUR_SENDG
 const EMAIL_SERVICE = process.env.EMAIL_SERVICE || 'smtp'; // Add 'EMAIL_SERVICE=sendgrid' to .env to use SendGrid
 
 // Create email transport configuration with XSpark settings
-const createTransporter = () => {
+const createTransporter = (alternativePort = false) => {
+  // For production environments like Render, prefer port 587 by default
+  const isProduction = process.env.NODE_ENV === 'production';
+  const defaultPort = isProduction ? 587 : parseInt(process.env.EMAIL_SMTP_PORT);
+  const port = alternativePort ? 587 : defaultPort;
+  const secure = port === 465; // Use secure only for 465, STARTTLS for 587
+  
   console.log('Creating email transporter with:', {
     host: process.env.EMAIL_HOST,
-    port: parseInt(process.env.EMAIL_SMTP_PORT),
-    user: process.env.EMAIL_USER
+    port: port,
+    secure: secure,
+    user: process.env.EMAIL_USER,
+    environment: process.env.NODE_ENV || 'development'
   });
   
-  return nodemailer.createTransport({
+  const transportConfig = {
     host: process.env.EMAIL_HOST,
-    port: parseInt(process.env.EMAIL_SMTP_PORT),
-    secure: true, // Use SSL/TTLS for port 465
+    port: port,
+    secure: secure, // Use SSL for 465, false for 587 (will use STARTTLS)
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASSWORD
     },
     tls: {
       rejectUnauthorized: false, // Accept self-signed certificates
+      ciphers: 'SSLv3' // Add cipher compatibility for older servers
     },
-    debug: true, // Enable debug logging
-    // Add timeout configuration
-    connectionTimeout: 10000, // 10 seconds
-    greetingTimeout: 10000,  // 10 seconds
-    socketTimeout: 15000,    // 15 seconds
-  });
+    debug: process.env.NODE_ENV !== 'production', // Enable debug only in development
+    // Adjust timeouts for production hosting platforms
+    connectionTimeout: isProduction ? 20000 : 10000, // 20 seconds in production
+    greetingTimeout: isProduction ? 15000 : 10000,   // 15 seconds in production  
+    socketTimeout: isProduction ? 30000 : 15000,     // 30 seconds in production
+    // Add additional options for better compatibility
+    requireTLS: port === 587, // Require TLS for port 587
+    ignoreTLS: port === 25,   // Ignore TLS for port 25 if needed
+  };
+
+  // Remove debug in production to reduce log noise
+  if (isProduction) {
+    delete transportConfig.debug;
+  }
+
+  return nodemailer.createTransport(transportConfig);
 };
 
 // Create initial transporter instance
@@ -50,8 +69,16 @@ const verifyTransporter = () => {
       return resolve(true);
     }
     
+    // Set a timeout for the verification to prevent hanging
+    const verificationTimeout = setTimeout(() => {
+      console.log('Email server verification timed out - will attempt fallback during actual sending');
+      resolve(false);
+    }, 8000); // 8 second timeout
+    
     // SMTP verification
     transporter.verify((error, success) => {
+      clearTimeout(verificationTimeout);
+      
       if (error) {
         console.error('Email server verification error:', {
           message: error.message,
@@ -60,7 +87,26 @@ const verifyTransporter = () => {
           host: process.env.EMAIL_HOST,
           port: process.env.EMAIL_SMTP_PORT
         });
-        resolve(false);
+        
+        // If port 465 fails, immediately try creating transporter with port 587
+        if (error.code === 'ETIMEDOUT' && process.env.EMAIL_SMTP_PORT === '465') {
+          console.log('Port 465 timed out, testing port 587 with STARTTLS...');
+          
+          const altTransporter = createTransporter(true); // Use port 587
+          altTransporter.verify((altError, altSuccess) => {
+            if (altError) {
+              console.error('Port 587 also failed:', altError.message);
+              resolve(false);
+            } else {
+              console.log('Port 587 verification successful - switching to port 587 as default');
+              // Replace the main transporter with the working one
+              transporter = altTransporter;
+              resolve(true);
+            }
+          });
+        } else {
+          resolve(false);
+        }
       } else {
         console.log('Email server connection verified successfully');
         resolve(true);
@@ -108,33 +154,60 @@ const sendMailWithStatus = async (mailOptions) => {
         messageId: info.messageId
       };
     } catch (transportError) {
+      console.log('SMTP transport error:', {
+        code: transportError.code,
+        message: transportError.message,
+        command: transportError.command
+      });
       // If SMTP fails and SendGrid is configured, try SendGrid as fallback
       if (process.env.SENDGRID_API_KEY && process.env.SENDGRID_API_KEY !== 'YOUR_SENDGRID_API_KEY') {
         console.log('SMTP failed, trying SendGrid as fallback...');
         return await sendWithSendGrid(mailOptions);
       }
       
-      // If we get a connection error, try to recreate the transporter once
+      // If we get a connection error, try alternative approaches
       if (transportError.code === 'ETIMEDOUT' || 
           transportError.code === 'ECONNREFUSED' || 
           transportError.code === 'ECONNRESET') {
         
-        console.log('Reconnecting to email server after connection error...');
-        // Create a fresh transporter instance
-        transporter = createTransporter();
+        console.log('SMTP connection failed, trying alternative port 587 with STARTTLS...');
         
-        // Try one more time with the fresh connection
-        const info = await transporter.sendMail(mailOptions);
-        console.log('Email sent after reconnection to:', mailOptions.to);
-        console.log('Message ID:', info.messageId);
+        try {
+          // Try port 587 with STARTTLS (more compatible with hosting platforms)
+          const alternativeTransporter = createTransporter(true);
+          const info = await alternativeTransporter.sendMail(mailOptions);
+          console.log('Email sent via alternative port 587 to:', mailOptions.to);
+          console.log('Message ID:', info.messageId);
 
-        return {
-          success: true,
-          accepted: info.accepted,
-          rejected: info.rejected,
-          messageId: info.messageId,
-          reconnected: true
-        };
+          // Update the main transporter to use the working configuration
+          transporter = alternativeTransporter;
+
+          return {
+            success: true,
+            accepted: info.accepted,
+            rejected: info.rejected,
+            messageId: info.messageId,
+            alternativePort: true
+          };
+        } catch (alternativeError) {
+          console.log('Port 587 also failed, trying to reconnect with original settings...');
+          
+          // Create a fresh transporter instance with original settings
+          transporter = createTransporter();
+          
+          // Try one more time with the fresh connection
+          const info = await transporter.sendMail(mailOptions);
+          console.log('Email sent after reconnection to:', mailOptions.to);
+          console.log('Message ID:', info.messageId);
+
+          return {
+            success: true,
+            accepted: info.accepted,
+            rejected: info.rejected,
+            messageId: info.messageId,
+            reconnected: true
+          };
+        }
       }
       
       // If it's not a connection error, or the retry failed, throw the original error
