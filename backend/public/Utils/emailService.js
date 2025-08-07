@@ -1,6 +1,6 @@
 require('dotenv').config();
 const nodemailer = require('nodemailer');
-const sgMail = require('@sendgrid/mail'); // Add this line to import SendGrid
+const sgMail = require('@sendgrid/mail'); // SendGrid integration
 const { db } = require('../../firebase.js');
 
 // Set SendGrid API key if available
@@ -9,25 +9,21 @@ if (process.env.SENDGRID_API_KEY && process.env.SENDGRID_API_KEY !== 'YOUR_SENDG
 }
 
 // Email service configuration
-const EMAIL_SERVICE = process.env.EMAIL_SERVICE || 'smtp'; // Add 'EMAIL_SERVICE=sendgrid' to .env to use SendGrid
+const EMAIL_SERVICE = process.env.EMAIL_SERVICE || 'smtp'; // Options: 'smtp', 'sendgrid', 'gmail'
 
-// Create email transport configuration with XSpark settings
-const createTransporter = (alternativePort = false) => {
-  // For production environments like Render, prefer port 587 by default
-  const isProduction = process.env.NODE_ENV === 'production';
-  const defaultPort = isProduction ? 587 : parseInt(process.env.EMAIL_SMTP_PORT);
-  const port = alternativePort ? 587 : defaultPort;
-  const secure = port === 465; // Use secure only for 465, STARTTLS for 587
+// Create primary SMTP transport configuration
+const createPrimaryTransporter = (alternativePort = false) => {
+  const port = alternativePort ? 587 : parseInt(process.env.EMAIL_SMTP_PORT);
+  const secure = alternativePort ? false : (port === 465); // Use secure for 465, STARTTLS for 587
   
-  console.log('Creating email transporter with:', {
+  console.log('Creating primary SMTP transporter with:', {
     host: process.env.EMAIL_HOST,
     port: port,
     secure: secure,
-    user: process.env.EMAIL_USER,
-    environment: process.env.NODE_ENV || 'development'
+    user: process.env.EMAIL_USER
   });
   
-  const transportConfig = {
+  return nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
     port: port,
     secure: secure, // Use SSL for 465, false for 587 (will use STARTTLS)
@@ -37,28 +33,32 @@ const createTransporter = (alternativePort = false) => {
     },
     tls: {
       rejectUnauthorized: false, // Accept self-signed certificates
-      ciphers: 'SSLv3' // Add cipher compatibility for older servers
     },
-    debug: process.env.NODE_ENV !== 'production', // Enable debug only in development
-    // Adjust timeouts for production hosting platforms
-    connectionTimeout: isProduction ? 20000 : 10000, // 20 seconds in production
-    greetingTimeout: isProduction ? 15000 : 10000,   // 15 seconds in production  
-    socketTimeout: isProduction ? 30000 : 15000,     // 30 seconds in production
-    // Add additional options for better compatibility
-    requireTLS: port === 587, // Require TLS for port 587
-    ignoreTLS: port === 25,   // Ignore TLS for port 25 if needed
-  };
+    debug: true, // Enable debug logging
+    // Add timeout configuration
+    connectionTimeout: 10000, // 10 seconds
+    greetingTimeout: 10000,  // 10 seconds
+    socketTimeout: 15000,    // 15 seconds
+  });
+};
 
-  // Remove debug in production to reduce log noise
-  if (isProduction) {
-    delete transportConfig.debug;
-  }
-
-  return nodemailer.createTransport(transportConfig);
+// Create Gmail fallback transport configuration
+const createGmailTransporter = () => {
+  console.log('Creating Gmail fallback transporter');
+  
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.GMAIL_USER || 'tshehlap@gmail.com',
+      pass: process.env.GMAIL_APP_PASSWORD || 'xfot xdmq llsi akrb'
+    },
+    debug: process.env.NODE_ENV !== 'production'
+  });
 };
 
 // Create initial transporter instance
-let transporter = createTransporter();
+let primaryTransporter = createPrimaryTransporter();
+let gmailTransporter = createGmailTransporter();
 
 // Enhanced connection test with detailed logging and graceful fallback
 const verifyTransporter = () => {
@@ -69,46 +69,19 @@ const verifyTransporter = () => {
       return resolve(true);
     }
     
-    // Set a timeout for the verification to prevent hanging
-    const verificationTimeout = setTimeout(() => {
-      console.log('Email server verification timed out - will attempt fallback during actual sending');
-      resolve(false);
-    }, 8000); // 8 second timeout
-    
-    // SMTP verification
-    transporter.verify((error, success) => {
-      clearTimeout(verificationTimeout);
-      
+    // Primary SMTP verification
+    primaryTransporter.verify((error, success) => {
       if (error) {
-        console.error('Email server verification error:', {
+        console.error('Primary SMTP server verification error:', {
           message: error.message,
           code: error.code,
           command: error.command,
           host: process.env.EMAIL_HOST,
           port: process.env.EMAIL_SMTP_PORT
         });
-        
-        // If port 465 fails, immediately try creating transporter with port 587
-        if (error.code === 'ETIMEDOUT' && process.env.EMAIL_SMTP_PORT === '465') {
-          console.log('Port 465 timed out, testing port 587 with STARTTLS...');
-          
-          const altTransporter = createTransporter(true); // Use port 587
-          altTransporter.verify((altError, altSuccess) => {
-            if (altError) {
-              console.error('Port 587 also failed:', altError.message);
-              resolve(false);
-            } else {
-              console.log('Port 587 verification successful - switching to port 587 as default');
-              // Replace the main transporter with the working one
-              transporter = altTransporter;
-              resolve(true);
-            }
-          });
-        } else {
-          resolve(false);
-        }
+        resolve(false);
       } else {
-        console.log('Email server connection verified successfully');
+        console.log('Primary SMTP server connection verified successfully');
         resolve(true);
       }
     });
@@ -141,77 +114,100 @@ const sendMailWithStatus = async (mailOptions) => {
       return await sendWithSendGrid(mailOptions);
     }
     
-    // Otherwise proceed with SMTP
+    // Otherwise proceed with primary SMTP
     try {
-      const info = await transporter.sendMail(mailOptions);
-      console.log('Email sent to:', mailOptions.to);
+      const info = await primaryTransporter.sendMail(mailOptions);
+      console.log('Email sent via primary SMTP to:', mailOptions.to);
       console.log('Message ID:', info.messageId);
 
       return {
         success: true,
         accepted: info.accepted,
         rejected: info.rejected,
-        messageId: info.messageId
+        messageId: info.messageId,
+        provider: 'primary-smtp'
       };
-    } catch (transportError) {
-      console.log('SMTP transport error:', {
-        code: transportError.code,
-        message: transportError.message,
-        command: transportError.command
+    } catch (primaryError) {
+      console.log('Primary SMTP transport error:', {
+        code: primaryError.code,
+        message: primaryError.message,
+        command: primaryError.command
       });
-      // If SMTP fails and SendGrid is configured, try SendGrid as fallback
-      if (process.env.SENDGRID_API_KEY && process.env.SENDGRID_API_KEY !== 'YOUR_SENDGRID_API_KEY') {
-        console.log('SMTP failed, trying SendGrid as fallback...');
-        return await sendWithSendGrid(mailOptions);
-      }
       
-      // If we get a connection error, try alternative approaches
-      if (transportError.code === 'ETIMEDOUT' || 
-          transportError.code === 'ECONNREFUSED' || 
-          transportError.code === 'ECONNRESET') {
-        
-        console.log('SMTP connection failed, trying alternative port 587 with STARTTLS...');
-        
+      // TIER 1 FALLBACK: Try SendGrid
+      if (process.env.SENDGRID_API_KEY && process.env.SENDGRID_API_KEY !== 'YOUR_SENDGRID_API_KEY') {
+        console.log('Primary SMTP failed, trying SendGrid as fallback...');
         try {
-          // Try port 587 with STARTTLS (more compatible with hosting platforms)
-          const alternativeTransporter = createTransporter(true);
-          const info = await alternativeTransporter.sendMail(mailOptions);
-          console.log('Email sent via alternative port 587 to:', mailOptions.to);
-          console.log('Message ID:', info.messageId);
-
-          // Update the main transporter to use the working configuration
-          transporter = alternativeTransporter;
-
-          return {
-            success: true,
-            accepted: info.accepted,
-            rejected: info.rejected,
-            messageId: info.messageId,
-            alternativePort: true
-          };
-        } catch (alternativeError) {
-          console.log('Port 587 also failed, trying to reconnect with original settings...');
-          
-          // Create a fresh transporter instance with original settings
-          transporter = createTransporter();
-          
-          // Try one more time with the fresh connection
-          const info = await transporter.sendMail(mailOptions);
-          console.log('Email sent after reconnection to:', mailOptions.to);
-          console.log('Message ID:', info.messageId);
-
-          return {
-            success: true,
-            accepted: info.accepted,
-            rejected: info.rejected,
-            messageId: info.messageId,
-            reconnected: true
-          };
+          const sendgridResult = await sendWithSendGrid(mailOptions);
+          if (sendgridResult.success) {
+            return sendgridResult;
+          }
+        } catch (sendgridError) {
+          console.log('SendGrid fallback also failed:', sendgridError.message);
         }
       }
       
-      // If it's not a connection error, or the retry failed, throw the original error
-      throw transportError;
+      // TIER 2 FALLBACK: Try Gmail
+      console.log('Trying Gmail as fallback...');
+      try {
+        // Update from address and reply-to for Gmail
+        const gmailMailOptions = {
+          ...mailOptions,
+          from: process.env.GMAIL_FROM_ADDRESS || '"XS Card" <xscard@xspark.co.za>',
+          replyTo: process.env.GMAIL_REPLY_TO || 'tshehlap@gmail.com'
+        };
+        
+        const info = await gmailTransporter.sendMail(gmailMailOptions);
+        console.log('Email sent via Gmail fallback to:', mailOptions.to);
+        console.log('Message ID:', info.messageId);
+
+        return {
+          success: true,
+          accepted: info.accepted,
+          rejected: info.rejected,
+          messageId: info.messageId,
+          provider: 'gmail-fallback'
+        };
+      } catch (gmailError) {
+        console.log('Gmail fallback also failed:', gmailError.message);
+        
+        // TIER 3 FALLBACK: Try alternative port on primary SMTP
+        if (primaryError.code === 'ETIMEDOUT' || 
+            primaryError.code === 'ECONNREFUSED' || 
+            primaryError.code === 'ECONNRESET') {
+          
+          console.log('All fallbacks failed, trying alternative port 587 with STARTTLS...');
+          
+          try {
+            const alternativeTransporter = createPrimaryTransporter(true);
+            const info = await alternativeTransporter.sendMail(mailOptions);
+            console.log('Email sent via alternative port 587 to:', mailOptions.to);
+            console.log('Message ID:', info.messageId);
+
+            // Update the main transporter to use the working configuration
+            primaryTransporter = alternativeTransporter;
+
+            return {
+              success: true,
+              accepted: info.accepted,
+              rejected: info.rejected,
+              messageId: info.messageId,
+              provider: 'primary-smtp-alternative-port'
+            };
+          } catch (alternativeError) {
+            console.log('All email services failed. Final error:', alternativeError.message);
+            throw primaryError; // Throw the original error
+          }
+        }
+        
+        // If it's not a connection error, return the final error
+        return {
+          success: false,
+          error: primaryError.message,
+          errorCode: primaryError.code || 'UNKNOWN',
+          provider: 'all-fallbacks-failed'
+        };
+      }
     }
 
   } catch (error) {
@@ -228,7 +224,8 @@ const sendMailWithStatus = async (mailOptions) => {
     return {
       success: false,
       error: error.message,
-      errorCode: error.code || 'UNKNOWN'
+      errorCode: error.code || 'UNKNOWN',
+      provider: 'unknown-error'
     };
   }
 };
@@ -264,25 +261,13 @@ const sendWithSendGrid = async (mailOptions) => {
   } catch (error) {
     console.error('SendGrid email error:', error);
     
-    // Try SMTP as fallback if SendGrid fails
-    if (EMAIL_SERVICE === 'sendgrid') {
-      console.log('SendGrid failed, trying SMTP as fallback...');
-      try {
-        const info = await transporter.sendMail(mailOptions);
-        return {
-          success: true,
-          accepted: info.accepted,
-          rejected: info.rejected,
-          messageId: info.messageId,
-          provider: 'smtp-fallback'
-        };
-      } catch (smtpError) {
-        console.error('SMTP fallback also failed:', smtpError.message);
-        throw error; // Throw original SendGrid error
-      }
-    } else {
-      throw error;
-    }
+    // Return error - let the main function handle fallbacks
+    return {
+      success: false,
+      error: error.message,
+      errorCode: error.code || 'UNKNOWN',
+      provider: 'sendgrid-failed'
+    };
   }
 };
 
@@ -422,7 +407,9 @@ const sendBulkRegistrationEmail = async (userId, bulkRegistrationId, eventData, 
 };
 
 module.exports = {
-  transporter,
+  transporter: primaryTransporter, // Keep backward compatibility
+  primaryTransporter,
+  gmailTransporter,
   sendMailWithStatus,
   verifyTransporter,
   sendBulkRegistrationEmail
