@@ -80,14 +80,6 @@ async function testSendGrid() {
       response: error.response?.body || 'No response body'
     });
     
-    // Log the full error response for debugging
-    if (error.response?.body?.errors) {
-      console.log('\nDetailed errors:');
-      error.response.body.errors.forEach((err, index) => {
-        console.log(`${index + 1}. ${err.message || err.field || JSON.stringify(err)}`);
-      });
-    }
-    
     // Common error solutions
     console.log('\n🔧 Common solutions:');
     if (error.code === 401) {
