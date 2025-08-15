@@ -40,13 +40,13 @@ export const setGlobalNavigationRef = (navigationRef: any) => {
 // Helper function to get the appropriate base URL
 const getBaseUrl = () => {
   // For production, use the deployed server
-  return 'https://xscard-app.onrender.com';
+ // return 'https://xscard-app.onrender.com';
   
   // For development, try multiple local addresses
   // You can uncomment the appropriate line for your network setup
   
   // Common localhost addresses
-  // return 'http://localhost:8383';
+   return 'http://localhost:8384';
   // return 'http://192.168.68.104:8383';
   
 };
