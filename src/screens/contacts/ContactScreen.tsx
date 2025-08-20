@@ -55,14 +55,15 @@ export default function ContactsScreen() {
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [isOptionsModalVisible, setIsOptionsModalVisible] = useState(false);
-  const [modalMessage, setModalMessage] = useState('');
-  const [modalTitle, setModalTitle] = useState('');
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [remainingContacts, setRemainingContacts] = useState<number | 'unlimited'>(FREE_PLAN_CONTACT_LIMIT);  const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const { colorScheme } = useColorScheme();
+
+  // Toast notification state
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
 
   // Create a ref to store the swipeables
   const swipeableRefs = useRef<Map<number, Swipeable | null>>(new Map());
@@ -109,6 +110,11 @@ export default function ContactsScreen() {
       }
 
       const contactResponse = await authenticatedFetchWithRefresh(ENDPOINTS.GET_CONTACTS + `/${userId}`);
+      
+      if (!contactResponse.ok) {
+        throw new Error(`Failed to load contacts: ${contactResponse.status}`);
+      }
+
       const data = await contactResponse.json();
 
       // Get user data to check plan
@@ -123,17 +129,29 @@ export default function ContactsScreen() {
           const remaining = Math.max(0, FREE_PLAN_CONTACT_LIMIT - data.contactList.length);
           setRemainingContacts(remaining);
           
-          // Show limit modal if no contacts remaining
-          if (remaining === 0) {
-            setShowLimitModal(true);
-          }
+          // Don't show limit modal when loading contacts - only show when trying to add new ones
+        } else {
+          setRemainingContacts('unlimited');
+        }
+      } else {
+        // Handle case where data exists but contactList is null/undefined
+        console.log('Contact data exists but contactList is empty/null, treating as empty list');
+        setContacts([]);
+        setContactDocId(userId);
+        
+        if (userData.plan === 'free') {
+          setRemainingContacts(FREE_PLAN_CONTACT_LIMIT);
         } else {
           setRemainingContacts('unlimited');
         }
       }
     } catch (error) {
       console.error('Error loading contacts:', error);
-      showModal('Error', 'Failed to load contacts');
+      // For any error, just set empty contacts - don't show any modal
+      setContacts([]);
+      setRemainingContacts('unlimited');
+      // Show toast for network errors
+      showToast('Unable to load contacts. Please try again later.');
     } finally {
       setIsLoading(false); // Set loading to false after fetching (success or error)
     }
@@ -225,7 +243,7 @@ export default function ContactsScreen() {
           : `Check out my digital business card! ${shareUrl}`;
           
         Linking.openURL(`whatsapp://send?text=${encodeURIComponent(message)}`).catch(() => {
-          showModal('Error', 'WhatsApp is not installed on your device');
+          showToast('WhatsApp is not installed on your device');
         });
       }
     },
@@ -244,7 +262,7 @@ export default function ContactsScreen() {
           : `Check out my business card: ${shareUrl}`;
 
         Linking.openURL(`tg://msg?text=${encodeURIComponent(message)}`).catch(() => {
-          showModal('Error', 'Telegram is not installed on your device');
+          showToast('Telegram is not installed on your device');
         });
       }
     },
@@ -257,7 +275,7 @@ export default function ContactsScreen() {
         try {
           const storedUserData = await AsyncStorage.getItem('userData');
           if (!storedUserData) {
-            showModal('Error', 'User data not available');
+            showToast('User data not available');
             return;
           }
           
@@ -278,11 +296,11 @@ export default function ContactsScreen() {
           }
           
           Linking.openURL(emailUrl).catch(() => {
-            showModal('Error', 'Could not open email client');
+            showToast('Could not open email client');
           });
         } catch (error) {
           console.error('Error preparing email:', error);
-          showModal('Error', 'Failed to prepare email');
+          showToast('Failed to prepare email');
         }
       }
     }
@@ -298,7 +316,7 @@ export default function ContactsScreen() {
       
       const storedUserData = await AsyncStorage.getItem('userData');
       if (!storedUserData) {
-        showModal('Error', 'User data not available');
+        showToast('User data not available');
         return;
       }
       
@@ -311,7 +329,7 @@ export default function ContactsScreen() {
       setIsShareModalVisible(true);
     } catch (error) {
       console.error('Error preparing share:', error);
-      showModal('Error', 'Failed to prepare sharing');
+      showToast('Failed to prepare sharing');
     }
   };
 
@@ -327,7 +345,7 @@ export default function ContactsScreen() {
       setSelectedContact(null);
     } catch (error) {
       console.error('Error sharing:', error);
-      showModal('Error', 'Failed to share');
+      showToast('Failed to share');
     }
   };
 
@@ -394,10 +412,13 @@ export default function ContactsScreen() {
     );
   };
 
-  const showModal = (title: string, message: string) => {
-    setModalTitle(title);
-    setModalMessage(message);
-    setIsOptionsModalVisible(true);
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    setToastVisible(true);
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+      setToastVisible(false);
+    }, 5000);
   };
 
   // Add function to navigate to UnlockPremium
@@ -524,9 +545,11 @@ export default function ContactsScreen() {
               <Text style={styles.emptyStateTitle}>No contact yet</Text>
               <Text style={styles.emptyStateDescription}>
                 When you share your card and they share their details back, it will appear here
-              </Text>              <TouchableOpacity style={dynamicStyles.shareCardButton} onPress={() => handleShare()}>
+              </Text>
+              <TouchableOpacity style={dynamicStyles.shareCardButton} onPress={() => handleShare()}>
                 <MaterialIcons name="share" size={24} color={COLORS.white} />
-                <Text style={styles.shareCardButtonText}>Share my card</Text>              </TouchableOpacity>
+                <Text style={styles.shareCardButtonText}>Share my card</Text>
+              </TouchableOpacity>
             </View>
           ) : (
             <ScrollView 
@@ -565,7 +588,8 @@ export default function ContactsScreen() {
                         <View style={styles.contactInfo}>
                           <Text style={styles.contactName}>
                             {contact.name} {contact.surname}
-                          </Text>                          <View style={styles.contactSubInfo}>
+                          </Text>
+                          <View style={styles.contactSubInfo}>
                             <Text style={styles.contactPhone}>
                               {contact.phone || 'No phone number'}
                             </Text>
@@ -662,25 +686,7 @@ export default function ContactsScreen() {
           </View>
         </Modal>
 
-        <Modal
-          visible={isOptionsModalVisible}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setIsOptionsModalVisible(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => setIsOptionsModalVisible(false)}
-              >
-                <MaterialIcons name="close" size={24} color={COLORS.black} />
-              </TouchableOpacity>
-              <Text style={styles.modalTitle}>{modalTitle}</Text>
-              <Text style={styles.modalMessage}>{modalMessage}</Text>
-            </View>
-          </View>
-        </Modal>
+
 
         <Modal
           visible={showLimitModal}
@@ -712,6 +718,13 @@ export default function ContactsScreen() {
             </View>
           </View>
         </Modal>
+
+        {/* Toast Notification */}
+        {toastVisible && (
+          <View style={styles.toastContainer}>
+            <Text style={styles.toastText}>{toastMessage}</Text>
+          </View>
+        )}
 
         {/* Contact Options Modal */}
         <Modal
@@ -1262,5 +1275,22 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 8,
     textAlign: 'center',
+  },
+  toastContainer: {
+    position: 'absolute',
+    top: 100,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    zIndex: 1000,
+  },
+  toastText: {
+    color: COLORS.white,
+    fontSize: 14,
+    textAlign: 'center',
+    fontWeight: '500',
   },
 });

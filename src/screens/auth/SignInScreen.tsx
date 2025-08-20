@@ -7,9 +7,9 @@ import { AuthStackParamList } from '../../types';
 import { MaterialIcons } from '@expo/vector-icons';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import ErrorPopup from '../../components/popups/ErrorPopup';
+// ErrorPopup import removed - no popups on signin page
 import { setKeepLoggedInPreference, storeAuthData, updateLastLoginTime } from '../../utils/authStorage';
-import { ErrorHandler, ERROR_CODES, handleAuthError, handleNetworkError, createAppError } from '../../utils/errorHandler';
+// Error handler imports removed - no popups on signin page
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../../config/firebaseConfig';
 
@@ -32,8 +32,7 @@ export default function SignInScreen() {
     email: '',
     password: '',
   });
-  const [errorMessage, setErrorMessage] = useState('');
-  const [showError, setShowError] = useState(false);
+  // Error popup removed - no popups on signin page
 
 
 
@@ -76,21 +75,11 @@ export default function SignInScreen() {
     let isValid = true;
 
     if (!email.trim()) {
-      setErrorMessage('Email is required');
-      setShowError(true);
       newErrors.email = 'Email is required';
       isValid = false;
     }
-    // } else if (!validateEmail(email)) {
-    //   setErrorMessage('Please enter a valid email address');
-    //   setShowError(true);
-    //   newErrors.email = 'Please enter a valid email address';
-    //   isValid = false;
-    // }
 
     if (!password) {
-      setErrorMessage('Password is required');
-      setShowError(true);
       newErrors.password = 'Password is required';
       isValid = false;
     }
@@ -198,47 +187,42 @@ export default function SignInScreen() {
     } catch (error: any) {
       console.error('SignIn: Authentication error:', error);
       
-      // Handle Firebase authentication errors
+      // Handle Firebase authentication errors silently
       if (error.code) {
-        let errorMessage = 'Authentication failed';
+        console.error('SignIn: Authentication error:', error.code, error.message);
         
+        // Set field-specific errors instead of popup
         switch (error.code) {
           case 'auth/user-not-found':
-            errorMessage = 'No account found with this email address.';
+            setErrors(prev => ({ ...prev, email: 'No account found with this email' }));
             break;
           case 'auth/wrong-password':
-            errorMessage = 'Invalid password. Please try again.';
+            setErrors(prev => ({ ...prev, password: 'Invalid password' }));
             break;
           case 'auth/invalid-email':
-            errorMessage = 'Invalid email address format.';
+            setErrors(prev => ({ ...prev, email: 'Invalid email format' }));
             break;
           case 'auth/user-disabled':
-            errorMessage = 'This account has been disabled.';
+            setErrors(prev => ({ ...prev, email: 'Account disabled' }));
             break;
           case 'auth/too-many-requests':
-            errorMessage = 'Too many failed attempts. Please try again later.';
+            setErrors(prev => ({ ...prev, password: 'Too many attempts. Try later' }));
             break;
           case 'auth/network-request-failed':
-            errorMessage = 'Network error. Please check your internet connection.';
+            setErrors(prev => ({ ...prev, email: 'Network error' }));
             break;
           default:
-            errorMessage = error.message || 'Authentication failed. Please try again.';
+            console.error('SignIn: Unknown authentication error:', error);
         }
-        
-        setErrorMessage(errorMessage);
       } else if (error instanceof TypeError && error.message.includes('fetch')) {
-        // Handle network errors for backend calls
-        await handleNetworkError(error, async () => {
-          await handleSignIn();
-        });
-        setErrorMessage('Please check your internet connection and try again.');
+        // Handle network errors silently
+        console.error('SignIn: Network error:', error);
+        setErrors(prev => ({ ...prev, email: 'Network error' }));
       } else {
-        // Handle other errors
-        const appError = createAppError(ERROR_CODES.UNKNOWN_ERROR, error as Error);
-        await ErrorHandler.handleError(appError);
-        setErrorMessage(appError.userMessage);
+        // Handle other errors silently
+        console.error('SignIn: Other error:', error);
+        setErrors(prev => ({ ...prev, email: 'Authentication failed' }));
       }
-      setShowError(true);
     } finally {
       setIsLoading(false);
     }
@@ -255,11 +239,7 @@ export default function SignInScreen() {
           contentContainerStyle={styles.container}
           keyboardShouldPersistTaps="handled"
         >
-      <ErrorPopup
-        visible={showError}
-        message={errorMessage}
-        onClose={() => setShowError(false)}
-      />
+      {/* ErrorPopup removed - no popups on signin page */}
       
       <Text style={styles.title}>Sign In</Text>
 

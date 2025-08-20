@@ -71,7 +71,7 @@ export default function CreateEventScreen() {
       country: 'South Africa',
     },
     category: 'other' as EventCategory,
-    eventType: 'free' as 'free' | 'paid',
+    eventType: 'free' as 'free' | 'paid', // Paid events temporarily disabled
     ticketPrice: 0,
     maxAttendees: 0,
     visibility: 'public' as 'public' | 'private' | 'invite-only',
@@ -592,20 +592,24 @@ export default function CreateEventScreen() {
               Free
             </Text>
           </TouchableOpacity>
+          {/* Paid events temporarily disabled */}
           <TouchableOpacity
             style={[
               styles.segmentButton,
-              formData.eventType === 'paid' && { backgroundColor: COLORS.primary }
+              formData.eventType === 'paid' && { backgroundColor: COLORS.primary },
+              { opacity: 0.5, backgroundColor: COLORS.gray + '20' }
             ]}
             onPress={() => updateFormData({ eventType: 'paid' })}
+            disabled={true}
           >
             <Text
               style={[
                 styles.segmentText,
-                formData.eventType === 'paid' && { color: COLORS.white }
+                formData.eventType === 'paid' && { color: COLORS.white },
+                { color: COLORS.gray }
               ]}
             >
-              Paid
+              Paid (Disabled)
             </Text>
           </TouchableOpacity>
         </View>

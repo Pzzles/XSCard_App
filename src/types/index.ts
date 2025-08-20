@@ -58,12 +58,12 @@ export type RootStackParamList = {
   CheckInDashboard: { event: any };
   EventAnalytics: { event: any };
   OrganiserRegistration: undefined;
+  Settings: undefined;
 };
 
 export type RootTabParamList = {
   Cards: undefined;
   Contacts: undefined;
-  Settings: undefined;
 };
 
 export type AuthStackParamList = {

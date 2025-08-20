@@ -315,7 +315,7 @@ export class ErrorHandler {
 // Convenience functions for common error scenarios
 export const handleAuthError = (error: unknown, fallbackAction?: () => void) => {
   return ErrorHandler.handleError(error, {
-    showUserMessage: true,
+    showUserMessage: false, // No popups for auth errors
     logError: true,
     fallbackAction,
   });

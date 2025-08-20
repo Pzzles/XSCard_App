@@ -278,21 +278,7 @@ export default function Header({ title, rightIcon, showAddButton = false }: Head
               <Text style={[styles.menuText, { color: COLORS.secondary }]}>Settings</Text>
             </TouchableOpacity>
 
-            {userPlan !== 'enterprise' && (
-              <TouchableOpacity 
-                style={styles.menuItem}
-                onPress={() => handleNavigate('UnlockPremium')}
-              >
-                <MaterialIcons 
-                  name={userPlan === 'free' ? "star" : "settings"} 
-                  size={24} 
-                  color={COLORS.secondary} 
-                />
-                <Text style={[styles.menuText, { color: COLORS.secondary }]}>
-                  {userPlan === 'free' ? 'Unlock Premium' : 'Manage Subscription'}
-                </Text>
-              </TouchableOpacity>
-            )}
+
 
             <TouchableOpacity 
               style={styles.menuItem}
