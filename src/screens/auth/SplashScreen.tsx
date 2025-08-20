@@ -10,7 +10,7 @@ type SplashScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'Splas
 
 export default function SplashScreen() {
   const navigation = useNavigation<SplashScreenNavigationProp>();
-  const { isLoading, isAuthenticated, keepLoggedIn } = useAuth();
+  const { isLoading, isAuthenticated, keepLoggedIn, firebaseReady } = useAuth();
   const [authCheckStatus, setAuthCheckStatus] = useState<string>('Checking authentication...');
   const [minDisplayTimeElapsed, setMinDisplayTimeElapsed] = useState(false);
 
@@ -25,7 +25,7 @@ export default function SplashScreen() {
 
   // Handle navigation when auth state is determined and minimum time has elapsed
   useEffect(() => {
-    if (!isLoading && minDisplayTimeElapsed) {
+    if (!isLoading && firebaseReady && minDisplayTimeElapsed) {
       console.log('SplashScreen: Auth state determined:', { isAuthenticated, keepLoggedIn });
       
       if (isAuthenticated) {
@@ -33,23 +33,52 @@ export default function SplashScreen() {
         
         if (keepLoggedIn) {
           console.log('SplashScreen: User authenticated with keepLoggedIn enabled');
-          setAuthCheckStatus('Welcome back!');
+          setAuthCheckStatus('Validating session...');
           
-          // Validate token in background but don't block navigation
-          validateCurrentToken().then(isValid => {
-            if (!isValid) {
-              console.log('SplashScreen: Token validation failed, but AuthContext will handle refresh');
-            } else {
-              console.log('SplashScreen: Token validation successful');
+          // 🔥 CRITICAL FIX: Wait for Firebase auth state to be ready before validating
+          const validateWithRetry = async (retryCount = 0) => {
+            try {
+              const isValid = await validateCurrentToken();
+              if (isValid) {
+                console.log('SplashScreen: Token validation successful');
+                setAuthCheckStatus('Welcome back!');
+                setTimeout(() => {
+                  console.log('SplashScreen: Navigating to MainApp');
+                  navigation.replace('MainApp');
+                }, 500);
+              } else {
+                // If validation fails and we haven't retried too many times, wait and retry
+                if (retryCount < 3) {
+                  console.log(`SplashScreen: Token validation failed, retrying in 1 second (attempt ${retryCount + 1}/3)`);
+                  setAuthCheckStatus('Checking session...');
+                  setTimeout(() => validateWithRetry(retryCount + 1), 1000);
+                } else {
+                  console.log('SplashScreen: Token validation failed after retries - forcing logout');
+                  setAuthCheckStatus('Session expired');
+                  setTimeout(() => {
+                    console.log('SplashScreen: Navigating to SignIn due to invalid token');
+                    navigation.replace('SignIn');
+                  }, 500);
+                }
+              }
+            } catch (error) {
+              console.log('SplashScreen: Token validation error:', error);
+              if (retryCount < 3) {
+                console.log(`SplashScreen: Validation error, retrying in 1 second (attempt ${retryCount + 1}/3)`);
+                setAuthCheckStatus('Checking session...');
+                setTimeout(() => validateWithRetry(retryCount + 1), 1000);
+              } else {
+                setAuthCheckStatus('Session error');
+                setTimeout(() => {
+                  console.log('SplashScreen: Navigating to SignIn due to validation error');
+                  navigation.replace('SignIn');
+                }, 500);
+              }
             }
-          }).catch(error => {
-            console.log('SplashScreen: Token validation error:', error);
-          });
+          };
           
-          setTimeout(() => {
-            console.log('SplashScreen: Navigating to MainApp');
-            navigation.replace('MainApp');
-          }, 500);
+          // Start validation with retry mechanism
+          validateWithRetry();
         } else {
           console.log('SplashScreen: User authenticated but keepLoggedIn is disabled - treating as new session');
           setAuthCheckStatus('Please sign in again');
@@ -73,8 +102,11 @@ export default function SplashScreen() {
       } else {
         setAuthCheckStatus('Loading...');
       }
+    } else if (!firebaseReady) {
+      // Firebase not ready yet
+      setAuthCheckStatus('Initializing...');
     }
-  }, [isLoading, minDisplayTimeElapsed, isAuthenticated, keepLoggedIn, navigation]);
+  }, [isLoading, firebaseReady, minDisplayTimeElapsed, isAuthenticated, keepLoggedIn, navigation]);
 
   return (
     <View style={styles.container}>
