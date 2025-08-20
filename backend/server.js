@@ -20,7 +20,7 @@ const { db, admin, storage, bucket } = require('./firebase.js');
 const { sendMailWithStatus } = require('./public/Utils/emailService');
 const { handleSingleUpload } = require('./middleware/fileUpload');
 const app = express();
-const port = 8384;
+const port = 8383;
 
 // Add CORS middleware to allow loading Firebase Storage images
 app.use((req, res, next) => {
