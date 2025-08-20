@@ -37,6 +37,13 @@ export const setGlobalNavigationRef = (navigationRef: any) => {
   globalNavigationRef = navigationRef;
 };
 
+// Global AuthContext reference for forced logout notifications
+let globalAuthContextRef: any = null;
+
+export const setGlobalAuthContextRef = (ref: any) => {
+  globalAuthContextRef = ref;
+};
+
 // Helper function to get the appropriate base URL
 const getBaseUrl = () => {
   // For production, use the deployed server
@@ -298,7 +305,14 @@ export const validateAuthToken = async (): Promise<boolean> => {
     const currentToken = await AsyncStorage.getItem('userToken');
     
     if (!currentToken) {
-      console.log('[Token Validation] No token found');
+      console.log('[Token Validation] No token found - treating as expired (like manual expiry)');
+      return false;
+    }
+    
+    // 🔥 ENHANCED: Also check if lastLoginTime exists (like manual expiry does)
+    const lastLoginTime = await AsyncStorage.getItem('lastLoginTime');
+    if (!lastLoginTime) {
+      console.log('[Token Validation] No lastLoginTime found - treating as expired (like manual expiry)');
       return false;
     }
 
@@ -529,16 +543,30 @@ export const forceLogoutExpiredToken = async (navigationCallback?: () => void): 
   try {
     console.log('[Force Logout] Token expired - forcing logout...');
     
-    // Clear all auth data from AsyncStorage
+    // 🔥 ENHANCED: Use the same approach as manual expiry for consistency
+    // Clear the token and lastLoginTime first (like manual expiry does)
+    await AsyncStorage.removeItem('userToken');
+    await AsyncStorage.removeItem('lastLoginTime');
+    console.log('[Force Logout] Token and lastLoginTime cleared (like manual expiry)');
+    
+    // Then clear all other auth data
     await AsyncStorage.multiRemove([
-      'userToken',
       'userData', 
       'authData',
-      'keepLoggedIn',
-      'lastLoginTime'
+      'keepLoggedIn'
     ]);
     
-    console.log('[Force Logout] Auth data cleared successfully');
+    console.log('[Force Logout] All auth data cleared successfully');
+    
+    // 🔥 CRITICAL FIX: Notify AuthContext about forced logout
+    // This prevents the infinite loop by ensuring AuthContext state is updated
+    if (globalAuthContextRef) {
+      console.log('[Force Logout] Notifying AuthContext about forced logout');
+      globalAuthContextRef.dispatch({ type: 'CLEAR_USER' });
+      globalAuthContextRef.dispatch({ type: 'SET_KEEP_LOGGED_IN', payload: false });
+    } else {
+      console.warn('[Force Logout] No AuthContext reference available');
+    }
     
     // Try to navigate to login screen
     if (navigationCallback) {
@@ -561,5 +589,48 @@ export const forceLogoutExpiredToken = async (navigationCallback?: () => void): 
     } catch (clearError) {
       console.error('[Force Logout] Failed to clear storage:', clearError);
     }
+  }
+};
+
+// Test function for token expiration - DEVELOPMENT ONLY
+export const testTokenExpiration = async (): Promise<void> => {
+  try {
+    console.log('[Test] Testing token expiration...');
+    
+    const response = await fetch(buildUrl(ENDPOINTS.TEST_EXPIRED_TOKEN), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': await AsyncStorage.getItem('userToken') || '',
+      },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log('[Test] Token expiration test result:', data);
+    } else {
+      console.log('[Test] Token expiration test failed:', response.status);
+    }
+  } catch (error) {
+    console.error('[Test] Token expiration test error:', error);
+  }
+};
+
+// Test function to manually expire token - DEVELOPMENT ONLY
+export const manuallyExpireToken = async (): Promise<void> => {
+  try {
+    console.log('[Test] Manually expiring token...');
+    
+    // Clear the token from storage
+    await AsyncStorage.removeItem('userToken');
+    console.log('[Test] Token cleared from storage');
+    
+    // Also clear lastLoginTime to make it appear expired
+    await AsyncStorage.removeItem('lastLoginTime');
+    console.log('[Test] Last login time cleared');
+    
+    console.log('[Test] Token manually expired - next API call will trigger logout');
+  } catch (error) {
+    console.error('[Test] Error manually expiring token:', error);
   }
 };

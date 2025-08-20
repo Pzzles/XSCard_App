@@ -13,7 +13,7 @@ import { ErrorHandler, ERROR_CODES, handleAuthError, handleStorageError, createA
 import { auth } from '../config/firebaseConfig';
 import { onAuthStateChanged, signOut as firebaseSignOut, User as FirebaseUser } from 'firebase/auth';
 // API utilities for data recovery
-import { buildUrl, ENDPOINTS } from '../utils/api';
+import { buildUrl, ENDPOINTS, setGlobalAuthContextRef } from '../utils/api';
 
 // User interface
 export interface User {
@@ -34,6 +34,7 @@ interface AuthState {
   keepLoggedIn: boolean;
   lastLoginTime: number | null;
   error: string | null;
+  firebaseReady: boolean; // Track when Firebase auth state is ready
 }
 
 // Authentication context interface
@@ -54,7 +55,8 @@ type AuthAction =
   | { type: 'SET_KEEP_LOGGED_IN'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string }
   | { type: 'CLEAR_ERROR' }
-  | { type: 'RESTORE_AUTH'; payload: AuthData };
+  | { type: 'RESTORE_AUTH'; payload: AuthData }
+  | { type: 'SET_FIREBASE_READY'; payload: boolean };
 
 // Initial state
 const initialState: AuthState = {
@@ -65,6 +67,7 @@ const initialState: AuthState = {
   keepLoggedIn: false,
   lastLoginTime: null,
   error: null,
+  firebaseReady: false, // Firebase auth state not ready initially
 };
 
 // Auth reducer
@@ -131,6 +134,12 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
         error: null,
       };
     
+    case 'SET_FIREBASE_READY':
+      return {
+        ...state,
+        firebaseReady: action.payload,
+      };
+    
     default:
       return state;
   }
@@ -147,11 +156,19 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
+  // Set up global reference for forced logout notifications
+  useEffect(() => {
+    setGlobalAuthContextRef({ dispatch });
+  }, []);
+
   // Firebase Auth State Listener - NEW INTEGRATION
   useEffect(() => {
     console.log('AuthProvider: Setting up Firebase auth state listener');
     
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+      // Mark Firebase as ready once the listener fires (regardless of user state)
+      dispatch({ type: 'SET_FIREBASE_READY', payload: true });
+      console.log('AuthProvider: Firebase auth state ready, user:', !!firebaseUser);
       try {
         console.log('Firebase auth state changed:', !!firebaseUser);
         
@@ -281,6 +298,40 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             // Clear local auth data if user doesn't want to stay logged in
             await clearAuthData();
             dispatch({ type: 'CLEAR_USER' });
+          } else {
+            // 🔥 CRITICAL FIX: Firebase user signed out but keepLoggedIn is true
+            // This means we have stored data but Firebase lost the user
+            console.log('AuthProvider: Firebase signout detected with keepLoggedIn=true - attempting to restore');
+            
+            // Check if we have stored auth data
+            const storedAuthData = await getStoredAuthData();
+            if (storedAuthData && storedAuthData.userToken) {
+              console.log('AuthProvider: Found stored auth data, attempting to restore Firebase user');
+              
+              try {
+                // Try to restore Firebase user using stored token
+                // Note: We can't directly sign in with token, but we can validate it
+                const token = storedAuthData.userToken.replace('Bearer ', '');
+                
+                // For now, we'll keep the stored data and let the token validation handle it
+                // The SplashScreen will validate the token and handle the result
+                console.log('AuthProvider: Keeping stored auth data for token validation');
+                
+                // Don't clear the user - let the validation process handle it
+                // This allows the SplashScreen to attempt token validation
+              } catch (restoreError) {
+                console.error('AuthProvider: Failed to restore Firebase user:', restoreError);
+                // If we can't restore, clear the data to maintain consistency
+                await clearAuthData();
+                dispatch({ type: 'CLEAR_USER' });
+                dispatch({ type: 'SET_KEEP_LOGGED_IN', payload: false });
+              }
+            } else {
+              console.log('AuthProvider: No stored auth data found, clearing state');
+              await clearAuthData();
+              dispatch({ type: 'CLEAR_USER' });
+              dispatch({ type: 'SET_KEEP_LOGGED_IN', payload: false });
+            }
           }
         }
       } catch (error) {

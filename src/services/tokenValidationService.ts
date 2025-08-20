@@ -15,11 +15,34 @@ export class TokenValidationService {
     try {
       console.log('TokenValidationService: Validating current token with Firebase integration');
       
-      // First check if Firebase user exists
-      const firebaseUser = auth.currentUser;
+      // 🔥 ENHANCEMENT: Wait a bit for Firebase to restore auth state during app reload
+      let firebaseUser = auth.currentUser;
       if (!firebaseUser) {
-        console.log('TokenValidationService: No Firebase user found');
-        return false;
+        console.log('TokenValidationService: No Firebase user found, waiting for auth state restoration...');
+        // Wait up to 2 seconds for Firebase to restore auth state
+        for (let i = 0; i < 4; i++) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          firebaseUser = auth.currentUser;
+          if (firebaseUser) {
+            console.log('TokenValidationService: Firebase user found after waiting');
+            break;
+          }
+        }
+        
+              if (!firebaseUser) {
+        console.log('TokenValidationService: No Firebase user found after waiting');
+        
+        // 🔥 CRITICAL FIX: Try backend validation as fallback when no Firebase user
+        console.log('TokenValidationService: Attempting backend validation as fallback');
+        try {
+          const isValid = await validateAuthToken();
+          console.log('TokenValidationService: Backend validation result:', isValid);
+          return isValid;
+        } catch (backendError) {
+          console.error('TokenValidationService: Backend validation failed:', backendError);
+          return false;
+        }
+      }
       }
       
       // Check if we have stored token
