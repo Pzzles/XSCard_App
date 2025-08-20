@@ -44,13 +44,28 @@ export default function AddCards() {
     const { cameraGranted, galleryGranted } = await requestPermissions();
     
     if (!cameraGranted || !galleryGranted) {
-      Alert.alert('Permission Required', 'Camera and gallery permissions are required to use this feature.');
+      Alert.alert(
+        'Permission Required', 
+        'XSCard needs camera and photo library access to let you add profile pictures and company logos to your digital business card. This helps create a professional appearance.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Settings', 
+            onPress: () => {
+              Alert.alert(
+                'Enable Permissions',
+                'Please go to your device Settings > XSCard and enable Camera and Photos permissions to continue.'
+              );
+            }
+          }
+        ]
+      );
       return;
     }
 
     Alert.alert(
-      'Select Image Source',
-      'Choose where you want to pick your profile picture from',
+      'Select Profile Picture',
+      'Choose where you want to get your profile picture from. This will be displayed on your digital business card.',
       [
         {
           text: 'Camera',
@@ -78,13 +93,28 @@ export default function AddCards() {
     const { cameraGranted, galleryGranted } = await requestPermissions();
     
     if (!cameraGranted || !galleryGranted) {
-      Alert.alert('Permission Required', 'Camera and gallery permissions are required to use this feature.');
+      Alert.alert(
+        'Permission Required', 
+        'XSCard needs camera and photo library access to let you add profile pictures and company logos to your digital business card. This helps create a professional appearance.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Settings', 
+            onPress: () => {
+              Alert.alert(
+                'Enable Permissions',
+                'Please go to your device Settings > XSCard and enable Camera and Photos permissions to continue.'
+              );
+            }
+          }
+        ]
+      );
       return;
     }
 
     Alert.alert(
-      'Select Logo Source',
-      'Choose where you want to pick your company logo from',
+      'Select Company Logo',
+      'Choose where you want to get your company logo from. This will be displayed on your digital business card.',
       [
         {
           text: 'Camera',
@@ -210,85 +240,122 @@ export default function AddCards() {
 
           {/* Images & Layout Section */}
           <Text style={styles.sectionTitle}>Images & layout</Text>
-          <View style={styles.imageButtons}>
-            <TouchableOpacity style={styles.imageButton} onPress={handleProfileImagePick}>
-              {profileImage ? (
-                <Image source={{ uri: profileImage }} style={styles.imagePreview} />
-              ) : (
-                <>
-                  <MaterialIcons name="add" size={24} color={COLORS.black} />
-                  <Text style={styles.buttonText}>Profile Picture</Text>
-                </>
-              )}
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.imageButton} onPress={handleLogoUpload}>
-              {companyLogo ? (
-           
-           
-           <Image source={{ uri: companyLogo }} style={styles.imagePreview} />
-              ) : (
-                <>
-                  <MaterialIcons name="add" size={24} color={COLORS.black} />
-                  <Text style={styles.buttonText}>Company logo</Text>
-                </>
-              )}
-            </TouchableOpacity>
+          <View style={styles.imageSection}>
+            <Text style={styles.sectionDescription}>
+              Add your profile picture and company logo to enhance your digital business card.
+            </Text>
+            <View style={styles.imageButtonsRow}>
+              <TouchableOpacity 
+                style={styles.imageButton}
+                onPress={handleProfileImagePick}
+              >
+                {profileImage ? (
+                  <Image source={{ uri: profileImage }} style={styles.imagePreview} />
+                ) : (
+                  <View style={styles.imagePlaceholder}>
+                    <MaterialIcons name="person" size={40} color={COLORS.primary} />
+                    <Text style={styles.imagePlaceholderText}>Profile Picture</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.imageButton}
+                onPress={handleLogoUpload}
+              >
+                {companyLogo ? (
+                  <Image source={{ uri: companyLogo }} style={styles.imagePreview} />
+                ) : (
+                  <View style={styles.imagePlaceholder}>
+                    <MaterialIcons name="business" size={40} color={COLORS.primary} />
+                    <Text style={styles.imagePlaceholderText}>Company Logo</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Personal Details Section */}
           <Text style={styles.sectionTitle}>Personal details</Text>
           <View style={styles.form}>
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
-            <TextInput 
-              style={styles.input}
-              placeholder="First name"
-              placeholderTextColor="#999"
-              value={formData.firstName}
-              onChangeText={(text) => setFormData({...formData, firstName: text})}
-            />
-            <TextInput 
-              style={styles.input}
-              placeholder="Last name"
-              placeholderTextColor="#999"
-              value={formData.lastName}
-              onChangeText={(text) => setFormData({...formData, lastName: text})}
-            />
-            <TextInput 
-              style={styles.input}
-              placeholder="Occupation"
-              placeholderTextColor="#999"
-              value={formData.occupation}
-              onChangeText={(text) => setFormData({...formData, occupation: text})}
-            />
-            <TextInput 
-              style={styles.input}
-              placeholder="Company name"
-              placeholderTextColor="#999"
-              value={formData.company}
-              onChangeText={(text) => setFormData({...formData, company: text})}
-            />
-            <TextInput 
-              style={styles.input}
-              placeholder="Email"
-              placeholderTextColor="#999"
-              value={formData.email}
-              onChangeText={(text) => setFormData({...formData, email: text})}
-              keyboardType="email-address"
-            />
-            <TextInput 
-              style={styles.input}
-              placeholder="Phone number"
-              placeholderTextColor="#999"
-              value={formData.phoneNumber}
-              onChangeText={(text) => setFormData({...formData, phoneNumber: text})}
-              keyboardType="phone-pad"
-            />
+            
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>First Name *</Text>
+              <TextInput 
+                style={styles.input}
+                placeholder="Enter first name"
+                placeholderTextColor="#999"
+                value={formData.firstName}
+                onChangeText={(text) => setFormData({...formData, firstName: text})}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Last Name *</Text>
+              <TextInput 
+                style={styles.input}
+                placeholder="Enter last name"
+                placeholderTextColor="#999"
+                value={formData.lastName}
+                onChangeText={(text) => setFormData({...formData, lastName: text})}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Occupation *</Text>
+              <TextInput 
+                style={styles.input}
+                placeholder="Enter occupation"
+                placeholderTextColor="#999"
+                value={formData.occupation}
+                onChangeText={(text) => setFormData({...formData, occupation: text})}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Company Name *</Text>
+              <TextInput 
+                style={styles.input}
+                placeholder="Enter company name"
+                placeholderTextColor="#999"
+                value={formData.company}
+                onChangeText={(text) => setFormData({...formData, company: text})}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Email *</Text>
+              <TextInput 
+                style={styles.input}
+                placeholder="Enter email address"
+                placeholderTextColor="#999"
+                value={formData.email}
+                onChangeText={(text) => setFormData({...formData, email: text})}
+                keyboardType="email-address"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Phone Number *</Text>
+              <TextInput 
+                style={styles.input}
+                placeholder="Enter phone number"
+                placeholderTextColor="#999"
+                value={formData.phoneNumber}
+                onChangeText={(text) => setFormData({...formData, phoneNumber: text})}
+                keyboardType="phone-pad"
+              />
+            </View>
+                      </View>
+          </ScrollView>
+
+          {/* Add Button */}
+          <View style={styles.buttonContainer}>
             <TouchableOpacity style={styles.addButton} onPress={handleAdd}>
-              <Text style={styles.addButtonText}>Add</Text>
+              <Text style={styles.addButtonText}>Add Card</Text>
             </TouchableOpacity>
           </View>
-        </ScrollView>
       </KeyboardAvoidingView>
     </View>
   );
@@ -324,32 +391,63 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     color: COLORS.black,
   },
-  imageButtons: {
+  imageSection: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 15,
+    padding: 15,
+    marginVertical: 15,
+  },
+  sectionDescription: {
+    fontSize: 14,
+    color: '#777',
+    marginBottom: 15,
+  },
+  imageButtonsRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 24,
+    justifyContent: 'space-around',
   },
   imageButton: {
-    backgroundColor: '#F8F8F8',
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
+    width: 130,
+    height: 130,
+    borderRadius: 15,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 4,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    overflow: 'hidden',
   },
-  buttonText: {
-    color: COLORS.black,
-    marginLeft: 4,
+  imagePlaceholder: {
+    flex: 1,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imagePlaceholderText: {
+    marginTop: 10,
+    color: '#666',
+    fontSize: 14,
+    textAlign: 'center',
   },
   form: {
     gap: 12,
   },
+  inputGroup: {
+    marginBottom: 0,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: COLORS.black,
+    marginBottom: 8,
+  },
   input: {
-    backgroundColor: '#F8F8F8',
+    borderWidth: 1,
+    borderColor: COLORS.border,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
+    backgroundColor: COLORS.white,
   },
   actionButtons: {
     flexDirection: 'row',
@@ -371,25 +469,28 @@ const styles = StyleSheet.create({
     color: '#666',
     fontSize: 16,
   },
+  buttonContainer: {
+    padding: 16,
+    paddingBottom: 32,
+  },
   addButton: {
-    backgroundColor: '#1E1B4B',
-    padding: 15,
+    backgroundColor: COLORS.primary,
     borderRadius: 8,
+    padding: 16,
     alignItems: 'center',
-    marginTop: 10,
   },
   addButtonText: {
     color: COLORS.white,
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   errorText: {
-    color: 'red',
+    color: COLORS.error,
     marginBottom: 10,
+    fontSize: 14,
   },
   imagePreview: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: '100%',
+    height: '100%',
   },
 });

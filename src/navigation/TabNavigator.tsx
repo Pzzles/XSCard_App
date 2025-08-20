@@ -79,15 +79,6 @@ function TabNavigator() {
           ),
         }}
       />
-      <Tab.Screen
-        name="Settings"
-        component={SettingsScreen}
-        options={{
-          tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="settings" size={24} color={color} />
-          ),
-        }}
-      />
     </Tab.Navigator>
   );
 }

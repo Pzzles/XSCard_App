@@ -42,7 +42,13 @@ exports.getContactById = async (req, res) => {
         const doc = await contactRef.get();
         
         if (!doc.exists) {
-            return res.status(404).send({ message: 'Contact list not found' });
+            // Return empty contact list instead of 404 error
+            console.log(`No contact document found for user ${id}, returning empty list`);
+            return res.status(200).send({
+                id: id,
+                userId: id,
+                contactList: []
+            });
         }
 
         // Send raw data for debugging

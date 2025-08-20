@@ -7,9 +7,9 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { AuthStackParamList } from '../../types';
 import { API_BASE_URL, ENDPOINTS, buildUrl } from '../../utils/api';
-import ErrorPopup from '../../components/popups/ErrorPopup';
+// ErrorPopup import removed - no popups on signup page
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ErrorHandler, ERROR_CODES, handleAuthError, handleNetworkError, createAppError, handleStorageError } from '../../utils/errorHandler';
+// Error handler imports removed - no popups on signup page
 
 type SignUpScreenNavigationProp = StackNavigationProp<AuthStackParamList, 'SignUp'>;
 
@@ -27,8 +27,7 @@ export default function SignUpScreen() {
     email: '',
     password: '',
   });
-  const [errorMessage, setErrorMessage] = useState('');
-  const [showError, setShowError] = useState(false);
+  // Error popup removed - no popups on signup page
 
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -165,19 +164,15 @@ export default function SignUpScreen() {
     } catch (error) {
       console.error('SignUp: Error during signup:', error);
       
-      // Handle network errors with retry capability
+      // Handle network errors silently
       if (error instanceof TypeError && error.message.includes('fetch')) {
-        await handleNetworkError(error, async () => {
-          await handleSignUp();
-        });
-        setErrorMessage('Please check your internet connection and try again.');
+        console.error('SignUp: Network error:', error);
+        setErrors(prev => ({ ...prev, email: 'Network error' }));
       } else {
-        // Handle other errors
-        const appError = createAppError(ERROR_CODES.UNKNOWN_ERROR, error as Error);
-        await ErrorHandler.handleError(appError);
-        setErrorMessage(appError.userMessage);
+        // Handle other errors silently
+        console.error('SignUp: Other error:', error);
+        setErrors(prev => ({ ...prev, email: 'Signup failed' }));
       }
-      setShowError(true);
     } finally {
       setIsLoading(false);
     }
@@ -185,11 +180,7 @@ export default function SignUpScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ErrorPopup
-        visible={showError}
-        message={errorMessage}
-        onClose={() => setShowError(false)}
-      />
+      {/* ErrorPopup removed - no popups on signup page */}
       
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}

@@ -21,7 +21,7 @@
       "buildNumber": "1.0.2",
       "icon": "./assets/icons/icon.png",
       "infoPlist": {
-        "NSCameraUsageDescription": "This app uses the camera to scan QR codes for event check-ins."
+        "NSCameraUsageDescription": "XSCard uses the camera to let you take profile pictures and company logos during account setup and card creation. This helps create professional digital business cards."
       }
     },
     "android": {
@@ -54,8 +54,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "The app accesses your photos to let you upload profile images and company logos.",
-          "cameraPermission": "The app accesses your camera to let you take photos for profile images and company logos."
+                  "photosPermission": "XSCard accesses your photos to let you select profile pictures and company logos from your gallery during account setup and card creation.",
+        "cameraPermission": "XSCard uses your camera to let you take profile pictures and company logos during account setup and card creation for your digital business card."
         }
       ]
     ]

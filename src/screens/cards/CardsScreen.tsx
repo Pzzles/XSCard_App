@@ -650,7 +650,7 @@ export default function CardsScreen() {
                 <View style={styles.logoContainer}>
                   <View style={styles.logoFrame}>
                   <Image
-                    source={card.companyLogo ? 
+                    source={card.companyLogo && getImageUrl(card.companyLogo) ? 
                       { uri: getImageUrl(card.companyLogo) } : 
                       require('../../../assets/images/logoplaceholder.jpg')
                     }
@@ -664,16 +664,22 @@ export default function CardsScreen() {
                       }}
                       resizeMode="contain"
                       fadeDuration={300} // Smooth fade-in animation when loading
+                      onError={(error) => {
+                        console.warn('Failed to load company logo:', error.nativeEvent.error);
+                      }}
                   />
                   </View>
                   <View style={styles.profileOverlayContainer}>
                     <Animated.View style={[styles.profileImageContainer, { transform: [{ rotate: rotateInterpolate }] }]}>
                       <Image
                         style={styles.profileImage}
-                        source={card.profileImage ? 
+                        source={card.profileImage && getImageUrl(card.profileImage) ? 
                           { uri: getImageUrl(card.profileImage) } : 
                           require('../../../assets/images/profile.png')
                         }
+                        onError={(error) => {
+                          console.warn('Failed to load profile image:', error.nativeEvent.error);
+                        }}
                       />
                     </Animated.View>
                   </View>
@@ -709,7 +715,8 @@ export default function CardsScreen() {
 
                 {/* Social Links */}
                 {card.socials && Object.entries(card.socials).map(([platform, value]) => {
-                  if (socialIcons[platform] && value && value.trim() !== '') {
+                  const textValue = typeof value === 'string' ? value.trim() : '';
+                  if (socialIcons[platform] && textValue !== '') {
                     return (
                       <TouchableOpacity 
                         key={platform}
@@ -723,7 +730,7 @@ export default function CardsScreen() {
                           size={30} 
                           color={card.colorScheme} 
                         />
-                        <Text style={styles.contactText}>{value}</Text>
+                        <Text style={styles.contactText}>{textValue}</Text>
                       </TouchableOpacity>
                     );
                   }

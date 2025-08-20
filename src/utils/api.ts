@@ -40,13 +40,13 @@ export const setGlobalNavigationRef = (navigationRef: any) => {
 // Helper function to get the appropriate base URL
 const getBaseUrl = () => {
   // For production, use the deployed server
-  return 'https://xscard-app.onrender.com';
+ // return 'https://xscard-app.onrender.com';
   
   // For development, try multiple local addresses
   // You can uncomment the appropriate line for your network setup
   
   // Common localhost addresses
-  // return 'http://localhost:8383';
+   return 'http://localhost:8384';
   // return 'http://192.168.68.104:8383';
   
 };
@@ -446,10 +446,10 @@ export const authenticatedFetchWithRefresh = async (endpoint: string, options: R
         });
       } else if (response.status === 403) {
         const error = createAppError(ERROR_CODES.PERMISSION_DENIED, new Error('Permission denied'));
-        await ErrorHandler.handleError(error, { showUserMessage: true });
+        await ErrorHandler.handleError(error, { showUserMessage: false }); // No popups
       } else if (response.status === 404) {
         const error = createAppError(ERROR_CODES.RESOURCE_NOT_FOUND, new Error('Resource not found'));
-        await ErrorHandler.handleError(error, { showUserMessage: true });
+        await ErrorHandler.handleError(error, { showUserMessage: false }); // No popups
       }
     }
 

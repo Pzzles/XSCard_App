@@ -51,13 +51,23 @@ export const pickImage = async (useCamera: boolean = false) => {
  * @returns {string|null} - The full URL to the image or null if no image
  */
 export const getImageUrl = (imageUri: string | undefined | null): string | null => {
-  if (!imageUri) return null;
+  // Handle null, undefined, or empty string
+  if (!imageUri || typeof imageUri !== 'string' || imageUri.trim() === '') {
+    return null;
+  }
+  
+  // Trim whitespace to prevent URI parsing issues
+  const cleanUri = imageUri.trim();
   
   // If it's already a full URL (Firebase Storage), return as is
-  if (imageUri.startsWith('http')) {
-    return imageUri;
+  if (cleanUri.startsWith('http://') || cleanUri.startsWith('https://')) {
+    return cleanUri;
   }
   
   // Otherwise, it's a local path, prepend the API base URL
-  return `${API_BASE_URL}${imageUri}`;
+  // Ensure we don't double-slash
+  const basePath = API_BASE_URL.endsWith('/') ? API_BASE_URL : `${API_BASE_URL}/`;
+  const imagePath = cleanUri.startsWith('/') ? cleanUri.slice(1) : cleanUri;
+  
+  return `${basePath}${imagePath}`;
 };

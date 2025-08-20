@@ -88,13 +88,29 @@ export default function CompleteProfile() {
     const { cameraGranted, galleryGranted } = await requestPermissions();
     
     if (!cameraGranted || !galleryGranted) {
-      Alert.alert('Permission Required', 'Camera and gallery permissions are required to use this feature.');
+      Alert.alert(
+        'Permission Required', 
+        'XSCard needs camera and photo library access to let you add profile pictures and company logos to your digital business card. This helps create a professional appearance.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Settings', 
+            onPress: () => {
+              // This would typically open app settings, but we'll just show the alert
+              Alert.alert(
+                'Enable Permissions',
+                'Please go to your device Settings > XSCard and enable Camera and Photos permissions to continue.'
+              );
+            }
+          }
+        ]
+      );
       return;
     }
 
     Alert.alert(
-      'Select Image Source',
-      'Choose where you want to pick your profile picture from',
+      'Select Profile Picture',
+      'Choose where you want to get your profile picture from. This will be displayed on your digital business card.',
       [
         {
           text: 'Camera',
@@ -128,13 +144,29 @@ export default function CompleteProfile() {
     const { cameraGranted, galleryGranted } = await requestPermissions();
     
     if (!cameraGranted || !galleryGranted) {
-      Alert.alert('Permission Required', 'Camera and gallery permissions are required to use this feature.');
+      Alert.alert(
+        'Permission Required', 
+        'XSCard needs camera and photo library access to let you add profile pictures and company logos to your digital business card. This helps create a professional appearance.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Settings', 
+            onPress: () => {
+              // This would typically open app settings, but we'll just show the alert
+              Alert.alert(
+                'Enable Permissions',
+                'Please go to your device Settings > XSCard and enable Camera and Photos permissions to continue.'
+              );
+            }
+          }
+        ]
+      );
       return;
     }
 
     Alert.alert(
-      'Select Logo Source',
-      'Choose where you want to pick your company logo from',
+      'Select Company Logo',
+      'Choose where you want to get your company logo from. This will be displayed on your digital business card.',
       [
         {
           text: 'Camera',
